@@ -14,6 +14,7 @@ add_library(droppix_core
   src/edid.cpp
   src/virtual_display.cpp
   src/capturer.cpp
+  src/png_writer.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
@@ -39,6 +40,7 @@ add_executable(droppix_tests
   tests/test_smoke.cpp
   tests/test_edid.cpp
   tests/test_virtual_display.cpp
+  tests/test_png_writer.cpp
 )
 target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main)
 include(GoogleTest)
