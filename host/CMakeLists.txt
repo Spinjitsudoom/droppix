@@ -9,22 +9,35 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_library(EVDI_LIB NAMES evdi PATHS /usr/lib64 /lib64 REQUIRED)
 message(STATUS "Using libevdi: ${EVDI_LIB}")
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil libswscale)
+find_package(Threads REQUIRED)
+
 # Core library: sources are added by later tasks.
 add_library(droppix_core
   src/edid.cpp
   src/virtual_display.cpp
   src/capturer.cpp
   src/png_writer.cpp
+  src/protocol.cpp
+  src/software_encoder.cpp
+  src/test_pattern_source.cpp
+  src/evdi_frame_source.cpp
+  src/transport_server.cpp
+  src/stream_daemon.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
   third_party/evdi
   third_party/stb
 )
-target_link_libraries(droppix_core PUBLIC ${EVDI_LIB})
+target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG)
 
 add_executable(droppix_spike src/spike_main.cpp)
 target_link_libraries(droppix_spike PRIVATE droppix_core)
+
+add_executable(droppix_stream src/stream_main.cpp)
+target_link_libraries(droppix_stream PRIVATE droppix_core)
 
 # --- Tests (GoogleTest via FetchContent) ---
 include(FetchContent)
@@ -41,7 +54,11 @@ add_executable(droppix_tests
   tests/test_edid.cpp
   tests/test_virtual_display.cpp
   tests/test_png_writer.cpp
+  tests/test_protocol.cpp
+  tests/test_software_encoder.cpp
+  tests/test_test_pattern_source.cpp
+  tests/test_transport_server.cpp
 )
-target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main)
+target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main Threads::Threads)
 include(GoogleTest)
 gtest_discover_tests(droppix_tests)
