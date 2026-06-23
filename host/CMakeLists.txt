@@ -22,6 +22,7 @@ add_library(droppix_core
   src/protocol.cpp
   src/software_encoder.cpp
   src/test_pattern_source.cpp
+  src/evdi_frame_source.cpp
   src/transport_server.cpp
   src/stream_daemon.cpp
 )

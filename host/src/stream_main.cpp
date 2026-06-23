@@ -5,6 +5,7 @@
 #include <string>
 #include "stream_daemon.h"
 #include "test_pattern_source.h"
+#include "evdi_frame_source.h"
 #include "software_encoder.h"
 
 static volatile std::sig_atomic_t g_stop = 0;
@@ -30,12 +31,6 @@ int main(int argc, char** argv) {
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
-  if (!test_pattern) {
-    std::fprintf(stderr, "Phase 1a: only --test-pattern is wired here. "
-                         "evdi source arrives in Task 6.\n");
-    return 2;
-  }
-
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
     std::fprintf(stderr, "listen on %d failed\n", port); return 1;
@@ -50,8 +45,12 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "warning: adb reverse failed\n");
   }
 
-  droppix::TestPatternSource src(width, height, fps);
   droppix::SoftwareEncoder enc;
+  droppix::TestPatternSource pattern(width, height, fps);
+  droppix::EvdiFrameSource evdi;
+  droppix::FrameSource& src =
+      test_pattern ? static_cast<droppix::FrameSource&>(pattern)
+                   : static_cast<droppix::FrameSource&>(evdi);
   droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate});
   bool ran = daemon.run_until(g_stop, frames);
   return ran ? 0 : 1;
