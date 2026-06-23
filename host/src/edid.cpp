@@ -48,8 +48,8 @@ std::vector<unsigned char> build_edid(const Timing& t) {
   for (int i = 0; i < 8; ++i) e[i] = header[i];
 
   // Manufacturer ID "DPX" (bytes 8-9), 5-bit packed big-endian.
-  // 'D'=4,'P'=16,'X'=24 -> (4<<10)|(16<<5)|24 = 0x1118.
-  e[8]  = 0x11;
+  // 'D'=4,'P'=16,'X'=24 -> (4<<10)|(16<<5)|24 = 0x1218.
+  e[8]  = 0x12;
   e[9]  = 0x18;
   // Product code (10-11), serial (12-15) left as 0/defaults.
   e[10] = 0x01; e[11] = 0x00;
@@ -82,10 +82,13 @@ std::vector<unsigned char> build_edid(const Timing& t) {
   const char* name = "droppix";
   int p = 77;
   for (const char* c = name; *c && p < 90; ++c) e[p++] = *c;
-  while (p < 90) e[p++] = (p == 77) ? 0x0A : 0x20;  // pad with spaces, LF-terminate
+  if (p < 90) e[p++] = 0x0A;     // line-feed terminator after the name
+  while (p < 90) e[p++] = 0x20;  // pad remainder with spaces
 
-  // Descriptors #3 (90-107) and #4 (108-125): dummy.
-  e[91] = e[109] = 0x10;  // dummy descriptor tag
+  // Descriptors #3 (90-107) and #4 (108-125): dummy display descriptors.
+  // Bytes 0-2 of each (90-92 / 108-110) stay 0x000000 to mark "not a DTD";
+  // the descriptor tag (0x10 = dummy) goes at byte 3 (=93 / 111).
+  e[93] = e[111] = 0x10;
 
   e[126] = 0;  // extension count
 

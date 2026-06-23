@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <numeric>
+#include <string>
 #include "edid.h"
 
 using droppix::build_edid;
@@ -42,4 +43,28 @@ TEST(Edid, PixelClockEncodedLittleEndianIn10kHzUnits) {
   const int o = 54;
   int clk = e[o] | (e[o+1] << 8);   // units of 10 kHz
   EXPECT_EQ(clk, 14850);            // 148.5 MHz
+}
+
+TEST(Edid, ManufacturerIdEncodesDPX) {
+  auto e = build_edid(timing_1080p60());
+  EXPECT_EQ(e[8], 0x12);
+  EXPECT_EQ(e[9], 0x18);
+}
+
+TEST(Edid, DummyDescriptorsAreNotMisreadAsTimings) {
+  auto e = build_edid(timing_1080p60());
+  // Descriptors #3 (byte 90) and #4 (byte 108): first two bytes must be 0
+  // so parsers treat them as display descriptors, not detailed timings.
+  EXPECT_EQ(e[90], 0x00); EXPECT_EQ(e[91], 0x00);
+  EXPECT_EQ(e[108], 0x00); EXPECT_EQ(e[109], 0x00);
+  EXPECT_EQ(e[93], 0x10);   // dummy descriptor tag at offset+3
+  EXPECT_EQ(e[111], 0x10);
+}
+
+TEST(Edid, MonitorNameDescriptorHasNameAndTerminator) {
+  auto e = build_edid(timing_1080p60());
+  EXPECT_EQ(e[75], 0xFC);   // monitor name tag
+  std::string name(reinterpret_cast<const char*>(&e[77]), 7);
+  EXPECT_EQ(name, "droppix");
+  EXPECT_EQ(e[84], 0x0A);   // LF terminator right after the 7-char name
 }
