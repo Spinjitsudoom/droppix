@@ -23,6 +23,7 @@ add_library(droppix_core
   src/software_encoder.cpp
   src/test_pattern_source.cpp
   src/transport_server.cpp
+  src/stream_daemon.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
@@ -33,6 +34,9 @@ target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG)
 
 add_executable(droppix_spike src/spike_main.cpp)
 target_link_libraries(droppix_spike PRIVATE droppix_core)
+
+add_executable(droppix_stream src/stream_main.cpp)
+target_link_libraries(droppix_stream PRIVATE droppix_core)
 
 # --- Tests (GoogleTest via FetchContent) ---
 include(FetchContent)
