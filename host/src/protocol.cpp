@@ -1,0 +1,103 @@
+#include "protocol.h"
+
+namespace droppix {
+namespace {
+
+void put_u32(std::vector<unsigned char>& v, uint32_t x) {
+  v.push_back((x >> 24) & 0xFF); v.push_back((x >> 16) & 0xFF);
+  v.push_back((x >> 8) & 0xFF);  v.push_back(x & 0xFF);
+}
+void put_u64(std::vector<unsigned char>& v, uint64_t x) {
+  for (int s = 56; s >= 0; s -= 8) v.push_back((x >> s) & 0xFF);
+}
+uint32_t get_u32(const unsigned char* p) {
+  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) |
+         (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+}
+uint64_t get_u64(const unsigned char* p) {
+  uint64_t x = 0;
+  for (int i = 0; i < 8; ++i) x = (x << 8) | p[i];
+  return x;
+}
+
+}  // namespace
+
+std::vector<unsigned char> encode_message(MsgType type,
+                                          const std::vector<unsigned char>& body) {
+  std::vector<unsigned char> m;
+  uint32_t len = 1 + static_cast<uint32_t>(body.size());
+  put_u32(m, len);
+  m.push_back(static_cast<unsigned char>(type));
+  m.insert(m.end(), body.begin(), body.end());
+  return m;
+}
+
+void MessageParser::feed(const unsigned char* data, size_t n) {
+  buf_.insert(buf_.end(), data, data + n);
+}
+
+bool MessageParser::next(ParsedMessage& out) {
+  if (buf_.size() - pos_ < 4) { return false; }
+  uint32_t len = get_u32(buf_.data() + pos_);
+  if (buf_.size() - pos_ < 4 + len) { return false; }
+  if (len < 1) {  // malformed: drop the length word and continue
+    pos_ += 4;
+    return next(out);
+  }
+  const unsigned char* p = buf_.data() + pos_ + 4;
+  out.type = static_cast<MsgType>(p[0]);
+  out.body.assign(p + 1, p + len);
+  pos_ += 4 + len;
+  // Compact occasionally so buf_ doesn't grow without bound.
+  if (pos_ > 65536) { buf_.erase(buf_.begin(), buf_.begin() + pos_); pos_ = 0; }
+  return true;
+}
+
+std::vector<unsigned char> encode_hello(uint32_t w, uint32_t h, uint32_t d) {
+  std::vector<unsigned char> b; put_u32(b, w); put_u32(b, h); put_u32(b, d);
+  return b;
+}
+bool decode_hello(const std::vector<unsigned char>& b,
+                  uint32_t& w, uint32_t& h, uint32_t& d) {
+  if (b.size() != 12) return false;
+  w = get_u32(b.data()); h = get_u32(b.data() + 4); d = get_u32(b.data() + 8);
+  return true;
+}
+
+std::vector<unsigned char> encode_config(uint32_t w, uint32_t h, uint32_t fps,
+                                         const std::vector<unsigned char>& ed) {
+  std::vector<unsigned char> b;
+  put_u32(b, w); put_u32(b, h); put_u32(b, fps);
+  put_u32(b, static_cast<uint32_t>(ed.size()));
+  b.insert(b.end(), ed.begin(), ed.end());
+  return b;
+}
+bool decode_config(const std::vector<unsigned char>& b,
+                   uint32_t& w, uint32_t& h, uint32_t& fps,
+                   std::vector<unsigned char>& ed) {
+  if (b.size() < 16) return false;
+  w = get_u32(b.data()); h = get_u32(b.data() + 4); fps = get_u32(b.data() + 8);
+  uint32_t n = get_u32(b.data() + 12);
+  if (b.size() != 16 + n) return false;
+  ed.assign(b.begin() + 16, b.end());
+  return true;
+}
+
+std::vector<unsigned char> encode_video(uint64_t pts_us, bool key,
+                                        const std::vector<unsigned char>& nal) {
+  std::vector<unsigned char> b;
+  put_u64(b, pts_us);
+  b.push_back(key ? 1 : 0);
+  b.insert(b.end(), nal.begin(), nal.end());
+  return b;
+}
+bool decode_video(const std::vector<unsigned char>& b,
+                  uint64_t& pts_us, bool& key, std::vector<unsigned char>& nal) {
+  if (b.size() < 9) return false;
+  pts_us = get_u64(b.data());
+  key = b[8] != 0;
+  nal.assign(b.begin() + 9, b.end());
+  return true;
+}
+
+}  // namespace droppix
