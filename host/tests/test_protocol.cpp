@@ -62,3 +62,25 @@ TEST(Protocol, VideoRoundTrip) {
   ASSERT_TRUE(decode_video(body, pts, key, out));
   EXPECT_EQ(pts, 123456u); EXPECT_TRUE(key); EXPECT_EQ(out, nal);
 }
+
+TEST(Protocol, ParserRejectsOversizedLengthWithoutOverread) {
+  MessageParser p;
+  // length word = 0xFFFFFFFF, then a couple stray bytes. Must not crash/overread.
+  unsigned char bad[] = {0xFF, 0xFF, 0xFF, 0xFF, 0x03, 0xAA};
+  p.feed(bad, sizeof(bad));
+  ParsedMessage out;
+  EXPECT_FALSE(p.next(out));
+}
+
+TEST(Protocol, ParserResyncsPastManyZeroLengthWordsWithoutRecursion) {
+  MessageParser p;
+  std::vector<unsigned char> data;
+  for (int i = 0; i < 5000; ++i) { data.insert(data.end(), {0, 0, 0, 0}); }  // len=0 words
+  auto good = encode_message(MsgType::Ping, {7});
+  data.insert(data.end(), good.begin(), good.end());
+  p.feed(data.data(), data.size());
+  ParsedMessage out;
+  ASSERT_TRUE(p.next(out));     // must reach the real message via a loop, not blow the stack
+  EXPECT_EQ(out.type, MsgType::Ping);
+  EXPECT_EQ(out.body, (std::vector<unsigned char>{7}));
+}

@@ -37,20 +37,22 @@ void MessageParser::feed(const unsigned char* data, size_t n) {
 }
 
 bool MessageParser::next(ParsedMessage& out) {
-  if (buf_.size() - pos_ < 4) { return false; }
-  uint32_t len = get_u32(buf_.data() + pos_);
-  if (buf_.size() - pos_ < 4 + len) { return false; }
-  if (len < 1) {  // malformed: drop the length word and continue
-    pos_ += 4;
-    return next(out);
+  static constexpr uint32_t kMaxMessage = 64u * 1024u * 1024u;  // 64 MiB sanity cap
+  for (;;) {
+    if (buf_.size() - pos_ < 4) return false;
+    uint32_t len = get_u32(buf_.data() + pos_);
+    if (len < 1 || len > kMaxMessage) {
+      pos_ += 4;       // malformed length word: skip and resync (no recursion)
+      continue;
+    }
+    if (buf_.size() - pos_ < static_cast<size_t>(4) + len) return false;  // widened
+    const unsigned char* p = buf_.data() + pos_ + 4;
+    out.type = static_cast<MsgType>(p[0]);
+    out.body.assign(p + 1, p + len);
+    pos_ += static_cast<size_t>(4) + len;
+    if (pos_ > 65536) { buf_.erase(buf_.begin(), buf_.begin() + pos_); pos_ = 0; }
+    return true;
   }
-  const unsigned char* p = buf_.data() + pos_ + 4;
-  out.type = static_cast<MsgType>(p[0]);
-  out.body.assign(p + 1, p + len);
-  pos_ += 4 + len;
-  // Compact occasionally so buf_ doesn't grow without bound.
-  if (pos_ > 65536) { buf_.erase(buf_.begin(), buf_.begin() + pos_); pos_ = 0; }
-  return true;
 }
 
 std::vector<unsigned char> encode_hello(uint32_t w, uint32_t h, uint32_t d) {
@@ -78,7 +80,7 @@ bool decode_config(const std::vector<unsigned char>& b,
   if (b.size() < 16) return false;
   w = get_u32(b.data()); h = get_u32(b.data() + 4); fps = get_u32(b.data() + 8);
   uint32_t n = get_u32(b.data() + 12);
-  if (b.size() != 16 + n) return false;
+  if (b.size() != static_cast<size_t>(16) + n) return false;
   ed.assign(b.begin() + 16, b.end());
   return true;
 }
