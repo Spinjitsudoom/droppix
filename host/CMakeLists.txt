@@ -13,6 +13,7 @@ message(STATUS "Using libevdi: ${EVDI_LIB}")
 add_library(droppix_core
   src/edid.cpp
   src/virtual_display.cpp
+  src/capturer.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
