@@ -89,7 +89,9 @@ std::vector<EncodedPacket> SoftwareEncoder::encode(const Frame& frame, int64_t p
 std::vector<EncodedPacket> SoftwareEncoder::flush() {
   if (!ctx_) return {};
   avcodec_send_frame(ctx_, nullptr);  // enter draining mode
-  return drain();
+  auto out = drain();
+  pts_map_.clear();
+  return out;
 }
 
 SoftwareEncoder::~SoftwareEncoder() {

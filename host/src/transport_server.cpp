@@ -48,14 +48,14 @@ bool TransportServer::accept_client(int timeout_ms) {
   return true;
 }
 
-bool TransportServer::read_hello(uint32_t& w, uint32_t& h, uint32_t& density,
+bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, uint32_t& density,
                                  int timeout_ms) {
   unsigned char buf[1024];
   ParsedMessage m;
   for (;;) {
     if (parser_.next(m)) {
       if (m.type != MsgType::Hello) continue;
-      return decode_hello(m.body, w, h, density);
+      return decode_hello(m.body, version, w, h, density);
     }
     if (!wait_readable(client_fd_, timeout_ms)) return false;
     ssize_t n = ::recv(client_fd_, buf, sizeof(buf), 0);

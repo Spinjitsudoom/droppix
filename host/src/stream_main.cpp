@@ -31,6 +31,11 @@ int main(int argc, char** argv) {
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
+  if (fps <= 0) fps = 30;
+  if (bitrate <= 0) bitrate = 8000;
+  if (width <= 0) width = 1280;
+  if (height <= 0) height = 720;
+
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
     std::fprintf(stderr, "listen on %d failed\n", port); return 1;
@@ -45,13 +50,17 @@ int main(int argc, char** argv) {
       std::fprintf(stderr, "warning: adb reverse failed\n");
   }
 
-  droppix::SoftwareEncoder enc;
-  droppix::TestPatternSource pattern(width, height, fps);
-  droppix::EvdiFrameSource evdi;
-  droppix::FrameSource& src =
-      test_pattern ? static_cast<droppix::FrameSource&>(pattern)
-                   : static_cast<droppix::FrameSource&>(evdi);
-  droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate});
-  bool ran = daemon.run_until(g_stop, frames);
-  return ran ? 0 : 1;
+  // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
+  while (!g_stop) {
+    droppix::SoftwareEncoder enc;
+    droppix::TestPatternSource pattern(width, height, fps);
+    droppix::EvdiFrameSource evdi;
+    droppix::FrameSource& src =
+        test_pattern ? static_cast<droppix::FrameSource&>(pattern)
+                     : static_cast<droppix::FrameSource&>(evdi);
+    droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate});
+    daemon.run_until(g_stop, frames);
+    if (frames > 0) break;  // one-shot (test) mode exits after a single session
+  }
+  return 0;
 }

@@ -8,6 +8,13 @@ enum class MsgType : uint8_t {
   Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6
 };
 
+// Protocol version sent in HELLO. Bump on any wire-format change.
+constexpr uint32_t kProtocolVersion = 1;
+
+// NOTE: the encoder uses x264 repeat-headers, so SPS/PPS travel IN-BAND ahead of
+// each IDR. The CONFIG message's extradata is therefore typically empty and a
+// decoder (e.g. Android MediaCodec) must configure from the in-band IDR headers.
+
 // Wire frame: [u32 big-endian length][payload]; length covers payload;
 // payload[0] = type byte, payload[1..] = body.
 std::vector<unsigned char> encode_message(MsgType type,
@@ -29,9 +36,9 @@ class MessageParser {
 };
 
 // Payload codecs (all integers big-endian).
-std::vector<unsigned char> encode_hello(uint32_t width, uint32_t height,
-                                        uint32_t density);
-bool decode_hello(const std::vector<unsigned char>& body,
+std::vector<unsigned char> encode_hello(uint32_t version, uint32_t width,
+                                        uint32_t height, uint32_t density);
+bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
                   uint32_t& width, uint32_t& height, uint32_t& density);
 
 std::vector<unsigned char> encode_config(uint32_t width, uint32_t height,

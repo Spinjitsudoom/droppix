@@ -55,14 +55,15 @@ bool MessageParser::next(ParsedMessage& out) {
   }
 }
 
-std::vector<unsigned char> encode_hello(uint32_t w, uint32_t h, uint32_t d) {
-  std::vector<unsigned char> b; put_u32(b, w); put_u32(b, h); put_u32(b, d);
+std::vector<unsigned char> encode_hello(uint32_t version, uint32_t w, uint32_t h, uint32_t d) {
+  std::vector<unsigned char> b; put_u32(b, version); put_u32(b, w); put_u32(b, h); put_u32(b, d);
   return b;
 }
-bool decode_hello(const std::vector<unsigned char>& b,
+bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
                   uint32_t& w, uint32_t& h, uint32_t& d) {
-  if (b.size() != 12) return false;
-  w = get_u32(b.data()); h = get_u32(b.data() + 4); d = get_u32(b.data() + 8);
+  if (b.size() != 16) return false;
+  version = get_u32(b.data()); w = get_u32(b.data() + 4);
+  h = get_u32(b.data() + 8); d = get_u32(b.data() + 12);
   return true;
 }
 

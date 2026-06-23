@@ -10,9 +10,9 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   std::fprintf(stderr, "source %dx%d\n", w, h);
 
   if (!tx_.accept_client(60000)) { std::fprintf(stderr, "no client\n"); return false; }
-  uint32_t cw, ch, density;
-  if (!tx_.read_hello(cw, ch, density, 10000)) { std::fprintf(stderr, "no HELLO\n"); return false; }
-  std::fprintf(stderr, "client HELLO %ux%u\n", cw, ch);
+  uint32_t cver, cw, ch, density;
+  if (!tx_.read_hello(cver, cw, ch, density, 10000)) { std::fprintf(stderr, "no HELLO\n"); return false; }
+  std::fprintf(stderr, "client HELLO v%u %ux%u\n", cver, cw, ch);
 
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;

@@ -10,6 +10,8 @@ bool EvdiFrameSource::start(int& width, int& height) {
   cap_ = std::make_unique<Capturer>(display_.handle());
   if (!cap_->wait_for_mode(5000)) {
     std::fprintf(stderr, "evdi: no KWin mode within 5s\n");
+    cap_.reset();
+    display_.disconnect();
     return false;
   }
   width = cap_->width();

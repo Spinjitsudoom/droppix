@@ -17,7 +17,8 @@ def main():
     out = sys.stdout.buffer
 
     s = socket.create_connection(("127.0.0.1", port))
-    s.sendall(struct.pack(">IB", 1 + 12, HELLO) + struct.pack(">III", w, h, 320))
+    VERSION = 1
+    s.sendall(struct.pack(">IB", 1 + 16, HELLO) + struct.pack(">IIII", VERSION, w, h, 320))
 
     buf = b""
     def read_msg():

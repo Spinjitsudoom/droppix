@@ -40,9 +40,10 @@ TEST(Protocol, ParserHandlesTwoBackToBackMessages) {
 }
 
 TEST(Protocol, HelloRoundTrip) {
-  auto body = encode_hello(1920, 1080, 320);
-  uint32_t w, h, d;
-  ASSERT_TRUE(decode_hello(body, w, h, d));
+  auto body = encode_hello(kProtocolVersion, 1920, 1080, 320);
+  uint32_t ver, w, h, d;
+  ASSERT_TRUE(decode_hello(body, ver, w, h, d));
+  EXPECT_EQ(ver, kProtocolVersion);
   EXPECT_EQ(w, 1920u); EXPECT_EQ(h, 1080u); EXPECT_EQ(d, 320u);
 }
 
