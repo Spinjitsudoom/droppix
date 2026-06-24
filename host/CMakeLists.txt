@@ -52,6 +52,11 @@ if(Qt6_FOUND)
   )
   target_include_directories(droppix_gui PRIVATE gui)
   target_link_libraries(droppix_gui PRIVATE Qt6::Widgets)
+  target_sources(droppix_gui PRIVATE
+    gui/profile_store.cpp
+    gui/stream_controller.cpp
+    gui/adb_manager.cpp
+  )
 else()
   message(STATUS "Qt6 not found; skipping droppix_gui")
 endif()
@@ -86,3 +91,14 @@ target_include_directories(droppix_tests PRIVATE gui)
 target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main Threads::Threads)
 include(GoogleTest)
 gtest_discover_tests(droppix_tests)
+
+if(Qt6_FOUND)
+  find_package(Qt6 COMPONENTS Test QUIET)
+  add_executable(droppix_gui_tests
+    gui/tests/test_profile_store.cpp
+    gui/profile_store.cpp
+  )
+  target_include_directories(droppix_gui_tests PRIVATE gui)
+  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
+  gtest_discover_tests(droppix_gui_tests)
+endif()
