@@ -30,7 +30,8 @@ MainWindow::MainWindow(QWidget* parent)
   srcEvdi_ = new QRadioButton("Real monitor (evdi)");
   srcEvdi_->setChecked(true);
   resolution_ = new QComboBox;
-  resolution_->addItems({"1280x720", "1920x1080", "2560x1440",
+  resolution_->addItems({"640x480", "800x600", "960x540", "1024x576", "1024x640",
+                         "1280x720", "1920x1080", "2560x1440",
                          "1280x800", "1920x1200", "2560x1600"});
   resolution_->setCurrentText("1920x1080");
   fps_ = new QSpinBox; fps_->setRange(1, 120); fps_->setValue(30);

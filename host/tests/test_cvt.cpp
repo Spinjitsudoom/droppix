@@ -18,6 +18,10 @@ TEST(Cvt, Rb720p60)   { expectRb(cvt_rb_timing(1280, 720,60),  64000, 5, 21, 128
 TEST(Cvt, Rb1600p60)  { expectRb(cvt_rb_timing(2560,1600,60), 268500, 6, 46, 2560,1600); }
 TEST(Cvt, Rb1200p60)  { expectRb(cvt_rb_timing(1920,1200,60), 154000, 6, 35, 1920,1200); }
 TEST(Cvt, Rb1080p30)  { expectRb(cvt_rb_timing(1920,1080,30),  68250, 5, 16, 1920,1080); }
+// Low-res modes (sub-720 GUI presets) must also produce valid reduced-blanking timings.
+TEST(Cvt, Rb480p60)   { expectRb(cvt_rb_timing( 640, 480,60),  23500, 4, 14,  640, 480); }
+TEST(Cvt, Rb600p60)   { expectRb(cvt_rb_timing( 800, 600,60),  35500, 4, 18,  800, 600); }
+TEST(Cvt, Rb540p60)   { expectRb(cvt_rb_timing( 960, 540,60),  37250, 5, 16,  960, 540); }
 
 TEST(Cvt, ModeTimingUsesCeaPresetFor1080p60) {
   // The default 1080p60 must use the verified CEA preset (148500), not CVT (138500).
