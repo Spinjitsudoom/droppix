@@ -41,6 +41,19 @@ target_link_libraries(droppix_spike PRIVATE droppix_core)
 add_executable(droppix_stream src/stream_main.cpp)
 target_link_libraries(droppix_stream PRIVATE droppix_core)
 
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 QUIET COMPONENTS Widgets)
+if(Qt6_FOUND)
+  add_executable(droppix_gui
+    gui/main.cpp
+    gui/main_window.cpp
+  )
+  target_include_directories(droppix_gui PRIVATE gui)
+  target_link_libraries(droppix_gui PRIVATE Qt6::Widgets)
+else()
+  message(STATUS "Qt6 not found; skipping droppix_gui")
+endif()
+
 # --- Tests (GoogleTest via FetchContent) ---
 include(FetchContent)
 FetchContent_Declare(googletest
