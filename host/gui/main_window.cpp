@@ -1,6 +1,8 @@
 #include "main_window.h"
 #include "args_builder.h"
 #include <QtWidgets>
+#include <QCloseEvent>
+#include <QCoreApplication>
 
 namespace droppix {
 
@@ -10,8 +12,8 @@ static QString configDir() {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
-      store_(configDir()),
-      streamBin_("/home/Spinjitsudoomyt/droppix-build/droppix_stream") {
+      store_(configDir()) {
+  streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
   setWindowTitle("droppix");
 
   // --- Profile row ---
@@ -151,5 +153,10 @@ void MainWindow::onStartStop() {
 void MainWindow::setRunningUi(bool running) {
   startBtn_->setText(running ? "■ Stop" : "▶ Start streaming");
   if (!running) { streamLabel_->setText("Stream: Stopped"); statsLabel_->setText("Stats: —"); }
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+  controller_.stop();          // don't orphan the streamer on quit
+  QMainWindow::closeEvent(event);
 }
 }  // namespace droppix
