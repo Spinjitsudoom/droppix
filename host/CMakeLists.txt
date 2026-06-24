@@ -26,6 +26,7 @@ add_library(droppix_core
   src/transport_server.cpp
   src/stream_daemon.cpp
   src/stat_accumulator.cpp
+  src/stats_json.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
@@ -39,6 +40,26 @@ target_link_libraries(droppix_spike PRIVATE droppix_core)
 
 add_executable(droppix_stream src/stream_main.cpp)
 target_link_libraries(droppix_stream PRIVATE droppix_core)
+
+set(CMAKE_AUTOMOC ON)
+find_package(Qt6 QUIET COMPONENTS Widgets)
+if(Qt6_FOUND)
+  add_executable(droppix_gui
+    gui/main.cpp
+    gui/main_window.cpp
+    gui/stats_parser.cpp
+    gui/args_builder.cpp
+  )
+  target_include_directories(droppix_gui PRIVATE gui)
+  target_link_libraries(droppix_gui PRIVATE Qt6::Widgets)
+  target_sources(droppix_gui PRIVATE
+    gui/profile_store.cpp
+    gui/stream_controller.cpp
+    gui/adb_manager.cpp
+  )
+else()
+  message(STATUS "Qt6 not found; skipping droppix_gui")
+endif()
 
 # --- Tests (GoogleTest via FetchContent) ---
 include(FetchContent)
@@ -60,7 +81,24 @@ add_executable(droppix_tests
   tests/test_test_pattern_source.cpp
   tests/test_transport_server.cpp
   tests/test_stat_accumulator.cpp
+  tests/test_stats_json.cpp
+  tests/test_stats_parser.cpp
+  tests/test_args_builder.cpp
+  gui/stats_parser.cpp
+  gui/args_builder.cpp
 )
+target_include_directories(droppix_tests PRIVATE gui)
 target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main Threads::Threads)
 include(GoogleTest)
 gtest_discover_tests(droppix_tests)
+
+if(Qt6_FOUND)
+  find_package(Qt6 COMPONENTS Test QUIET)
+  add_executable(droppix_gui_tests
+    gui/tests/test_profile_store.cpp
+    gui/profile_store.cpp
+  )
+  target_include_directories(droppix_gui_tests PRIVATE gui)
+  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
+  gtest_discover_tests(droppix_gui_tests)
+endif()

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <sys/prctl.h>
 #include "stream_daemon.h"
 #include "test_pattern_source.h"
 #include "evdi_frame_source.h"
@@ -13,15 +14,18 @@ static void on_sigint(int) { g_stop = 1; }
 
 int main(int argc, char** argv) {
   std::signal(SIGINT, on_sigint);
+  std::signal(SIGTERM, on_sigint);          // GUI terminate() -> clean shutdown
+  prctl(PR_SET_PDEATHSIG, SIGTERM);          // die if our parent (e.g. pkexec) is killed
   int port = 27000, fps = 30, bitrate = 8000, frames = 0;
   int width = 1280, height = 720;
-  bool test_pattern = false, adb_reverse = false;
+  bool test_pattern = false, adb_reverse = false, stats_json = false;
 
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     auto val = [&]() { return (i + 1 < argc) ? std::atoi(argv[++i]) : 0; };
     if (a == "--test-pattern") test_pattern = true;
     else if (a == "--adb-reverse") adb_reverse = true;
+    else if (a == "--stats-json") stats_json = true;
     else if (a == "--port") port = val();
     else if (a == "--fps") fps = val();
     else if (a == "--bitrate") bitrate = val();
@@ -58,7 +62,7 @@ int main(int argc, char** argv) {
     droppix::FrameSource& src =
         test_pattern ? static_cast<droppix::FrameSource&>(pattern)
                      : static_cast<droppix::FrameSource&>(evdi);
-    droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate});
+    droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate, stats_json});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }

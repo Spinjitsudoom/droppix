@@ -1,5 +1,6 @@
 #include "stream_daemon.h"
 #include "stat_accumulator.h"
+#include "stats_json.h"
 #include <chrono>
 #include <cstdio>
 
@@ -43,10 +44,16 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     auto now = std::chrono::steady_clock::now();
     double elapsed_s = std::chrono::duration<double>(now - last_report).count();
     if (elapsed_s >= 1.0) {
-      std::fprintf(stderr,
-          "stats: encode avg %.1f ms peak %.1f ms | fps %.1f | frame avg %.1f KB peak %.1f KB\n",
-          encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
-          frame_kb.avg(), frame_kb.peak());
+      if (cfg_.stats_json) {
+        std::fprintf(stderr, "%s\n", format_stats_json(
+            encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
+            frame_kb.avg(), frame_kb.peak(), tx_.connected()).c_str());
+      } else {
+        std::fprintf(stderr,
+            "stats: encode avg %.1f ms peak %.1f ms | fps %.1f | frame avg %.1f KB peak %.1f KB\n",
+            encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
+            frame_kb.avg(), frame_kb.peak());
+      }
       encode_ms.reset(); frame_kb.reset(); frames_since_report = 0; last_report = now;
     }
 
