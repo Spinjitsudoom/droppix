@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
   std::signal(SIGTERM, on_sigint);          // GUI terminate() -> clean shutdown
   prctl(PR_SET_PDEATHSIG, SIGTERM);          // die if our parent (e.g. pkexec) is killed
   int port = 27000, fps = 30, bitrate = 8000, frames = 0;
-  int width = 1280, height = 720;
+  int width = 1920, height = 1080, refresh = 60;
   bool test_pattern = false, adb_reverse = false, stats_json = false;
 
   for (int i = 1; i < argc; ++i) {
@@ -31,14 +31,16 @@ int main(int argc, char** argv) {
     else if (a == "--bitrate") bitrate = val();
     else if (a == "--width") width = val();
     else if (a == "--height") height = val();
+    else if (a == "--refresh") refresh = val();
     else if (a == "--frames") frames = val();
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
   if (fps <= 0) fps = 30;
   if (bitrate <= 0) bitrate = 8000;
-  if (width <= 0) width = 1280;
-  if (height <= 0) height = 720;
+  if (width <= 0) width = 1920;
+  if (height <= 0) height = 1080;
+  if (refresh <= 0) refresh = 60;
 
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
@@ -58,7 +60,7 @@ int main(int argc, char** argv) {
   while (!g_stop) {
     droppix::SoftwareEncoder enc;
     droppix::TestPatternSource pattern(width, height, fps);
-    droppix::EvdiFrameSource evdi;
+    droppix::EvdiFrameSource evdi(width, height, refresh);
     droppix::FrameSource& src =
         test_pattern ? static_cast<droppix::FrameSource&>(pattern)
                      : static_cast<droppix::FrameSource&>(evdi);
