@@ -1,4 +1,5 @@
 #include "software_encoder.h"
+#include <algorithm>
 #include <cstdio>
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -24,10 +25,25 @@ bool SoftwareEncoder::open(int width, int height, int fps, int bitrate_kbps) {
   ctx_->gop_size = fps * 2;        // keyframe every ~2s
   ctx_->max_b_frames = 0;          // no B-frames: lowest latency
   ctx_->bit_rate = int64_t(bitrate_kbps) * 1000;
+  // VBV: cap instantaneous bitrate so single frames can't balloon (low latency).
+  ctx_->rc_max_rate = ctx_->bit_rate;
+  ctx_->rc_buffer_size = static_cast<int>(ctx_->bit_rate / std::max(1, fps) * 2);  // ~2 frames
   av_opt_set(ctx_->priv_data, "preset", "ultrafast", 0);
   av_opt_set(ctx_->priv_data, "tune", "zerolatency", 0);
-  // Make every IDR self-contained (SPS/PPS repeated in-band).
-  av_opt_set(ctx_->priv_data, "x264-params", "repeat-headers=1", 0);
+  // Make every IDR self-contained (SPS/PPS repeated in-band), and pin the x264
+  // VBV params explicitly: with some libavcodec/libx264 builds, setting
+  // ctx_->rc_max_rate / rc_buffer_size alone is not reliably translated into
+  // x264's vbv-maxrate/vbv-bufsize, so we also pass them via x264-params.
+  {
+    // Buffer size in kbits, sized to hold ~2 frames worth of data at the
+    // target bitrate (matches rc_buffer_size above, expressed in kbits).
+    const int vbv_bufsize_kbits = std::max(1, bitrate_kbps * 2 / std::max(1, fps));
+    char params[160];
+    std::snprintf(params, sizeof(params),
+                   "repeat-headers=1:vbv-maxrate=%d:vbv-bufsize=%d",
+                   bitrate_kbps, vbv_bufsize_kbits);
+    av_opt_set(ctx_->priv_data, "x264-params", params, 0);
+  }
 
   if (avcodec_open2(ctx_, codec, nullptr) < 0) {
     std::fprintf(stderr, "avcodec_open2 failed\n"); return false;

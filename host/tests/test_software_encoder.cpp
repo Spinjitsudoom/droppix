@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <set>
 #include "software_encoder.h"
 #include "capturer.h"
@@ -12,6 +13,25 @@ static Frame make_frame(int w, int h, unsigned char b, unsigned char g, unsigned
   f.bgra.resize(static_cast<size_t>(w) * h * 4);
   for (size_t i = 0; i + 3 < f.bgra.size(); i += 4) {
     f.bgra[i] = b; f.bgra[i+1] = g; f.bgra[i+2] = r; f.bgra[i+3] = 0xFF;
+  }
+  return f;
+}
+
+// Build a BGRA frame whose content varies by pixel position and frame index,
+// so it is high-entropy / not trivially compressible (unlike a solid color).
+static Frame make_detail_frame(int w, int h, int i) {
+  Frame f;
+  f.width = w; f.height = h; f.stride = w * 4; f.valid = true;
+  f.bgra.resize(static_cast<size_t>(w) * h * 4);
+  for (int y = 0; y < h; ++y) {
+    for (int x = 0; x < w; ++x) {
+      size_t off = (static_cast<size_t>(y) * w + x) * 4;
+      unsigned char v = static_cast<unsigned char>((x * 7 + y * 13 + i * 29) & 0xFF);
+      f.bgra[off]   = v;
+      f.bgra[off+1] = static_cast<unsigned char>((v * 3) & 0xFF);
+      f.bgra[off+2] = static_cast<unsigned char>((v * 5) & 0xFF);
+      f.bgra[off+3] = 0xFF;
+    }
   }
   return f;
 }
@@ -59,4 +79,22 @@ TEST(SoftwareEncoder, PacketsCarryCallerMicrosecondPts) {
     EXPECT_GE(p.pts_us, 1000000) << "pts looks like a frame index, not microseconds";
     EXPECT_TRUE(submitted.count(p.pts_us) > 0) << "pts not one of the submitted values";
   }
+}
+
+TEST(SoftwareEncoder, RespectsBitrateNoHugeFrames) {
+  SoftwareEncoder enc;
+  const int fps = 30, kbps = 2000, w = 1280, h = 720;
+  ASSERT_TRUE(enc.open(w, h, fps, kbps));
+  size_t total = 0, maxFrame = 0; int n = 0;
+  for (int i = 0; i < 90; ++i) {
+    Frame f = make_detail_frame(w, h, i);     // changing, detailed content
+    for (auto& p : enc.encode(f, i * 33333)) { total += p.data.size(); maxFrame = std::max(maxFrame, p.data.size()); ++n; }
+  }
+  for (auto& p : enc.flush()) { total += p.data.size(); maxFrame = std::max(maxFrame, p.data.size()); ++n; }
+  ASSERT_GT(n, 0);
+  // ~2000 kbps @ 30 fps for 90 frames (3s) -> ~750 KB total expected; allow 4x slack.
+  double kbits = total * 8.0 / 1000.0;
+  EXPECT_LT(kbits, 4.0 * kbps * (90.0 / fps)) << "encoder ignoring bitrate (total " << kbits << " kbit)";
+  // No single frame should be a multi-hundred-KB spike under VBV.
+  EXPECT_LT(maxFrame, 300u * 1024u) << "frame spike: " << maxFrame << " bytes";
 }
