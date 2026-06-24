@@ -5,7 +5,7 @@
 #include "transport_server.h"
 
 namespace droppix {
-struct StreamConfig { int fps = 30; int bitrate_kbps = 8000; };
+struct StreamConfig { int fps = 30; int bitrate_kbps = 8000; bool stats_json = false; };
 
 class StreamDaemon {
  public:
