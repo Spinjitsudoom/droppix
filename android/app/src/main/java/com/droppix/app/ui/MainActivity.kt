@@ -12,10 +12,13 @@ import com.droppix.app.net.TransportClient
 import com.droppix.app.protocol.Protocol
 import kotlin.concurrent.thread
 
-class MainActivity : Activity() {
-    private companion object { const val TAG = "droppix"; const val HOST = "127.0.0.1"; const val PORT = 27000 }
+class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
+    private companion object {
+        const val TAG = "droppix"; const val HOST = "127.0.0.1"; const val PORT = 27000
+    }
 
     @Volatile private var running = false
+    @Volatile private var surface: Surface? = null
     private var netThread: Thread? = null
     @Volatile private var decoder: VideoDecoder? = null
     private lateinit var surfaceView: DisplaySurfaceView
@@ -29,37 +32,64 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        running = true
-        surfaceView.awaitSurface { surface -> startStreaming(surface) }
+        surfaceView.setSurfaceListener(this)  // fires onSurfaceReady if already valid
     }
 
-    private fun startStreaming(surface: Surface) {
+    override fun onPause() {
+        super.onPause()
+        surfaceView.setSurfaceListener(null)
+        stopStreaming()
+    }
+
+    // --- DisplaySurfaceView.SurfaceListener (UI thread) ---
+    override fun onSurfaceReady(surface: Surface) {
+        this.surface = surface
+        startStreaming()
+    }
+
+    override fun onSurfaceGone() {
+        stopStreaming()
+        surface = null
+    }
+
+    private fun startStreaming() {
+        if (running) return
+        running = true
         netThread = thread(name = "droppix-net") {
             val client = TransportClient()
             val listener = object : StreamListener {
                 override fun onConfig(config: Protocol.Config) {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
-                    runOnUiThread {
-                        surfaceView.holder.setFixedSize(config.width, config.height)
-                    }
+                    val s = surface ?: return
+                    runOnUiThread { surfaceView.holder.setFixedSize(config.width, config.height) }
                     decoder?.release()
-                    decoder = VideoDecoder(surface, config.width, config.height)
+                    decoder = try {
+                        VideoDecoder(s, config.width, config.height)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "decoder create failed: ${e.message}"); null
+                    }
                 }
                 override fun onVideo(video: Protocol.Video) {
                     decoder?.submit(video.nal, video.ptsUs)
                 }
             }
-            try {
-                client.run(HOST, PORT, 1920, 1080, resources.displayMetrics.densityDpi,
-                    listener) { running }
-            } catch (e: Exception) {
-                Log.w(TAG, "stream ended: ${e.message}")
+            // The host re-accepts clients in a loop, so keep dialing until paused.
+            while (running) {
+                try {
+                    Log.i(TAG, "connecting to $HOST:$PORT")
+                    client.run(HOST, PORT, 1920, 1080,
+                        resources.displayMetrics.densityDpi, listener) { running }
+                    Log.i(TAG, "stream session ended")
+                } catch (e: Exception) {
+                    Log.w(TAG, "connect/stream failed: ${e.message}")
+                }
+                decoder?.release(); decoder = null
+                if (running) Thread.sleep(1000)  // back off before retrying
             }
         }
     }
 
-    override fun onPause() {
-        super.onPause()
+    private fun stopStreaming() {
         running = false
         netThread?.join(1500)
         if (netThread?.isAlive == true) Log.w(TAG, "net thread did not exit within 1.5s")

@@ -63,7 +63,7 @@ class MessageParser {
     private val maxMessage = 64 * 1024 * 1024  // mirror host sanity cap
 
     fun feed(data: ByteArray, n: Int) {
-        buf = buf.copyOf(buf.size).plus(data.copyOfRange(0, n))
+        buf = buf.plus(data.copyOfRange(0, n))  // buf.plus already allocates a fresh array
     }
 
     fun next(): ParsedMessage? {
