@@ -26,6 +26,14 @@ gpgkey=https://packages.adoptium.net/artifactory/api/gpg/key/public
 EOF
     sudo dnf install -y temurin-17-jdk unzip wget which
   }
+  # Pin JDK 17 as the default java/javac so the build commands resolve the right
+  # JDK via `which java` (Fedora 44 defaults alternatives to java-25, which AGP
+  # 8.5.2 / Gradle 8.7 reject).
+  TJAVA=$(alternatives --display java 2>/dev/null | grep -oE "/usr/lib/jvm/[^ ]*temurin[^ ]*/bin/java" | head -1)
+  if [ -n "$TJAVA" ]; then
+    sudo alternatives --set java "$TJAVA" || true
+    sudo alternatives --set javac "${TJAVA}c" || true
+  fi
   SDK=/home/Spinjitsudoomyt/android-sdk
   if [ ! -d "$SDK/cmdline-tools/latest" ]; then
     mkdir -p "$SDK/cmdline-tools"
