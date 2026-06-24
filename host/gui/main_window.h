@@ -25,6 +25,7 @@ class MainWindow : public QMainWindow {
   // widgets
   QRadioButton* srcTest_; QRadioButton* srcEvdi_;
   QComboBox* resolution_; QSpinBox* fps_; QSpinBox* bitrate_; QSpinBox* port_;
+  QComboBox* refresh_;
   QCheckBox* autoReverse_;
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;

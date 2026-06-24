@@ -6,8 +6,12 @@ Command build_command(const Settings& s, const std::string& stream_bin) {
   std::vector<std::string> a;  // droppix_stream's own arguments
   if (s.source == Settings::Source::TestPattern) {
     a.push_back("--test-pattern");
-    a.push_back("--width");  a.push_back(std::to_string(s.width));
-    a.push_back("--height"); a.push_back(std::to_string(s.height));
+  }
+  // Both sources take the dimensions; evdi additionally advertises a refresh.
+  a.push_back("--width");  a.push_back(std::to_string(s.width));
+  a.push_back("--height"); a.push_back(std::to_string(s.height));
+  if (s.source == Settings::Source::Evdi) {
+    a.push_back("--refresh"); a.push_back(std::to_string(s.refresh_hz));
   }
   a.push_back("--fps");     a.push_back(std::to_string(s.fps));
   a.push_back("--bitrate"); a.push_back(std::to_string(s.bitrate_kbps));

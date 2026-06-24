@@ -12,7 +12,7 @@ TEST(ProfileStore, SaveLoadRoundTrip) {
   Settings s;
   s.source = Settings::Source::Evdi;
   s.width = 1920; s.height = 1080; s.fps = 60; s.bitrate_kbps = 12000;
-  s.port = 27123; s.auto_adb_reverse = false;
+  s.port = 27123; s.auto_adb_reverse = false; s.refresh_hz = 30;
   ASSERT_TRUE(store.save("hi-q", s));
 
   Settings out;
@@ -21,6 +21,7 @@ TEST(ProfileStore, SaveLoadRoundTrip) {
   EXPECT_EQ(out.width, 1920); EXPECT_EQ(out.height, 1080);
   EXPECT_EQ(out.fps, 60); EXPECT_EQ(out.bitrate_kbps, 12000);
   EXPECT_EQ(out.port, 27123); EXPECT_FALSE(out.auto_adb_reverse);
+  EXPECT_EQ(out.refresh_hz, 30);
 
   EXPECT_TRUE(store.names().contains("hi-q"));
   EXPECT_TRUE(store.remove("hi-q"));

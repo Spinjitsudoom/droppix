@@ -20,13 +20,16 @@ TEST(ArgsBuilder, TestPatternRunsBinaryDirectly) {
   EXPECT_TRUE(c.needs_adb_reverse);  // auto_adb_reverse default true
 }
 
-TEST(ArgsBuilder, EvdiUsesPkexecAndNoTestPattern) {
+TEST(ArgsBuilder, EvdiUsesPkexecWithModeFlags) {
   Settings s; s.source = Settings::Source::Evdi;
+  s.width = 2560; s.height = 1600; s.refresh_hz = 60;
   Command c = build_command(s, "/path/droppix_stream");
   EXPECT_EQ(c.program, "pkexec");
-  EXPECT_EQ(c.args.front(), "/path/droppix_stream");  // pkexec's first arg is the binary
+  EXPECT_EQ(c.args.front(), "/path/droppix_stream");
   EXPECT_FALSE(has(c.args, "--test-pattern"));
-  EXPECT_FALSE(has(c.args, "--width"));               // evdi resolution is engine-fixed
+  EXPECT_TRUE(has(c.args, "--width"));  EXPECT_TRUE(has(c.args, "2560"));
+  EXPECT_TRUE(has(c.args, "--height")); EXPECT_TRUE(has(c.args, "1600"));
+  EXPECT_TRUE(has(c.args, "--refresh")); EXPECT_TRUE(has(c.args, "60"));
   EXPECT_TRUE(has(c.args, "--stats-json"));
 }
 

@@ -16,6 +16,7 @@ find_package(Threads REQUIRED)
 # Core library: sources are added by later tasks.
 add_library(droppix_core
   src/edid.cpp
+  src/cvt.cpp
   src/virtual_display.cpp
   src/capturer.cpp
   src/png_writer.cpp
@@ -84,6 +85,7 @@ add_executable(droppix_tests
   tests/test_stats_json.cpp
   tests/test_stats_parser.cpp
   tests/test_args_builder.cpp
+  tests/test_cvt.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
 )

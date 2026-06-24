@@ -28,6 +28,7 @@ static QJsonObject toJson(const Settings& s) {
   o["source"] = (s.source == Settings::Source::Evdi) ? "evdi" : "test";
   o["width"] = s.width; o["height"] = s.height;
   o["fps"] = s.fps; o["bitrate_kbps"] = s.bitrate_kbps; o["port"] = s.port;
+  o["refresh_hz"] = s.refresh_hz;
   o["auto_adb_reverse"] = s.auto_adb_reverse;
   return o;
 }
@@ -40,6 +41,7 @@ static Settings fromJson(const QJsonObject& o) {
   s.fps = o["fps"].toInt(s.fps);
   s.bitrate_kbps = o["bitrate_kbps"].toInt(s.bitrate_kbps);
   s.port = o["port"].toInt(s.port);
+  s.refresh_hz = o["refresh_hz"].toInt(s.refresh_hz);
   s.auto_adb_reverse = o["auto_adb_reverse"].toBool(s.auto_adb_reverse);
   return s;
 }
