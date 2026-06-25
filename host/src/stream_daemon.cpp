@@ -11,7 +11,9 @@ namespace droppix {
 
 static std::string run_kscreen() {
   std::string out;
-  FILE* p = popen("kscreen-doctor -o 2>/dev/null", "r");
+  // timeout-guarded so a hung kscreen-doctor (e.g. run as root vs a user session)
+  // can never block the stream loop.
+  FILE* p = popen("timeout 2 kscreen-doctor -o 2>/dev/null", "r");
   if (!p) return out;
   char buf[4096]; size_t n;
   while ((n = fread(buf, 1, sizeof(buf), p)) > 0) out.append(buf, n);
@@ -32,25 +34,30 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;
 
-  // Touch input: map the tablet's touches onto the droppix monitor and inject via
-  // uinput. Needs root + the droppix output present (evdi session); otherwise the
-  // session runs display-only. The injector lives for the whole session.
+  // Touch input (opt-in via --touch): map the tablet's touches onto the droppix
+  // monitor and inject via uinput (needs root). OFF by default so a geometry-query
+  // or uinput issue can never affect the default display-only path. Geometry is
+  // taken from --monitor/--desktop when given (the GUI queries it as the user);
+  // otherwise a best-effort, timeout-guarded kscreen query is attempted.
   InputInjector injector;
   tx_.set_input_handler(nullptr);  // drop any handler from a prior session (its injector is gone)
-  {
-    Rect mon;
-    auto outs = parse_kscreen_outputs(run_kscreen());
-    if (select_droppix(outs, w, h, mon)) {
-      Rect db = desktop_bounds(outs);
-      if (injector.open(mon, db.w, db.h)) {
-        tx_.set_input_handler([&injector](uint8_t a, uint16_t x, uint16_t y) {
-          injector.inject(a, x, y);
-        });
-        std::fprintf(stderr, "input: injecting into %dx%d at (%d,%d), desktop %dx%d\n",
-                     mon.w, mon.h, mon.x, mon.y, db.w, db.h);
+  if (cfg_.touch) {
+    Rect mon = cfg_.monitor;
+    int dw = cfg_.desktop_w, dh = cfg_.desktop_h;
+    if (mon.w <= 0 || mon.h <= 0 || dw <= 0 || dh <= 0) {
+      auto outs = parse_kscreen_outputs(run_kscreen());
+      if (select_droppix(outs, w, h, mon)) {
+        Rect db = desktop_bounds(outs); dw = db.w; dh = db.h;
       }
+    }
+    if (mon.w > 0 && mon.h > 0 && dw > 0 && dh > 0 && injector.open(mon, dw, dh)) {
+      tx_.set_input_handler([&injector](uint8_t a, uint16_t x, uint16_t y) {
+        injector.inject(a, x, y);
+      });
+      std::fprintf(stderr, "input: injecting into %dx%d at (%d,%d), desktop %dx%d\n",
+                   mon.w, mon.h, mon.x, mon.y, dw, dh);
     } else {
-      std::fprintf(stderr, "input: droppix output not found; input disabled\n");
+      std::fprintf(stderr, "input: geometry/uinput unavailable; input disabled\n");
     }
   }
 

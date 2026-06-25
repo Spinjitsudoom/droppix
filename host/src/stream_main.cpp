@@ -18,14 +18,17 @@ int main(int argc, char** argv) {
   prctl(PR_SET_PDEATHSIG, SIGTERM);          // die if our parent (e.g. pkexec) is killed
   int port = 27000, fps = 30, bitrate = 8000, frames = 0;
   int width = 1920, height = 1080, refresh = 60;
-  bool test_pattern = false, adb_reverse = false, stats_json = false;
+  bool test_pattern = false, adb_reverse = false, stats_json = false, touch = false;
+  int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
 
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
     auto val = [&]() { return (i + 1 < argc) ? std::atoi(argv[++i]) : 0; };
+    auto sval = [&]() -> const char* { return (i + 1 < argc) ? argv[++i] : ""; };
     if (a == "--test-pattern") test_pattern = true;
     else if (a == "--adb-reverse") adb_reverse = true;
     else if (a == "--stats-json") stats_json = true;
+    else if (a == "--touch") touch = true;
     else if (a == "--port") port = val();
     else if (a == "--fps") fps = val();
     else if (a == "--bitrate") bitrate = val();
@@ -33,6 +36,8 @@ int main(int argc, char** argv) {
     else if (a == "--height") height = val();
     else if (a == "--refresh") refresh = val();
     else if (a == "--frames") frames = val();
+    else if (a == "--monitor") { std::sscanf(sval(), "%d,%d,%d,%d", &mx, &my, &mw, &mh); }
+    else if (a == "--desktop") { std::sscanf(sval(), "%dx%d", &dtw, &dth); }
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
@@ -64,7 +69,8 @@ int main(int argc, char** argv) {
     droppix::FrameSource& src =
         test_pattern ? static_cast<droppix::FrameSource&>(pattern)
                      : static_cast<droppix::FrameSource&>(evdi);
-    droppix::StreamDaemon daemon(src, enc, tx, {fps, bitrate, stats_json});
+    droppix::StreamDaemon daemon(src, enc, tx,
+        {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }
