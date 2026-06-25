@@ -19,6 +19,9 @@ class TransportServer {
                   const std::vector<unsigned char>& nal);
   void poll_control();                 // respond to PING, dispatch INPUT, detect disconnect
   // Called for each INPUT message during poll_control (action, x_norm, y_norm).
+  // INVARIANT: if the handler captures an object by reference, the caller MUST
+  // clear it (set_input_handler(nullptr)) before that object is destroyed —
+  // TransportServer outlives a single streaming session.
   void set_input_handler(std::function<void(uint8_t, uint16_t, uint16_t)> h) {
     input_handler_ = std::move(h);
   }
