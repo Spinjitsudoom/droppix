@@ -30,6 +30,7 @@ add_library(droppix_core
   src/stats_json.cpp
   src/input_map.cpp
   src/monitor_geometry.cpp
+  src/input_injector.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src

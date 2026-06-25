@@ -1,10 +1,23 @@
 #include "stream_daemon.h"
 #include "stat_accumulator.h"
 #include "stats_json.h"
+#include "input_injector.h"
+#include "monitor_geometry.h"
 #include <chrono>
 #include <cstdio>
+#include <string>
 
 namespace droppix {
+
+static std::string run_kscreen() {
+  std::string out;
+  FILE* p = popen("kscreen-doctor -o 2>/dev/null", "r");
+  if (!p) return out;
+  char buf[4096]; size_t n;
+  while ((n = fread(buf, 1, sizeof(buf), p)) > 0) out.append(buf, n);
+  pclose(p);
+  return out;
+}
 
 bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_frames) {
   int w = 0, h = 0;
@@ -18,6 +31,27 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
 
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;
+
+  // Touch input: map the tablet's touches onto the droppix monitor and inject via
+  // uinput. Needs root + the droppix output present (evdi session); otherwise the
+  // session runs display-only. The injector lives for the whole session.
+  InputInjector injector;
+  {
+    Rect mon;
+    auto outs = parse_kscreen_outputs(run_kscreen());
+    if (select_droppix(outs, w, h, mon)) {
+      Rect db = desktop_bounds(outs);
+      if (injector.open(mon, db.w, db.h)) {
+        tx_.set_input_handler([&injector](uint8_t a, uint16_t x, uint16_t y) {
+          injector.inject(a, x, y);
+        });
+        std::fprintf(stderr, "input: injecting into %dx%d at (%d,%d), desktop %dx%d\n",
+                     mon.w, mon.h, mon.x, mon.y, db.w, db.h);
+      }
+    } else {
+      std::fprintf(stderr, "input: droppix output not found; input disabled\n");
+    }
+  }
 
   auto t0 = std::chrono::steady_clock::now();
   int sent = 0;
