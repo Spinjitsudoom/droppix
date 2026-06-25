@@ -5,7 +5,7 @@
 namespace droppix {
 
 enum class MsgType : uint8_t {
-  Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6
+  Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6, Input = 7
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.
@@ -53,5 +53,10 @@ std::vector<unsigned char> encode_video(uint64_t pts_us, bool keyframe,
 bool decode_video(const std::vector<unsigned char>& body,
                   uint64_t& pts_us, bool& keyframe,
                   std::vector<unsigned char>& nal);
+
+// INPUT (app->host): u8 action (0=down,1=move,2=up), u16 x_norm, u16 y_norm.
+std::vector<unsigned char> encode_input(uint8_t action, uint16_t x_norm, uint16_t y_norm);
+bool decode_input(const std::vector<unsigned char>& body,
+                  uint8_t& action, uint16_t& x_norm, uint16_t& y_norm);
 
 }  // namespace droppix

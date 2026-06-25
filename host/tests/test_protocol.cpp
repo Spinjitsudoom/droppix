@@ -85,3 +85,23 @@ TEST(Protocol, ParserResyncsPastManyZeroLengthWordsWithoutRecursion) {
   EXPECT_EQ(out.type, MsgType::Ping);
   EXPECT_EQ(out.body, (std::vector<unsigned char>{7}));
 }
+
+TEST(Protocol, InputRoundTrip) {
+  auto body = encode_input(0, 30000, 40000);
+  uint8_t a; uint16_t x, y;
+  ASSERT_TRUE(decode_input(body, a, x, y));
+  EXPECT_EQ(a, 0); EXPECT_EQ(x, 30000); EXPECT_EQ(y, 40000);
+}
+TEST(Protocol, InputWireLayout) {
+  auto m = encode_message(MsgType::Input, encode_input(2, 0x0102, 0x0304));
+  // len = 1(type)+5(body)=6; type=7; body = 02 0102 0304 (big-endian)
+  ASSERT_EQ(m.size(), 4u + 6u);
+  EXPECT_EQ(m[3], 6); EXPECT_EQ(m[4], 7);
+  EXPECT_EQ(m[5], 0x02);
+  EXPECT_EQ(m[6], 0x01); EXPECT_EQ(m[7], 0x02);
+  EXPECT_EQ(m[8], 0x03); EXPECT_EQ(m[9], 0x04);
+}
+TEST(Protocol, InputTooShortInvalid) {
+  uint8_t a; uint16_t x, y;
+  EXPECT_FALSE(decode_input({0, 0}, a, x, y));
+}

@@ -25,6 +25,7 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     @Volatile private var surface: Surface? = null
     private var netThread: Thread? = null
     @Volatile private var decoder: VideoDecoder? = null
+    @Volatile private var client: TransportClient? = null
     private lateinit var surfaceView: DisplaySurfaceView
 
     private val stats = StatsSink()
@@ -50,12 +51,18 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     override fun onResume() {
         super.onResume()
         surfaceView.setSurfaceListener(this)  // fires onSurfaceReady if already valid
+        surfaceView.setTouchListener(object : DisplaySurfaceView.TouchListener {
+            override fun onTouch(action: Int, xNorm: Int, yNorm: Int) {
+                client?.sendInput(action, xNorm, yNorm)
+            }
+        })
         uiHandler.post(overlayTick)
     }
 
     override fun onPause() {
         super.onPause()
         uiHandler.removeCallbacks(overlayTick)
+        surfaceView.setTouchListener(null)
         surfaceView.setSurfaceListener(null)
         stopStreaming()
     }
@@ -75,7 +82,8 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         if (running) return
         running = true
         netThread = thread(name = "droppix-net") {
-            val client = TransportClient()
+            val c = TransportClient()
+            client = c
             val listener = object : StreamListener {
                 override fun onConfig(config: Protocol.Config) {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
@@ -96,7 +104,7 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             while (running) {
                 try {
                     Log.i(TAG, "connecting to $HOST:$PORT")
-                    client.run(HOST, PORT, 1920, 1080,
+                    c.run(HOST, PORT, 1920, 1080,
                         resources.displayMetrics.densityDpi, listener, { running }, stats)
                     Log.i(TAG, "stream session ended")
                 } catch (e: Exception) {
@@ -105,6 +113,7 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 decoder?.release(); decoder = null
                 if (running) Thread.sleep(1000)  // back off before retrying
             }
+            client = null
         }
     }
 

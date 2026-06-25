@@ -55,4 +55,11 @@ class ProtocolTest {
     private fun beU32(x: Int) = byteArrayOf(
         (x ushr 24).toByte(), (x ushr 16).toByte(), (x ushr 8).toByte(), x.toByte())
     private fun beU64(x: Long) = ByteArray(8) { i -> (x ushr (56 - i * 8)).toByte() }
+
+    @Test fun encodeInputMatchesHostWireFormat() {
+        // action=2, x=0x0102, y=0x0304 ; encodeMessage adds [00 00 00 06][07]
+        val m = Protocol.encodeMessage(MsgType.INPUT, Protocol.encodeInput(2, 0x0102, 0x0304))
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 6, 7, 0x02, 0x01, 0x02, 0x03, 0x04), m)
+    }
 }

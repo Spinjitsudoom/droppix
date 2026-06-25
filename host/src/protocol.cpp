@@ -19,6 +19,12 @@ uint64_t get_u64(const unsigned char* p) {
   for (int i = 0; i < 8; ++i) x = (x << 8) | p[i];
   return x;
 }
+void put_u16(std::vector<unsigned char>& v, uint16_t x) {
+  v.push_back((x >> 8) & 0xFF); v.push_back(x & 0xFF);
+}
+uint16_t get_u16(const unsigned char* p) {
+  return (uint16_t(p[0]) << 8) | uint16_t(p[1]);
+}
 
 }  // namespace
 
@@ -100,6 +106,21 @@ bool decode_video(const std::vector<unsigned char>& b,
   pts_us = get_u64(b.data());
   key = b[8] != 0;
   nal.assign(b.begin() + 9, b.end());
+  return true;
+}
+
+std::vector<unsigned char> encode_input(uint8_t action, uint16_t x_norm, uint16_t y_norm) {
+  std::vector<unsigned char> b;
+  b.push_back(action);
+  put_u16(b, x_norm); put_u16(b, y_norm);
+  return b;
+}
+bool decode_input(const std::vector<unsigned char>& b,
+                  uint8_t& action, uint16_t& x_norm, uint16_t& y_norm) {
+  if (b.size() != 5) return false;
+  action = b[0];
+  x_norm = get_u16(b.data() + 1);
+  y_norm = get_u16(b.data() + 3);
   return true;
 }
 

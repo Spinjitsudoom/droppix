@@ -28,6 +28,9 @@ add_library(droppix_core
   src/stream_daemon.cpp
   src/stat_accumulator.cpp
   src/stats_json.cpp
+  src/input_map.cpp
+  src/monitor_geometry.cpp
+  src/input_injector.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
@@ -86,6 +89,8 @@ add_executable(droppix_tests
   tests/test_stats_parser.cpp
   tests/test_args_builder.cpp
   tests/test_cvt.cpp
+  tests/test_input_map.cpp
+  tests/test_monitor_geometry.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
 )

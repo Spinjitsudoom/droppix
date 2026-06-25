@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <vector>
 #include "protocol.h"
 
@@ -16,7 +17,14 @@ class TransportServer {
                    const std::vector<unsigned char>& extradata);
   bool send_video(uint64_t pts_us, bool keyframe,
                   const std::vector<unsigned char>& nal);
-  void poll_control();                 // respond to PING, detect disconnect
+  void poll_control();                 // respond to PING, dispatch INPUT, detect disconnect
+  // Called for each INPUT message during poll_control (action, x_norm, y_norm).
+  // INVARIANT: if the handler captures an object by reference, the caller MUST
+  // clear it (set_input_handler(nullptr)) before that object is destroyed —
+  // TransportServer outlives a single streaming session.
+  void set_input_handler(std::function<void(uint8_t, uint16_t, uint16_t)> h) {
+    input_handler_ = std::move(h);
+  }
   bool connected() const { return client_fd_ >= 0; }
   void close_all();
 
@@ -28,5 +36,6 @@ class TransportServer {
   int client_fd_ = -1;
   uint16_t port_ = 0;
   MessageParser parser_;
+  std::function<void(uint8_t, uint16_t, uint16_t)> input_handler_;
 };
 }  // namespace droppix

@@ -97,6 +97,9 @@ void TransportServer::poll_control() {
   while (parser_.next(m)) {
     if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
+    } else if (m.type == MsgType::Input && input_handler_) {
+      uint8_t a; uint16_t x, y;
+      if (decode_input(m.body, a, x, y)) input_handler_(a, x, y);
     }
   }
 }
