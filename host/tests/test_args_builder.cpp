@@ -45,6 +45,22 @@ TEST(ArgsBuilder, TestPatternNeverHasTouch) {
   EXPECT_FALSE(has(c.args, "--touch"));   // touch is evdi-only
 }
 
+TEST(ArgsBuilder, EvdiOrientationFlagWhenSet) {
+  Settings s; s.source = Settings::Source::Evdi; s.orientation = 90;
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_TRUE(has(c.args, "--orientation")); EXPECT_TRUE(has(c.args, "90"));
+}
+TEST(ArgsBuilder, EvdiNoOrientationFlagWhenZero) {
+  Settings s; s.source = Settings::Source::Evdi; s.orientation = 0;
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_FALSE(has(c.args, "--orientation"));
+}
+TEST(ArgsBuilder, TestPatternNeverHasOrientation) {
+  Settings s; s.source = Settings::Source::TestPattern; s.orientation = 180;
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_FALSE(has(c.args, "--orientation"));   // evdi-only
+}
+
 TEST(ArgsBuilder, AutoAdbReverseToggle) {
   Settings s; s.auto_adb_reverse = false;
   EXPECT_FALSE(build_command(s, "/x").needs_adb_reverse);

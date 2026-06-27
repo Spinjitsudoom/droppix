@@ -20,6 +20,7 @@ int main(int argc, char** argv) {
   int width = 1920, height = 1080, refresh = 60;
   bool test_pattern = false, adb_reverse = false, stats_json = false, touch = false;
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
+  int orientation = 0;                                   // --orientation 0/90/180/270
 
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
@@ -38,6 +39,7 @@ int main(int argc, char** argv) {
     else if (a == "--frames") frames = val();
     else if (a == "--monitor") { std::sscanf(sval(), "%d,%d,%d,%d", &mx, &my, &mw, &mh); }
     else if (a == "--desktop") { std::sscanf(sval(), "%dx%d", &dtw, &dth); }
+    else if (a == "--orientation") orientation = val();
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
@@ -46,6 +48,7 @@ int main(int argc, char** argv) {
   if (width <= 0) width = 1920;
   if (height <= 0) height = 1080;
   if (refresh <= 0) refresh = 60;
+  if (orientation != 90 && orientation != 180 && orientation != 270) orientation = 0;
 
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
@@ -70,7 +73,7 @@ int main(int argc, char** argv) {
         test_pattern ? static_cast<droppix::FrameSource&>(pattern)
                      : static_cast<droppix::FrameSource&>(evdi);
     droppix::StreamDaemon daemon(src, enc, tx,
-        {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth});
+        {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth, orientation});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }

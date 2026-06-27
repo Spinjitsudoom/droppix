@@ -13,6 +13,9 @@ Command build_command(const Settings& s, const std::string& stream_bin) {
   if (s.source == Settings::Source::Evdi) {
     a.push_back("--refresh"); a.push_back(std::to_string(s.refresh_hz));
     if (s.touch) a.push_back("--touch");   // touch injection (evdi/root only)
+    if (s.orientation != 0) {              // rotate the droppix output (evdi only)
+      a.push_back("--orientation"); a.push_back(std::to_string(s.orientation));
+    }
   }
   a.push_back("--fps");     a.push_back(std::to_string(s.fps));
   a.push_back("--bitrate"); a.push_back(std::to_string(s.bitrate_kbps));

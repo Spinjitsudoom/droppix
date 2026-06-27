@@ -38,6 +38,11 @@ MainWindow::MainWindow(QWidget* parent)
   bitrate_ = new QSpinBox; bitrate_->setRange(500, 60000); bitrate_->setSuffix(" kbps"); bitrate_->setValue(8000);
   port_ = new QSpinBox; port_->setRange(1024, 65535); port_->setValue(27000);
   refresh_ = new QComboBox; refresh_->addItems({"30", "60"}); refresh_->setCurrentText("60");
+  orientation_ = new QComboBox;   // evdi only — rotates the droppix output via KWin
+  orientation_->addItem("Landscape (0°)", 0);
+  orientation_->addItem("Portrait (90°)", 90);
+  orientation_->addItem("Inverted (180°)", 180);
+  orientation_->addItem("Portrait flipped (270°)", 270);
   autoReverse_ = new QCheckBox("Auto adb reverse on start"); autoReverse_->setChecked(true);
   touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
 
@@ -46,6 +51,7 @@ MainWindow::MainWindow(QWidget* parent)
   form->addRow("Source:", srcRow);
   form->addRow("Resolution:", resolution_);
   form->addRow("Refresh (Hz):", refresh_);
+  form->addRow("Orientation:", orientation_);
   form->addRow("FPS:", fps_);
   form->addRow("Bitrate:", bitrate_);
   form->addRow("Port:", port_);
@@ -125,6 +131,7 @@ Settings MainWindow::collectSettings() const {
   s.refresh_hz = refresh_->currentText().toInt();
   s.auto_adb_reverse = autoReverse_->isChecked();
   s.touch = touch_->isChecked();
+  s.orientation = orientation_->currentData().toInt();
   return s;
 }
 
@@ -134,6 +141,7 @@ void MainWindow::applySettings(const Settings& s) {
   resolution_->setCurrentText(QString("%1x%2").arg(s.width).arg(s.height));
   fps_->setValue(s.fps); bitrate_->setValue(s.bitrate_kbps); port_->setValue(s.port);
   refresh_->setCurrentText(QString::number(s.refresh_hz));
+  { int i = orientation_->findData(s.orientation); orientation_->setCurrentIndex(i >= 0 ? i : 0); }
   autoReverse_->setChecked(s.auto_adb_reverse);
   touch_->setChecked(s.touch);
 }

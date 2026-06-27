@@ -8,5 +8,6 @@ struct Settings {
   int refresh_hz = 60;
   bool auto_adb_reverse = true;
   bool touch = false;   // enable tablet touch -> cursor (evdi only)
+  int orientation = 0;  // droppix output rotation degrees: 0/90/180/270 (evdi only)
 };
 }  // namespace droppix
