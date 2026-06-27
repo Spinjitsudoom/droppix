@@ -1,8 +1,11 @@
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <thread>
+#include <unistd.h>
 #include <sys/prctl.h>
 #include "stream_daemon.h"
 #include "test_pattern_source.h"
@@ -68,6 +71,23 @@ int main(int argc, char** argv) {
     std::fprintf(stderr, "running: %s\n", cmd.c_str());
     if (std::system(cmd.c_str()) != 0)
       std::fprintf(stderr, "warning: adb reverse failed\n");
+  }
+
+  // Stop channel for the GUI: it launches us via pkexec as ROOT, so it cannot signal
+  // us (terminate/kill -> EPERM) — PR_SET_PDEATHSIG only fires if the GUI itself exits.
+  // Instead the GUI closes our stdin on Stop; watch for that EOF and shut down. Only
+  // when stdin is a pipe (the GUI), not a tty (CLI uses Ctrl-C/SIGINT) and not the
+  // one-shot --frames test mode.
+  if (frames == 0 && !isatty(STDIN_FILENO)) {
+    std::thread([]{
+      char c;
+      while (::read(STDIN_FILENO, &c, sizeof(c)) > 0) { /* drain */ }
+      g_stop = 1;   // EOF/error on stdin -> ask for a graceful shutdown
+      // If we don't exit promptly (e.g. blocked waiting for a client between sessions),
+      // force it — the kernel closes the evdi fd, which tears down the virtual monitor.
+      std::this_thread::sleep_for(std::chrono::milliseconds(1500));
+      std::_Exit(0);
+    }).detach();
   }
 
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.

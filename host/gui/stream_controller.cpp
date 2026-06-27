@@ -20,8 +20,12 @@ void StreamController::start(const Command& cmd) {
 
 void StreamController::stop() {
   if (!running()) return;
+  // The evdi streamer runs as ROOT (pkexec), so we can't signal it — but we own its
+  // stdin pipe. Closing it makes the streamer exit on EOF (see stream_main). terminate()
+  // additionally covers the unprivileged test-pattern path.
+  proc_.closeWriteChannel();
   proc_.terminate();
-  if (!proc_.waitForFinished(2000)) proc_.kill();
+  if (!proc_.waitForFinished(3000)) proc_.kill();
 }
 
 bool StreamController::running() const {
