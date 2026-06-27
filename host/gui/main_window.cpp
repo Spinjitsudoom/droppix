@@ -4,6 +4,9 @@
 #include <QtWidgets>
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QProcess>
+#include <QTemporaryFile>
+#include <QFile>
 
 namespace droppix {
 
@@ -92,6 +95,18 @@ MainWindow::MainWindow(QWidget* parent)
   // --- Start/Stop + log ---
   startBtn_ = new QPushButton("▶  Start streaming");
   startBtn_->setObjectName("startButton");
+
+  // --- "remember authentication" tip (hidden once set up) ---
+  authRow_ = new QWidget;
+  authCaption_ = new QLabel("Start asks for your password each time.");
+  authCaption_->setObjectName("caption");
+  auto* authBtn = new QPushButton("Remember it");
+  auto* authLayout = new QHBoxLayout(authRow_);
+  authLayout->setContentsMargins(0, 0, 0, 0);
+  authLayout->addWidget(authCaption_); authLayout->addStretch(); authLayout->addWidget(authBtn);
+  if (QFile::exists(configDir() + "/auth_configured")) authRow_->hide();
+  connect(authBtn, &QPushButton::clicked, this, &MainWindow::setupAuth);
+
   auto* logCaption = new QLabel("Log"); logCaption->setObjectName("caption");
   log_ = new QPlainTextEdit; log_->setReadOnly(true);
   log_->setMaximumBlockCount(1000);
@@ -106,6 +121,7 @@ MainWindow::MainWindow(QWidget* parent)
   root->addLayout(statusRow);
   root->addWidget(deviceLabel_);
   root->addWidget(startBtn_);
+  root->addWidget(authRow_);
   root->addWidget(logCaption);
   root->addWidget(log_, 1);
   auto* central = new QWidget; central->setLayout(root);
@@ -198,6 +214,47 @@ void MainWindow::restoreLastProfile() {
   profileBox_->setCurrentText(want);
   applySettings(s);
   store_.setLastUsed(want);
+}
+
+void MainWindow::setupAuth() {
+  // Install a polkit rule pre-authorizing this exact streamer binary for this user, so
+  // Start asks for the password once per login (AUTH_SELF_KEEP) instead of every time.
+  // One pkexec prompt now writes the rule as root.
+  const QString user = QString::fromLocal8Bit(qgetenv("USER"));
+  const QString bin = QString::fromStdString(streamBin_);
+  QString binAlt = bin;                                    // also match the /home <-> /var/home alias
+  if (bin.startsWith("/var/home/")) binAlt = bin.mid(4);
+  else if (bin.startsWith("/home/")) binAlt = "/var" + bin;
+
+  const QString rule = QStringLiteral(
+      "// droppix: pre-authorize pkexec for the evdi streamer (in-app setup).\n"
+      "polkit.addRule(function(action, subject) {\n"
+      "    if (action.id == \"org.freedesktop.policykit.exec\" &&\n"
+      "        subject.user == \"%1\" &&\n"
+      "        (action.lookup(\"program\") == \"%2\" ||\n"
+      "         action.lookup(\"program\") == \"%3\")) {\n"
+      "        return polkit.Result.AUTH_SELF_KEEP;\n"
+      "    }\n"
+      "});\n").arg(user, bin, binAlt);
+
+  QTemporaryFile tmp;
+  if (!tmp.open()) { log_->appendPlainText("auth setup: could not create a temp file"); return; }
+  tmp.write(rule.toUtf8());
+  tmp.flush();
+
+  // pkexec prompts once, then installs the rule as root (mode 0644 so polkitd can read it).
+  int rc = QProcess::execute("pkexec", {"/usr/bin/install", "-m", "0644", tmp.fileName(),
+                                        "/etc/polkit-1/rules.d/49-droppix.rules"});
+  if (rc == 0) {
+    QFile marker(configDir() + "/auth_configured");
+    if (marker.open(QIODevice::WriteOnly)) { marker.write("1"); marker.close(); }
+    authCaption_->setText("✓ Authentication remembered — Start asks once per login.");
+    if (auto* btn = authRow_->findChild<QPushButton*>()) btn->hide();
+    log_->appendPlainText("Authentication remembered. Start will prompt once per login, then stay quiet.");
+  } else {
+    log_->appendPlainText("Authentication setup was cancelled or failed (pkexec exit " +
+                          QString::number(rc) + ").");
+  }
 }
 
 void MainWindow::onStartStop() {

@@ -23,6 +23,7 @@ class MainWindow : public QMainWindow {
   void restoreLastProfile();
   void setRunningUi(bool running);
   void setStatusDot(const char* color);
+  void setupAuth();              // install the polkit rule via one pkexec prompt
 
   // widgets
   QRadioButton* srcTest_; QRadioButton* srcEvdi_;
@@ -34,6 +35,7 @@ class MainWindow : public QMainWindow {
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
+  QWidget* authRow_; QLabel* authCaption_;   // "remember authentication" tip
   QPlainTextEdit* log_;
 
   ProfileStore store_;
