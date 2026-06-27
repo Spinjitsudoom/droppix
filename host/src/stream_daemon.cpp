@@ -87,11 +87,29 @@ static void bind_touch_to_output(std::string output_name) {
   std::system(cmd.c_str());
 }
 
+// Rotate the droppix output via KWin (kscreen-doctor), run as the user. The scanout
+// stays at the mode's WxH (so capture/encoder are unaffected); only the rendered
+// content is rotated, and KWin auto-applies the same rotation to the bound touch
+// device. degrees: 90->left, 180->inverted, 270->right (0 => no-op).
+static void apply_rotation(const std::string& output_name, int degrees) {
+  if (degrees == 0 || !safe_output_name(output_name)) return;
+  const char* rot = degrees == 90 ? "left" : degrees == 180 ? "inverted"
+                  : degrees == 270 ? "right" : nullptr;
+  if (!rot) return;
+  std::string cmd = "timeout 5 " + user_cmd_prefix() + "kscreen-doctor output." +
+                    output_name + ".rotation." + rot + " >/dev/null 2>&1";
+  std::system(cmd.c_str());
+  std::fprintf(stderr, "orientation: rotated output %s -> %s (%d deg)\n",
+               output_name.c_str(), rot, degrees);
+}
+
 bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_frames) {
-  // For touch: snapshot the outputs BEFORE the source creates its monitor, so we
-  // can identify the droppix output (by name) as the one that newly appears after.
+  // For touch/orientation we need the droppix output's NAME: snapshot the outputs
+  // BEFORE the source creates its monitor, so we can identify it as the one that
+  // newly appears afterwards.
+  const bool need_output = cfg_.touch || cfg_.orientation != 0;
   std::vector<OutputInfo> before_outputs;
-  if (cfg_.touch) {
+  if (need_output) {
     before_outputs = parse_kscreen_outputs(run_kscreen());
   }
 
@@ -107,25 +125,34 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;
 
-  // Touch input (opt-in via --touch): map the tablet's touches onto the droppix
-  // monitor and inject via uinput (needs root). OFF by default so a geometry-query
-  // or uinput issue can never affect the default display-only path. Geometry is
-  // taken from --monitor/--desktop when given (the GUI queries it as the user);
-  // otherwise a best-effort, timeout-guarded kscreen query is attempted.
+  // Identify the droppix output (needed for orientation and/or touch): prefer the
+  // newly-appeared one (unambiguous), else fall back to a size match.
+  OutputInfo droppix;
+  bool found_output = false;
+  if (need_output) {
+    auto after = parse_kscreen_outputs(run_kscreen());
+    found_output = select_new_output(before_outputs, after, droppix) ||
+                   select_droppix(after, w, h, droppix);
+    if (!found_output)
+      std::fprintf(stderr, "warning: could not identify the droppix output\n");
+  }
+
+  // Orientation (--orientation 90/180/270): rotate the droppix output via KWin.
+  if (cfg_.orientation != 0 && found_output && safe_output_name(droppix.name)) {
+    apply_rotation(droppix.name, cfg_.orientation);
+  }
+
+  // Touch input (opt-in via --touch): inject the tablet's touches via a uinput
+  // touchscreen (needs root) that KWin binds to the droppix output. OFF by default
+  // so a geometry-query or uinput issue can never affect the display-only path.
   InputInjector injector;
   tx_.set_input_handler(nullptr);  // drop any handler from a prior session (its injector is gone)
   if (cfg_.touch) {
-    // Identify the droppix output: prefer the newly-appeared one (unambiguous),
-    // else fall back to a size match. We need its NAME to bind the touch device.
-    auto after = parse_kscreen_outputs(run_kscreen());
-    OutputInfo droppix;
-    bool found = select_new_output(before_outputs, after, droppix) ||
-                 select_droppix(after, w, h, droppix);
     if (injector.open()) {
       tx_.set_input_handler([&injector](uint8_t a, uint16_t x, uint16_t y) {
         injector.inject(a, x, y);
       });
-      if (found && safe_output_name(droppix.name)) {
+      if (found_output && safe_output_name(droppix.name)) {
         std::fprintf(stderr, "input: binding touch -> output %s (%dx%d)\n",
                      droppix.name.c_str(), droppix.geom.w, droppix.geom.h);
         std::thread(bind_touch_to_output, droppix.name).detach();

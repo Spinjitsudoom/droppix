@@ -26,6 +26,7 @@ class MainWindow : public QMainWindow {
   QRadioButton* srcTest_; QRadioButton* srcEvdi_;
   QComboBox* resolution_; QSpinBox* fps_; QSpinBox* bitrate_; QSpinBox* port_;
   QComboBox* refresh_;
+  QComboBox* orientation_;
   QCheckBox* autoReverse_;
   QCheckBox* touch_;
   QComboBox* profileBox_; QPushButton* startBtn_;

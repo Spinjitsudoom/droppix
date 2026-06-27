@@ -11,6 +11,7 @@ struct StreamConfig {
   bool touch = false;          // enable uinput injection (off by default)
   Rect monitor{};              // droppix monitor rect (from --monitor); 0 => query kscreen
   int desktop_w = 0, desktop_h = 0;  // desktop bounds (from --desktop); 0 => query kscreen
+  int orientation = 0;         // droppix output rotation in degrees: 0/90/180/270
 };
 
 class StreamDaemon {
