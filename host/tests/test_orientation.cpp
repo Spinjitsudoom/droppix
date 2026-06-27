@@ -2,13 +2,9 @@
 #include "orientation.h"
 using namespace droppix;
 
-TEST(Orientation, CodeToDegrees) {
-  EXPECT_EQ(orientation_degrees(0), 0);
-  EXPECT_EQ(orientation_degrees(1), 90);
-  EXPECT_EQ(orientation_degrees(2), 180);
-  EXPECT_EQ(orientation_degrees(3), 270);
-}
-TEST(Orientation, UnknownCodeIsLandscape) {
-  EXPECT_EQ(orientation_degrees(4), 0);
-  EXPECT_EQ(orientation_degrees(255), 0);
+TEST(Orientation, PortraitCodes) {
+  EXPECT_FALSE(orientation_is_portrait(0));   // 0°   landscape
+  EXPECT_TRUE(orientation_is_portrait(1));    // 90°  portrait
+  EXPECT_FALSE(orientation_is_portrait(2));   // 180° landscape (flipped)
+  EXPECT_TRUE(orientation_is_portrait(3));    // 270° portrait (flipped)
 }

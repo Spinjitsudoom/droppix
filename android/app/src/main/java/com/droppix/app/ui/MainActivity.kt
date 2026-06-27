@@ -30,9 +30,10 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     @Volatile private var client: TransportClient? = null
     private lateinit var surfaceView: DisplaySurfaceView
 
-    // Auto-orientation: the Activity is locked to landscape (manifest), so the
-    // SurfaceView always matches the 1920x1080 stream; we only DETECT the physical
-    // orientation here and report it to the host, which rotates the droppix output.
+    // Auto-orientation: the Activity follows the sensor (manifest fullSensor) so Android
+    // rotates the display naturally. We detect the physical orientation and report it; on
+    // a portrait<->landscape change the host restreams at swapped dims and we reconnect,
+    // so the SurfaceView then matches the new (portrait/landscape) CONFIG size.
     private val orientationMapper = OrientationMapper()
     private var orientationListener: OrientationEventListener? = null
 

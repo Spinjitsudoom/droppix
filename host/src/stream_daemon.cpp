@@ -8,7 +8,6 @@
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
-#include <memory>
 #include <pwd.h>
 #include <string>
 #include <thread>
@@ -89,22 +88,6 @@ static void bind_touch_to_output(std::string output_name) {
   std::system(cmd.c_str());
 }
 
-// Rotate the droppix output via KWin (kscreen-doctor), run as the user. The scanout
-// stays at the mode's WxH (so capture/encoder are unaffected); only the rendered
-// content is rotated, and KWin auto-applies the same rotation to the bound touch
-// device. degrees: 90->left, 180->inverted, 270->right (0 => no-op).
-static void apply_rotation(const std::string& output_name, int degrees) {
-  if (degrees == 0 || !safe_output_name(output_name)) return;
-  const char* rot = degrees == 90 ? "left" : degrees == 180 ? "inverted"
-                  : degrees == 270 ? "right" : nullptr;
-  if (!rot) return;
-  std::string cmd = "timeout 5 " + user_cmd_prefix() + "kscreen-doctor output." +
-                    output_name + ".rotation." + rot + " >/dev/null 2>&1";
-  std::system(cmd.c_str());
-  std::fprintf(stderr, "orientation: rotated output %s -> %s (%d deg)\n",
-               output_name.c_str(), rot, degrees);
-}
-
 bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_frames) {
   // We need the droppix output's NAME for orientation (incl. live auto-rotate) and
   // touch: snapshot the outputs BEFORE the source creates its monitor, so we can
@@ -134,21 +117,22 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   if (!found_output)
     std::fprintf(stderr, "warning: could not identify the droppix output\n");
 
-  // Orientation: apply the initial --orientation now, then let the tablet drive it
-  // LIVE via ORIENTATION messages (auto-rotate). The handler is self-contained
-  // (captures a copy of the output name), so it's safe across this session.
-  tx_.set_orientation_handler(nullptr);
-  if (have_output) {
-    if (cfg_.orientation != 0) apply_rotation(droppix.name, cfg_.orientation);
-    auto last_deg = std::make_shared<int>(cfg_.orientation);
-    std::string oname = droppix.name;
-    tx_.set_orientation_handler([oname, last_deg](uint8_t code) {
-      int deg = orientation_degrees(code);
-      if (deg == *last_deg) return;   // skip redundant kscreen calls
-      *last_deg = deg;
-      apply_rotation(oname, deg);
-    });
-  }
+  // Auto-orientation: the tablet reports its physical orientation. The stream is
+  // landscape- or portrait-SHAPED (this session's w/h); when the tablet crosses the
+  // portrait<->landscape boundary the dimensions must change, so we record the new
+  // orientation and END the session — the caller (stream_main) rebuilds the source at
+  // the new dims and the app reconnects. Same-class flips (0<->180, 90<->270) are
+  // handled visually by the tablet's Android auto-rotate, so they don't restart.
+  bool restart_for_orientation = false;
+  const bool cur_portrait = h > w;
+  tx_.set_orientation_handler([this, &restart_for_orientation, cur_portrait](uint8_t code) {
+    if (cfg_.live_orientation) *cfg_.live_orientation = code;
+    if (orientation_is_portrait(code) != cur_portrait) {
+      std::fprintf(stderr, "orientation: tablet -> %s; restarting stream at new dims\n",
+                   orientation_is_portrait(code) ? "portrait" : "landscape");
+      restart_for_orientation = true;
+    }
+  });
 
   // Touch input (opt-in via --touch): inject the tablet's touches via a uinput
   // touchscreen (needs root) that KWin binds to the droppix output. OFF by default
@@ -181,7 +165,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // With touch on, poll the loop tightly so incoming touch is handled promptly
   // instead of being gated by the up-to-1s damage-driven frame wait.
   const int frame_timeout = cfg_.touch ? 8 : 1000;
-  while (!stop && tx_.connected()) {
+  while (!stop && !restart_for_orientation && tx_.connected()) {
     Frame f = src_.next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
@@ -219,6 +203,9 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   }
   for (auto& pkt : enc_.flush()) tx_.send_video(pkt.pts_us, pkt.keyframe, pkt.data);
   std::fprintf(stderr, "sent %d video packets\n", sent);
+  // On an orientation-driven restart, drop the client so it reconnects and the caller
+  // rebuilds the source at the new dimensions.
+  if (restart_for_orientation) tx_.close_all();
   return true;
 }
 
