@@ -21,6 +21,7 @@ class MainWindow : public QMainWindow {
   void onStartStop();
   void refreshProfiles();
   void setRunningUi(bool running);
+  void setStatusDot(const char* color);
 
   // widgets
   QRadioButton* srcTest_; QRadioButton* srcEvdi_;
@@ -30,6 +31,7 @@ class MainWindow : public QMainWindow {
   QCheckBox* autoReverse_;
   QCheckBox* touch_;
   QComboBox* profileBox_; QPushButton* startBtn_;
+  QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
   QPlainTextEdit* log_;
 

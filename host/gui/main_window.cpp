@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "args_builder.h"
+#include "style.h"
 #include <QtWidgets>
 #include <QCloseEvent>
 #include <QCoreApplication>
@@ -15,6 +16,16 @@ MainWindow::MainWindow(QWidget* parent)
       store_(configDir()) {
   streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
   setWindowTitle("droppix");
+
+  // --- Header ---
+  auto* logo = new QLabel; logo->setObjectName("logo");
+  auto* title = new QLabel("droppix"); title->setObjectName("header");
+  auto* tagline = new QLabel("use a tablet as a second monitor"); tagline->setObjectName("tagline");
+  auto* titleCol = new QVBoxLayout; titleCol->setSpacing(0);
+  titleCol->addWidget(title); titleCol->addWidget(tagline);
+  auto* headerRow = new QHBoxLayout;
+  headerRow->addWidget(logo); headerRow->addSpacing(10);
+  headerRow->addLayout(titleCol); headerRow->addStretch();
 
   // --- Profile row ---
   profileBox_ = new QComboBox;
@@ -47,42 +58,59 @@ MainWindow::MainWindow(QWidget* parent)
   touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
 
   auto* form = new QFormLayout;
-  auto* srcRow = new QHBoxLayout; srcRow->addWidget(srcTest_); srcRow->addWidget(srcEvdi_); srcRow->addStretch();
+  auto* srcRow = new QHBoxLayout;
+  srcRow->addWidget(srcTest_); srcRow->addSpacing(18); srcRow->addWidget(srcEvdi_); srcRow->addStretch();
   form->addRow("Source:", srcRow);
   form->addRow("Resolution:", resolution_);
-  form->addRow("Refresh (Hz):", refresh_);
-  form->addRow("Orientation:", orientation_);
+  auto* refreshOrient = new QHBoxLayout;
+  refreshOrient->addWidget(refresh_);
+  refreshOrient->addSpacing(12);
+  refreshOrient->addWidget(new QLabel("Orientation:"));
+  refreshOrient->addWidget(orientation_, 1);
+  form->addRow("Refresh (Hz):", refreshOrient);
   form->addRow("FPS:", fps_);
   form->addRow("Bitrate:", bitrate_);
   form->addRow("Port:", port_);
   form->addRow("", autoReverse_);
   form->addRow("", touch_);
+  form->setVerticalSpacing(10);
+  form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
   auto* settingsBox = new QGroupBox("Settings");
   settingsBox->setLayout(form);
 
-  // --- Status group ---
-  deviceLabel_ = new QLabel("Device: —");
-  streamLabel_ = new QLabel("Stream: Stopped");
-  statsLabel_  = new QLabel("Stats: —");
-  auto* statusLayout = new QVBoxLayout;
-  statusLayout->addWidget(deviceLabel_); statusLayout->addWidget(streamLabel_); statusLayout->addWidget(statsLabel_);
-  auto* statusBox = new QGroupBox("Status"); statusBox->setLayout(statusLayout);
+  // --- Status row: colored dot + state + compact stats ---
+  statusDot_   = new QLabel; statusDot_->setObjectName("statusDot");
+  streamLabel_ = new QLabel("Stopped"); streamLabel_->setObjectName("statusText");
+  statsLabel_  = new QLabel("—");       statsLabel_->setObjectName("statusStats");
+  setStatusDot(kDotStopped);
+  auto* statusRow = new QHBoxLayout;
+  statusRow->addWidget(statusDot_); statusRow->addSpacing(8);
+  statusRow->addWidget(streamLabel_); statusRow->addStretch();
+  statusRow->addWidget(statsLabel_);
+  deviceLabel_ = new QLabel("Device: —"); deviceLabel_->setObjectName("caption");
 
   // --- Start/Stop + log ---
-  startBtn_ = new QPushButton("▶ Start streaming");
+  startBtn_ = new QPushButton("▶  Start streaming");
+  startBtn_->setObjectName("startButton");
+  auto* logCaption = new QLabel("Log"); logCaption->setObjectName("caption");
   log_ = new QPlainTextEdit; log_->setReadOnly(true);
   log_->setMaximumBlockCount(1000);
+  log_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
 
   auto* root = new QVBoxLayout;
+  root->setContentsMargins(16, 16, 16, 16);
+  root->setSpacing(12);
+  root->addLayout(headerRow);
   root->addLayout(profRow);
   root->addWidget(settingsBox);
-  root->addWidget(statusBox);
+  root->addLayout(statusRow);
+  root->addWidget(deviceLabel_);
   root->addWidget(startBtn_);
-  root->addWidget(new QLabel("Log:"));
+  root->addWidget(logCaption);
   root->addWidget(log_, 1);
   auto* central = new QWidget; central->setLayout(root);
   setCentralWidget(central);
-  resize(560, 640);
+  resize(600, 720);
 
   // --- Wiring ---
   connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartStop);
@@ -106,11 +134,16 @@ MainWindow::MainWindow(QWidget* parent)
 
   connect(&controller_, &StreamController::logLine, this, [this](const QString& l){ log_->appendPlainText(l); });
   connect(&controller_, &StreamController::statsReceived, this, [this](const Stats& s){
-    statsLabel_->setText(QString("Stats: encode %1/%2 ms | %3 fps | %4/%5 KB")
-        .arg(s.encode_ms_avg,0,'f',1).arg(s.encode_ms_peak,0,'f',1)
-        .arg(s.fps,0,'f',0).arg(s.frame_kb_avg,0,'f',0).arg(s.frame_kb_peak,0,'f',0));
-    streamLabel_->setText(s.client_connected ? "Stream: Running — client connected"
-                                             : "Stream: Running — waiting for client");
+    if (s.client_connected) {
+      setStatusDot(kDotConnected);
+      streamLabel_->setText("Connected");
+      statsLabel_->setText(QString("fps %1 · %2 KB · enc %3 ms")
+          .arg(s.fps,0,'f',0).arg(s.frame_kb_avg,0,'f',0).arg(s.encode_ms_avg,0,'f',1));
+    } else {
+      setStatusDot(kDotWaiting);
+      streamLabel_->setText("Waiting for client");
+      statsLabel_->setText("—");
+    }
   });
   connect(&controller_, &StreamController::runningChanged, this, [this](bool r){ setRunningUi(r); });
   connect(&adb_, &AdbManager::deviceStatus, this, [this](const QString& st){ deviceLabel_->setText("Device: " + st); });
@@ -163,9 +196,23 @@ void MainWindow::onStartStop() {
   controller_.start(cmd);
 }
 
+void MainWindow::setStatusDot(const char* color) {
+  statusDot_->setStyleSheet(QString(
+      "background:%1; border-radius:6px;"
+      "min-width:12px; max-width:12px; min-height:12px; max-height:12px;").arg(color));
+}
+
 void MainWindow::setRunningUi(bool running) {
-  startBtn_->setText(running ? "■ Stop" : "▶ Start streaming");
-  if (!running) { streamLabel_->setText("Stream: Stopped"); statsLabel_->setText("Stats: —"); }
+  startBtn_->setText(running ? "■  Stop" : "▶  Start streaming");
+  startBtn_->setProperty("running", running);   // drives the red Stop style (QSS)
+  startBtn_->style()->unpolish(startBtn_);
+  startBtn_->style()->polish(startBtn_);
+  if (running) {
+    setStatusDot(kDotWaiting); streamLabel_->setText("Waiting for client");
+  } else {
+    setStatusDot(kDotStopped); streamLabel_->setText("Stopped");
+  }
+  statsLabel_->setText("—");
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
