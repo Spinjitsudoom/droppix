@@ -11,7 +11,9 @@ struct StreamConfig {
   bool touch = false;          // enable uinput injection (off by default)
   Rect monitor{};              // droppix monitor rect (from --monitor); 0 => query kscreen
   int desktop_w = 0, desktop_h = 0;  // desktop bounds (from --desktop); 0 => query kscreen
-  int orientation = 0;         // droppix output rotation in degrees: 0/90/180/270
+  int orientation = 0;         // initial orientation code (0..3); only seeds dims now
+  int* live_orientation = nullptr;  // session writes the latest reported code here so
+                                    // the caller can rebuild the source at new dims
 };
 
 class StreamDaemon {

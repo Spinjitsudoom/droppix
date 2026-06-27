@@ -12,6 +12,11 @@
 static volatile std::sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
 
+// Latest orientation code (0..3) the tablet reported; seeds each session's dims.
+// Written by the daemon's orientation handler, read here to rebuild at new dims.
+// Single-threaded (handler runs in the daemon loop; we read between sessions).
+static int g_orientation = 0;
+
 int main(int argc, char** argv) {
   std::signal(SIGINT, on_sigint);
   std::signal(SIGTERM, on_sigint);          // GUI terminate() -> clean shutdown
@@ -49,6 +54,7 @@ int main(int argc, char** argv) {
   if (height <= 0) height = 1080;
   if (refresh <= 0) refresh = 60;
   if (orientation != 90 && orientation != 180 && orientation != 270) orientation = 0;
+  g_orientation = orientation / 90;   // initial code: 0/90/180/270 -> 0/1/2/3
 
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
@@ -65,15 +71,22 @@ int main(int argc, char** argv) {
   }
 
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
+  // The stream is portrait- or landscape-SHAPED per the tablet's reported orientation;
+  // when it crosses that boundary the daemon ends the session and we rebuild here at
+  // the swapped dimensions (the app reconnects).
   while (!g_stop) {
+    bool portrait = (g_orientation == 1 || g_orientation == 3);
+    int sw = portrait ? height : width;
+    int sh = portrait ? width : height;
     droppix::SoftwareEncoder enc;
-    droppix::TestPatternSource pattern(width, height, fps);
-    droppix::EvdiFrameSource evdi(width, height, refresh);
+    droppix::TestPatternSource pattern(sw, sh, fps);
+    droppix::EvdiFrameSource evdi(sw, sh, refresh);
     droppix::FrameSource& src =
         test_pattern ? static_cast<droppix::FrameSource&>(pattern)
                      : static_cast<droppix::FrameSource&>(evdi);
     droppix::StreamDaemon daemon(src, enc, tx,
-        {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth, orientation});
+        {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth,
+         orientation, &g_orientation});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }
