@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -14,7 +15,14 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.droppix.app.R
 import com.droppix.app.net.Discovery
+import com.droppix.app.net.PairingCode
+import com.droppix.app.net.TlsTrust
+import com.droppix.app.net.certFingerprint
 import com.droppix.app.net.WakeService
+import java.net.InetSocketAddress
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLSocket
+import kotlin.concurrent.thread
 
 class ConnectActivity : AppCompatActivity() {
     private lateinit var pcList: ListView
@@ -25,6 +33,7 @@ class ConnectActivity : AppCompatActivity() {
 
     private lateinit var discovery: Discovery
     private lateinit var wakeService: WakeService
+    private lateinit var tlsTrust: TlsTrust
     private lateinit var pcListAdapter: ArrayAdapter<String>
     private data class DiscoveredPc(val name: String, val host: String, val port: Int)
     private val discoveredPcs = mutableListOf<DiscoveredPc>()
@@ -41,6 +50,7 @@ class ConnectActivity : AppCompatActivity() {
 
         discovery = Discovery(this)
         wakeService = WakeService(this)
+        tlsTrust = TlsTrust(this)
         pcListAdapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf<String>())
         pcList.adapter = pcListAdapter
         pcList.setOnItemClickListener { _, _, position, _ ->
@@ -146,9 +156,66 @@ class ConnectActivity : AppCompatActivity() {
     }
 
     fun connectTo(host: String, port: Int) {
+        when {
+            host == "127.0.0.1" -> launchStream(host, port)
+            tlsTrust.isPaired(host) -> launchStream(host, port)
+            else -> pairThenConnect(host, port)
+        }
+    }
+
+    private fun launchStream(host: String, port: Int) {
         getSharedPreferences("droppix", MODE_PRIVATE).edit()
             .putString("last_host", host).putInt("last_port", port).apply()
         startActivity(Intent(this, StreamActivity::class.java)
             .putExtra("host", host).putExtra("port", port))
+    }
+
+    private fun pairThenConnect(host: String, port: Int) {
+        thread(name = "droppix-pair-probe") {
+            var captured: X509Certificate? = null
+            var ok = false
+            try {
+                val socket = tlsTrust.socketFactory { cert -> captured = cert }.createSocket() as SSLSocket
+                try {
+                    socket.connect(InetSocketAddress(host, port), 5000)
+                    socket.startHandshake()
+                    ok = true
+                } finally {
+                    try { socket.close() } catch (_: Exception) {}
+                }
+            } catch (_: Exception) {
+                ok = false
+            }
+            val cert = captured
+            runOnUiThread {
+                if (!ok || cert == null) {
+                    Toast.makeText(this, "Could not reach $host", Toast.LENGTH_SHORT).show()
+                } else {
+                    showPairDialog(host, port, cert)
+                }
+            }
+        }
+    }
+
+    private fun showPairDialog(host: String, port: Int, cert: X509Certificate) {
+        val input = EditText(this)
+        input.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        input.filters = arrayOf(android.text.InputFilter.LengthFilter(6))
+
+        AlertDialog.Builder(this)
+            .setTitle("Pair with $host")
+            .setMessage("Enter the 6-digit code shown on the PC")
+            .setView(input)
+            .setPositiveButton("OK") { _, _ ->
+                val entry = input.text.toString().trim()
+                if (entry == PairingCode.derive(cert.encoded)) {
+                    tlsTrust.pin(host, certFingerprint(cert))
+                    launchStream(host, port)
+                } else {
+                    Toast.makeText(this, "Wrong code", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 }

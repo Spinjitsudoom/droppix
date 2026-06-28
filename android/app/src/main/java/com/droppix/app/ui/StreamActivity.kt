@@ -1,6 +1,7 @@
 package com.droppix.app.ui
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -12,6 +13,7 @@ import android.view.WindowManager
 import android.widget.TextView
 import com.droppix.app.R
 import com.droppix.app.decode.VideoDecoder
+import com.droppix.app.net.CertChangedException
 import com.droppix.app.net.DeviceIdentity
 import com.droppix.app.net.StreamListener
 import com.droppix.app.net.TlsTrust
@@ -135,6 +137,14 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                         id = DeviceIdentity.stableId(this@StreamActivity),
                         tlsTrust = tlsTrust)
                     Log.i(TAG, "stream session ended")
+                } catch (e: CertChangedException) {
+                    Log.w(TAG, "cert changed for $host: ${e.message}")
+                    running = false
+                    runOnUiThread { showCertChangedDialog(tlsTrust) }
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "not paired for $host: ${e.message}")
+                    running = false
+                    runOnUiThread { finish() }
                 } catch (e: Exception) {
                     Log.w(TAG, "connect/stream failed: ${e.message}")
                 }
@@ -143,6 +153,19 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             }
             client = null
         }
+    }
+
+    private fun showCertChangedDialog(tlsTrust: TlsTrust) {
+        AlertDialog.Builder(this)
+            .setTitle("PC identity changed")
+            .setMessage("The PC's security identity changed since you paired. Re-pair?")
+            .setPositiveButton("Re-pair") { _, _ ->
+                tlsTrust.clear(host)
+                finish()
+            }
+            .setNegativeButton("Cancel") { _, _ -> finish() }
+            .setCancelable(false)
+            .show()
     }
 
     private fun stopStreaming() {
