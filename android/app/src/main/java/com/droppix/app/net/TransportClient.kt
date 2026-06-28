@@ -41,7 +41,8 @@ class TransportClient {
 
     fun run(host: String, port: Int, width: Int, height: Int, density: Int,
             listener: StreamListener, isRunning: () -> Boolean,
-            stats: StatsSink? = null, pingIntervalMs: Long = 1000) {
+            stats: StatsSink? = null, pingIntervalMs: Long = 1000,
+            name: String = "", id: String = "") {
         val socket = Socket()
         try {
             socket.tcpNoDelay = true
@@ -54,7 +55,7 @@ class TransportClient {
 
             synchronized(sendLock) {
                 outStream.write(Protocol.encodeMessage(MsgType.HELLO,
-                    Protocol.encodeHello(Protocol.VERSION, width, height, density)))
+                    Protocol.encodeHello(Protocol.VERSION, width, height, density, name, id)))
                 outStream.flush()
             }
 

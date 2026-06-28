@@ -12,16 +12,20 @@ import android.view.WindowManager
 import android.widget.TextView
 import com.droppix.app.R
 import com.droppix.app.decode.VideoDecoder
+import com.droppix.app.net.DeviceIdentity
 import com.droppix.app.net.StreamListener
 import com.droppix.app.net.TransportClient
 import com.droppix.app.protocol.Protocol
 import com.droppix.app.stats.StatsSink
 import kotlin.concurrent.thread
 
-class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
+class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     private companion object {
-        const val TAG = "droppix"; const val HOST = "127.0.0.1"; const val PORT = 27000
+        const val TAG = "droppix"
     }
+
+    private val host by lazy { intent.getStringExtra("host") ?: "127.0.0.1" }
+    private val port by lazy { intent.getIntExtra("port", 27000) }
 
     @Volatile private var running = false
     @Volatile private var surface: Surface? = null
@@ -52,7 +56,7 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContentView(R.layout.activity_main)
+        setContentView(R.layout.activity_stream)
         surfaceView = findViewById(R.id.surface)
         overlay = findViewById(R.id.overlay)
         orientationListener = object : OrientationEventListener(this) {
@@ -105,6 +109,7 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             val listener = object : StreamListener {
                 override fun onConfig(config: Protocol.Config) {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
+                    saveLastEndpoint()  // handshake succeeded: remember this endpoint for "reconnect to last"
                     c.sendOrientation(orientationMapper.currentCode())  // sync host to current orientation
                     val s = surface ?: return
                     runOnUiThread { surfaceView.holder.setFixedSize(config.width, config.height) }
@@ -122,9 +127,11 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             // The host re-accepts clients in a loop, so keep dialing until paused.
             while (running) {
                 try {
-                    Log.i(TAG, "connecting to $HOST:$PORT")
-                    c.run(HOST, PORT, 1920, 1080,
-                        resources.displayMetrics.densityDpi, listener, { running }, stats)
+                    Log.i(TAG, "connecting to $host:$port")
+                    c.run(host, port, 1920, 1080,
+                        resources.displayMetrics.densityDpi, listener, { running }, stats,
+                        name = DeviceIdentity.displayName(this@StreamActivity),
+                        id = DeviceIdentity.stableId(this@StreamActivity))
                     Log.i(TAG, "stream session ended")
                 } catch (e: Exception) {
                     Log.w(TAG, "connect/stream failed: ${e.message}")
@@ -134,6 +141,11 @@ class MainActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             }
             client = null
         }
+    }
+
+    private fun saveLastEndpoint() {
+        getSharedPreferences("droppix", MODE_PRIVATE).edit()
+            .putString("last_host", host).putInt("last_port", port).apply()
     }
 
     private fun stopStreaming() {

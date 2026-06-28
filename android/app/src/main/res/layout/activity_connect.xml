@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#1b1f24"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="droppix"
+        android:textColor="#14b8a6"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Discovered PCs"
+        android:textColor="#9aa5b1"
+        android:textSize="14sp"
+        android:layout_marginBottom="4dp" />
+
+    <ListView
+        android:id="@+id/pc_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:divider="#2a2f36"
+        android:dividerHeight="1dp"
+        android:layout_marginBottom="16dp" />
+
+    <Button
+        android:id="@+id/reconnect_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Reconnect to last"
+        android:backgroundTint="#2a2f36"
+        android:textColor="#14b8a6"
+        android:layout_marginBottom="16dp"
+        android:visibility="gone" />
+
+    <EditText
+        android:id="@+id/manual_addr"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="192.168.1.50:27000"
+        android:textColorHint="#6b7280"
+        android:textColor="#e5e7eb"
+        android:backgroundTint="#14b8a6"
+        android:inputType="textUri"
+        android:singleLine="true"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/connect_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect"
+        android:backgroundTint="#14b8a6"
+        android:textColor="#1b1f24"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textColor="#9aa5b1"
+        android:textSize="13sp" />
+
+</LinearLayout>

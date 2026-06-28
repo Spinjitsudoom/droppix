@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Droppix" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#14b8a6</item>
+        <item name="colorPrimaryDark">#0f9d8d</item>
+        <item name="colorAccent">#14b8a6</item>
+        <item name="android:windowBackground">#1b1f24</item>
+        <item name="android:statusBarColor">#1b1f24</item>
+    </style>
+
+</resources>
