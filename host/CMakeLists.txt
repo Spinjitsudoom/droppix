@@ -65,8 +65,10 @@ if(Qt6_FOUND)
     gui/mdns_advertiser.cpp
     gui/mdns_browser.cpp
     gui/approved_store.cpp
+    gui/cert_manager.cpp
     src/mdns_browse.cpp
   )
+  target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
   message(STATUS "Qt6 not found; skipping droppix_gui")
 endif()

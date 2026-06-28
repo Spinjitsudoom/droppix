@@ -9,6 +9,7 @@
 #include "mdns_advertiser.h"
 #include "mdns_browser.h"
 #include "approved_store.h"
+#include "cert_manager.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
@@ -43,6 +44,7 @@ class MainWindow : public QMainWindow {
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
+  QLabel* pairingLabel_;
   QWidget* authRow_; QLabel* authCaption_;   // "remember authentication" tip
   QPlainTextEdit* log_;
   QGroupBox* devicesBox_;
@@ -51,6 +53,7 @@ class MainWindow : public QMainWindow {
 
   ProfileStore store_;
   ApprovedStore approved_;
+  CertManager cert_;
   StreamController controller_;
   AdbManager adb_;
   MdnsAdvertiser advertiser_;

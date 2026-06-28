@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 namespace droppix {
 struct Settings {
   enum class Source { TestPattern, Evdi };
@@ -9,5 +10,8 @@ struct Settings {
   bool auto_adb_reverse = true;
   bool touch = false;   // enable tablet touch -> cursor (evdi only)
   int orientation = 0;  // droppix output rotation degrees: 0/90/180/270 (evdi only)
+  bool tls = true;          // pass --tls/--cert/--key to the streamer
+  std::string certPath;     // PC's TLS cert (PEM)
+  std::string keyPath;      // PC's TLS key (PEM)
 };
 }  // namespace droppix

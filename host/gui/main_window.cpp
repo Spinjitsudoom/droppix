@@ -21,8 +21,10 @@ static QString configDir() {
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       store_(configDir()),
-      approved_(configDir()) {
+      approved_(configDir()),
+      cert_(configDir()) {
   streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
+  const bool certsReady = cert_.ensure();
   setWindowTitle("droppix");
 
   // --- Header ---
@@ -96,6 +98,10 @@ MainWindow::MainWindow(QWidget* parent)
   statusRow->addWidget(streamLabel_); statusRow->addStretch();
   statusRow->addWidget(statsLabel_);
   deviceLabel_ = new QLabel("Device: —"); deviceLabel_->setObjectName("caption");
+  pairingLabel_ = new QLabel(certsReady
+      ? "Pairing code: " + cert_.pairingCode()
+      : "Pairing code: unavailable");
+  pairingLabel_->setObjectName("caption");
 
   // --- Start/Stop + log ---
   startBtn_ = new QPushButton("▶  Start streaming");
@@ -135,6 +141,7 @@ MainWindow::MainWindow(QWidget* parent)
   root->addWidget(settingsBox);
   root->addLayout(statusRow);
   root->addWidget(deviceLabel_);
+  root->addWidget(pairingLabel_);
   root->addWidget(startBtn_);
   root->addWidget(authRow_);
   root->addWidget(devicesBox_);
@@ -258,6 +265,9 @@ Settings MainWindow::collectSettings() const {
   s.auto_adb_reverse = autoReverse_->isChecked();
   s.touch = touch_->isChecked();
   s.orientation = orientation_->currentData().toInt();
+  s.tls = true;
+  s.certPath = cert_.certPath().toStdString();
+  s.keyPath = cert_.keyPath().toStdString();
   return s;
 }
 

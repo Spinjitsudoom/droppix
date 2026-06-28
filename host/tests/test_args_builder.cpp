@@ -76,3 +76,34 @@ TEST(ArgsBuilder, TestPatternNeverHasApprove) {
   Command c = build_command(s, "/path/droppix_stream");
   EXPECT_FALSE(has(c.args, "--approve"));   // approval gate is evdi-only
 }
+
+TEST(ArgsBuilder, TlsFlagsPresentWhenCertSet) {
+  Settings s; s.source = Settings::Source::TestPattern;
+  s.tls = true; s.certPath = "/cfg/cert.pem"; s.keyPath = "/cfg/key.pem";
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_TRUE(has(c.args, "--tls"));
+  EXPECT_TRUE(has(c.args, "--cert")); EXPECT_TRUE(has(c.args, "/cfg/cert.pem"));
+  EXPECT_TRUE(has(c.args, "--key"));  EXPECT_TRUE(has(c.args, "/cfg/key.pem"));
+}
+
+TEST(ArgsBuilder, TlsFlagsPresentForEvdiTooWhenCertSet) {
+  Settings s; s.source = Settings::Source::Evdi;
+  s.tls = true; s.certPath = "/cfg/cert.pem"; s.keyPath = "/cfg/key.pem";
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_TRUE(has(c.args, "--tls"));
+  EXPECT_TRUE(has(c.args, "--cert")); EXPECT_TRUE(has(c.args, "/cfg/cert.pem"));
+}
+
+TEST(ArgsBuilder, NoTlsFlagsWhenCertPathEmpty) {
+  Settings s; s.source = Settings::Source::TestPattern;
+  s.tls = true; s.certPath.clear(); s.keyPath.clear();
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_FALSE(has(c.args, "--tls"));
+}
+
+TEST(ArgsBuilder, NoTlsFlagsWhenTlsDisabled) {
+  Settings s; s.source = Settings::Source::TestPattern;
+  s.tls = false; s.certPath = "/cfg/cert.pem"; s.keyPath = "/cfg/key.pem";
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_FALSE(has(c.args, "--tls"));
+}

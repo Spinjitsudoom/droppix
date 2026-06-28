@@ -22,6 +22,11 @@ Command build_command(const Settings& s, const std::string& stream_bin) {
   a.push_back("--bitrate"); a.push_back(std::to_string(s.bitrate_kbps));
   a.push_back("--port");    a.push_back(std::to_string(s.port));
   a.push_back("--stats-json");
+  if (s.tls && !s.certPath.empty()) {
+    a.push_back("--tls");
+    a.push_back("--cert"); a.push_back(s.certPath);
+    a.push_back("--key");  a.push_back(s.keyPath);
+  }
 
   Command c;
   c.needs_adb_reverse = s.auto_adb_reverse;
