@@ -95,6 +95,7 @@ add_executable(droppix_tests
   tests/test_monitor_geometry.cpp
   tests/test_orientation.cpp
   tests/test_approval.cpp
+  tests/test_wake.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
 )
