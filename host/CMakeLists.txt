@@ -12,6 +12,7 @@ message(STATUS "Using libevdi: ${EVDI_LIB}")
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil libswscale)
 find_package(Threads REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 # Core library: sources are added by later tasks.
 add_library(droppix_core
@@ -38,7 +39,7 @@ target_include_directories(droppix_core PUBLIC
   third_party/evdi
   third_party/stb
 )
-target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG)
+target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG OpenSSL::SSL OpenSSL::Crypto)
 
 add_executable(droppix_spike src/spike_main.cpp)
 target_link_libraries(droppix_spike PRIVATE droppix_core)
@@ -100,6 +101,7 @@ add_executable(droppix_tests
   tests/test_approval.cpp
   tests/test_wake.cpp
   tests/test_mdns_browse.cpp
+  tests/test_pairing_code.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
 )
