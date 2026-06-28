@@ -6,21 +6,37 @@ import com.droppix.app.stats.StatsSink
 import org.junit.Assert.*
 import org.junit.Test
 import java.io.DataInputStream
-import java.net.ServerSocket
+import java.security.KeyStore
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLServerSocket
+import javax.net.ssl.SSLServerSocketFactory
 import kotlin.concurrent.thread
+
+private fun statsTestServerSocketFactory(): SSLServerSocketFactory {
+    val ks = KeyStore.getInstance("PKCS12")
+    TransportClientStatsTest::class.java.getResourceAsStream("/test_server.p12").use {
+        ks.load(it, "droppix123".toCharArray())
+    }
+    val kmf = javax.net.ssl.KeyManagerFactory.getInstance(javax.net.ssl.KeyManagerFactory.getDefaultAlgorithm())
+    kmf.init(ks, "droppix123".toCharArray())
+    val context = SSLContext.getInstance("TLS")
+    context.init(kmf.keyManagers, null, null)
+    return context.serverSocketFactory
+}
 
 class TransportClientStatsTest {
     @Test fun rttAndFpsArePopulated() {
-        val server = ServerSocket(0)
+        val server = statsTestServerSocketFactory().createServerSocket(0) as SSLServerSocket
         val port = server.localPort
         val stop = AtomicBoolean(false)
 
         // Fake host: read HELLO, send CONFIG + a VIDEO, then echo any PING as PONG.
         val serverThread = thread {
             server.use {
-                val sock = it.accept()
+                val sock = it.accept() as javax.net.ssl.SSLSocket
+                sock.startHandshake()
                 val input = DataInputStream(sock.getInputStream())
                 val out = sock.getOutputStream()
                 // read HELLO
@@ -48,10 +64,11 @@ class TransportClientStatsTest {
             override fun onConfig(config: Protocol.Config) {}
             override fun onVideo(video: Protocol.Video) {}
         }
+        val tlsTrust = TlsTrust(FakePinStore())
         val clientThread = thread {
             // pingIntervalMs=0 -> ping on the first loop iteration so the test is fast
             client.run("127.0.0.1", port, 640, 480, 320, listener, { !stop.get() },
-                stats, 0)
+                stats, 0, tlsTrust = tlsTrust)
         }
 
         val deadline = System.currentTimeMillis() + 3000

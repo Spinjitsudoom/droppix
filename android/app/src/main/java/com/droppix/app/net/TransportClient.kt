@@ -6,7 +6,8 @@ import com.droppix.app.protocol.Protocol
 import com.droppix.app.stats.RateMeter
 import com.droppix.app.stats.StatsSink
 import java.net.InetSocketAddress
-import java.net.Socket
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLSocket
 
 interface StreamListener {
     fun onConfig(config: Protocol.Config)
@@ -42,11 +43,24 @@ class TransportClient {
     fun run(host: String, port: Int, width: Int, height: Int, density: Int,
             listener: StreamListener, isRunning: () -> Boolean,
             stats: StatsSink? = null, pingIntervalMs: Long = 1000,
-            name: String = "", id: String = "") {
-        val socket = Socket()
+            name: String = "", id: String = "", tlsTrust: TlsTrust) {
+        var serverCert: X509Certificate? = null
+        val socket = tlsTrust.socketFactory { cert -> serverCert = cert }.createSocket() as SSLSocket
         try {
             socket.tcpNoDelay = true
             socket.connect(InetSocketAddress(host, port), 5000)
+            socket.startHandshake()
+
+            if (host != "127.0.0.1") {
+                val cert = serverCert ?: throw IllegalStateException("no server certificate captured")
+                val fp = certFingerprint(cert)
+                val pinned = tlsTrust.pinnedFp(host)
+                when {
+                    pinned == null -> throw IllegalStateException("not paired")
+                    pinned != fp -> throw CertChangedException(host)
+                }
+            }
+
             socket.soTimeout = 1000  // periodic wakeups so isRunning() is checked
 
             val outStream = socket.getOutputStream()
