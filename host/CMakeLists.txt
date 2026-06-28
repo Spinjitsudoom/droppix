@@ -61,6 +61,7 @@ if(Qt6_FOUND)
     gui/stream_controller.cpp
     gui/adb_manager.cpp
     gui/mdns_advertiser.cpp
+    gui/approved_store.cpp
   )
 else()
   message(STATUS "Qt6 not found; skipping droppix_gui")
@@ -107,6 +108,8 @@ if(Qt6_FOUND)
   add_executable(droppix_gui_tests
     gui/tests/test_profile_store.cpp
     gui/profile_store.cpp
+    gui/tests/test_approved_store.cpp
+    gui/approved_store.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)

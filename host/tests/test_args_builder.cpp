@@ -65,3 +65,14 @@ TEST(ArgsBuilder, AutoAdbReverseToggle) {
   Settings s; s.auto_adb_reverse = false;
   EXPECT_FALSE(build_command(s, "/x").needs_adb_reverse);
 }
+
+TEST(ArgsBuilder, EvdiHasApproveFlag) {
+  Settings s; s.source = Settings::Source::Evdi;
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_TRUE(has(c.args, "--approve"));
+}
+TEST(ArgsBuilder, TestPatternNeverHasApprove) {
+  Settings s; s.source = Settings::Source::TestPattern;
+  Command c = build_command(s, "/path/droppix_stream");
+  EXPECT_FALSE(has(c.args, "--approve"));   // approval gate is evdi-only
+}

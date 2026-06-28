@@ -16,7 +16,8 @@ static QString configDir() {
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
-      store_(configDir()) {
+      store_(configDir()),
+      approved_(configDir()) {
   streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
   setWindowTitle("droppix");
 
@@ -164,6 +165,15 @@ MainWindow::MainWindow(QWidget* parent)
     setRunningUi(r);
     if (r) advertiser_.start(collectSettings().port); else advertiser_.stop();
   });
+  connect(&controller_, &StreamController::approvalRequested, this,
+    [this](const QString& id, const QString& name, const QString& ip){
+      const QString key = id.isEmpty() ? ip : id;
+      if (approved_.isApproved(key)) { controller_.writeLine("approve " + key); return; }
+      auto btn = QMessageBox::question(this, "Allow connection?",
+          QString("Allow \"%1\" (%2) to connect?").arg(name.isEmpty()?ip:name, ip));
+      if (btn == QMessageBox::Yes) { approved_.approve(key); controller_.writeLine("approve " + key); }
+      else controller_.writeLine("deny " + key);
+    });
   connect(&adb_, &AdbManager::deviceStatus, this, [this](const QString& st){ deviceLabel_->setText("Device: " + st); });
 
   adbTimer_ = new QTimer(this);

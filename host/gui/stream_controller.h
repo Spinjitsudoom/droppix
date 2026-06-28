@@ -12,10 +12,12 @@ class StreamController : public QObject {
   void start(const Command& cmd);
   void stop();
   bool running() const;
+  void writeLine(const QString& s);
  signals:
   void statsReceived(const droppix::Stats& stats);
   void logLine(const QString& line);
   void runningChanged(bool running);
+  void approvalRequested(QString id, QString name, QString ip);
  private:
   void onReadyRead();
   QProcess proc_;
