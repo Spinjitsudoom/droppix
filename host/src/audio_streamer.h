@@ -38,6 +38,7 @@ class AudioStreamer {
   std::atomic<bool> running_{false};
   std::mutex mu_;
   std::vector<std::vector<unsigned char>> queue_;   // guarded by mu_
+  std::mutex stop_mu_;               // guards stop() for idempotent/concurrent calls
 };
 
 }  // namespace droppix

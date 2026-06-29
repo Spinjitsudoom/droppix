@@ -27,8 +27,9 @@ void AudioStreamer::begin_reading() {
 
 void AudioStreamer::reader_loop() {
   unsigned char buf[4096];
+  const int fd = fd_;   // capture once: fd_ may be mutated by stop() on another thread
   while (running_) {
-    ssize_t n = ::read(fd_, buf, sizeof(buf));
+    ssize_t n = ::read(fd, buf, sizeof(buf));
     if (n <= 0) break;                       // EOF / error / pipe closed
     std::lock_guard<std::mutex> lk(mu_);
     queue_.emplace_back(buf, buf + n);
@@ -44,6 +45,7 @@ bool AudioStreamer::drain(std::vector<std::vector<unsigned char>>& out) {
 }
 
 void AudioStreamer::stop() {
+  std::lock_guard<std::mutex> lk(stop_mu_);
   running_ = false;
   if (proc_) { ::pclose(proc_); proc_ = nullptr; fd_ = -1; }  // closes pipe -> reader read() returns
   else if (fd_ >= 0) { ::close(fd_); fd_ = -1; }
