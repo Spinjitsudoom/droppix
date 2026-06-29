@@ -12,6 +12,7 @@ import android.view.Surface
 import android.view.WindowManager
 import android.widget.TextView
 import com.droppix.app.R
+import com.droppix.app.audio.AudioPlayer
 import com.droppix.app.decode.VideoDecoder
 import com.droppix.app.net.CertChangedException
 import com.droppix.app.net.DeviceIdentity
@@ -35,6 +36,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     private var netThread: Thread? = null
     @Volatile private var decoder: VideoDecoder? = null
     @Volatile private var client: TransportClient? = null
+    @Volatile private var audioPlayer: AudioPlayer? = null
     private lateinit var surfaceView: DisplaySurfaceView
 
     // Auto-orientation: the Activity follows the sensor (manifest fullSensor) so Android
@@ -110,6 +112,8 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             val c = TransportClient()
             val tlsTrust = TlsTrust(this@StreamActivity)
             client = c
+            val player = AudioPlayer().apply { start() }
+            audioPlayer = player
             val listener = object : StreamListener {
                 override fun onConfig(config: Protocol.Config) {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
@@ -126,6 +130,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 override fun onVideo(video: Protocol.Video) {
                     decoder?.submit(video.nal, video.ptsUs)
                 }
+                override fun onAudio(pcm: ByteArray) { player.submit(pcm) }
             }
             // The host re-accepts clients in a loop, so keep dialing until paused.
             while (running) {
@@ -153,6 +158,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             }
             client = null
             c.close()
+            player.release(); audioPlayer = null
         }
     }
 
