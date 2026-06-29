@@ -152,6 +152,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 if (running) Thread.sleep(1000)  // back off before retrying
             }
             client = null
+            c.close()
         }
     }
 

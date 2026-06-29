@@ -17,6 +17,12 @@ interface StreamListener {
 class TransportClient {
     private val sendLock = Any()
     @Volatile private var out: java.io.OutputStream? = null
+    // app->host sends originate on the UI thread (touch, orientation); socket I/O there
+    // throws NetworkOnMainThreadException. Serialize every send onto one background thread.
+    private val sender = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "droppix-send").apply { isDaemon = true }
+    }
+    fun close() { sender.shutdown() }
 
     private fun longToBytes(x: Long) = ByteArray(8) { i -> (x ushr (56 - i * 8)).toByte() }
     private fun bytesToLong(b: ByteArray): Long {
@@ -27,17 +33,25 @@ class TransportClient {
     fun sendInput(action: Int, xNorm: Int, yNorm: Int) {
         val o = out ?: return
         val msg = Protocol.encodeMessage(MsgType.INPUT, Protocol.encodeInput(action, xNorm, yNorm))
-        synchronized(sendLock) {
-            try { o.write(msg); o.flush() } catch (e: Exception) { /* dropped; loop will close */ }
-        }
+        submitSend(o, msg)
     }
 
     fun sendOrientation(code: Int) {
         val o = out ?: return
         val msg = Protocol.encodeMessage(MsgType.ORIENTATION, Protocol.encodeOrientation(code))
-        synchronized(sendLock) {
-            try { o.write(msg); o.flush() } catch (e: Exception) { /* dropped; loop will close */ }
-        }
+        submitSend(o, msg)
+    }
+
+    // Encode on the caller; write on the background sender so UI-thread callers don't
+    // hit NetworkOnMainThreadException. sendLock still serializes against net-thread writes.
+    private fun submitSend(o: java.io.OutputStream, msg: ByteArray) {
+        try {
+            sender.execute {
+                synchronized(sendLock) {
+                    try { o.write(msg); o.flush() } catch (_: Exception) { /* dropped; loop will close */ }
+                }
+            }
+        } catch (_: java.util.concurrent.RejectedExecutionException) { /* sender shut down */ }
     }
 
     fun run(host: String, port: Int, width: Int, height: Int, density: Int,
