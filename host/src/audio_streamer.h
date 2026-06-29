@@ -29,7 +29,6 @@ class AudioStreamer {
   void stop();
 
  private:
-  void begin_reading();
   void reader_loop();
 
   int fd_ = -1;

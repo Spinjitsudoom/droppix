@@ -8,19 +8,19 @@ bool AudioStreamer::start(const std::string& user_prefix) {
       user_prefix +
       "pw-record --raw --target=droppix-audio.monitor "
       "--format=s16 --rate=48000 --channels=2 --latency=20ms - 2>/dev/null";
-  proc_ = ::popen(cmd.c_str(), "r");
-  if (!proc_) return false;
+  FILE* p = ::popen(cmd.c_str(), "r");  // blocking; done OUTSIDE stop_mu_
+  if (!p) return false;
+  std::lock_guard<std::mutex> lk(stop_mu_);
+  proc_ = p;
   fd_ = ::fileno(proc_);
-  begin_reading();
+  running_ = true;
+  thread_ = std::thread(&AudioStreamer::reader_loop, this);
   return true;
 }
 
 void AudioStreamer::read_from_fd(int fd) {
+  std::lock_guard<std::mutex> lk(stop_mu_);
   fd_ = fd;
-  begin_reading();
-}
-
-void AudioStreamer::begin_reading() {
   running_ = true;
   thread_ = std::thread(&AudioStreamer::reader_loop, this);
 }
