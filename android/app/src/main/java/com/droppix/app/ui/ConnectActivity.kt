@@ -62,6 +62,13 @@ class ConnectActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { onConnectClicked() }
         updateReconnectRow()
         reconnectBtn.setOnClickListener { onReconnectClicked() }
+
+        // Small USB icon: one-tap connect over the adb-reverse tunnel (localhost,
+        // auto-trusted — no discovery or PIN). Needs the host GUI's adb reverse active.
+        findViewById<android.widget.ImageButton>(R.id.usb_btn).setOnClickListener {
+            status.text = "Connecting over USB..."
+            connectTo("127.0.0.1", 27000)
+        }
     }
 
     override fun onResume() {
