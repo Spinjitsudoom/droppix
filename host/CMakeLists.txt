@@ -33,6 +33,7 @@ add_library(droppix_core
   src/monitor_geometry.cpp
   src/input_injector.cpp
   src/mdns_browse.cpp
+  src/audio_streamer.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
@@ -66,6 +67,7 @@ if(Qt6_FOUND)
     gui/mdns_browser.cpp
     gui/approved_store.cpp
     gui/cert_manager.cpp
+    gui/audio_sink.cpp
     src/mdns_browse.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
@@ -100,12 +102,15 @@ add_executable(droppix_tests
   tests/test_input_map.cpp
   tests/test_monitor_geometry.cpp
   tests/test_orientation.cpp
+  tests/test_audio_streamer.cpp
   tests/test_approval.cpp
   tests/test_wake.cpp
   tests/test_mdns_browse.cpp
   tests/test_pairing_code.cpp
+  tests/test_audio_sink.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
+  gui/audio_sink.cpp
 )
 target_include_directories(droppix_tests PRIVATE gui)
 target_link_libraries(droppix_tests PRIVATE droppix_core GTest::gtest_main Threads::Threads)

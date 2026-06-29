@@ -12,6 +12,7 @@ import javax.net.ssl.SSLSocket
 interface StreamListener {
     fun onConfig(config: Protocol.Config)
     fun onVideo(video: Protocol.Video)
+    fun onAudio(pcm: ByteArray) {}
 }
 
 class TransportClient {
@@ -121,6 +122,7 @@ class TransportClient {
                             MsgType.PONG -> if (stats != null && msg.body.size >= 8) {
                                 stats.rttMs = (System.nanoTime() - bytesToLong(msg.body)) / 1_000_000.0
                             }
+                            MsgType.AUDIO -> listener.onAudio(msg.body)
                             MsgType.BYE -> return
                             else -> { /* ignore */ }
                         }

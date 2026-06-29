@@ -143,3 +143,11 @@ TEST(Protocol, OrientationBadLengthInvalid) {
   EXPECT_FALSE(decode_orientation({}, c));
   EXPECT_FALSE(decode_orientation({0, 0}, c));
 }
+
+TEST(Protocol, AudioMessageFraming) {
+  // length = 1 (type) + 4 (body) = 5, big-endian; type = Audio(9).
+  std::vector<unsigned char> pcm = {0xDE, 0xAD, 0xBE, 0xEF};
+  auto m = droppix::encode_message(droppix::MsgType::Audio, pcm);
+  std::vector<unsigned char> expected = {0,0,0,5, 9, 0xDE,0xAD,0xBE,0xEF};
+  EXPECT_EQ(m, expected);
+}

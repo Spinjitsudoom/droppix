@@ -80,4 +80,11 @@ class ProtocolTest {
         val m = Protocol.encodeMessage(MsgType.ORIENTATION, Protocol.encodeOrientation(1))
         assertArrayEquals(byteArrayOf(0, 0, 0, 2, 8, 0x01), m)
     }
+
+    @Test fun audioMessageFramingMatchesHost() {
+        val m = Protocol.encodeMessage(MsgType.AUDIO,
+            byteArrayOf(0xDE.toByte(), 0xAD.toByte(), 0xBE.toByte(), 0xEF.toByte()))
+        assertArrayEquals(
+            byteArrayOf(0,0,0,5, 9, 0xDE.toByte(),0xAD.toByte(),0xBE.toByte(),0xEF.toByte()), m)
+    }
 }

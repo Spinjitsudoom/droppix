@@ -7,7 +7,7 @@ namespace droppix {
 
 enum class MsgType : uint8_t {
   Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6, Input = 7,
-  Orientation = 8
+  Orientation = 8, Audio = 9
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.

@@ -10,6 +10,7 @@
 #include "mdns_browser.h"
 #include "approved_store.h"
 #include "cert_manager.h"
+#include "audio_sink.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
@@ -41,6 +42,7 @@ class MainWindow : public QMainWindow {
   QComboBox* orientation_;
   QCheckBox* autoReverse_;
   QCheckBox* touch_;
+  QCheckBox* audio_;
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
@@ -54,6 +56,7 @@ class MainWindow : public QMainWindow {
   ProfileStore store_;
   ApprovedStore approved_;
   CertManager cert_;
+  DroppixAudioSink audioSink_;
   StreamController controller_;
   AdbManager adb_;
   MdnsAdvertiser advertiser_;

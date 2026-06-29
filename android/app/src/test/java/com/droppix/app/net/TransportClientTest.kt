@@ -162,6 +162,39 @@ class TransportClientTest {
         serverThread.join(1000)
     }
 
+    @Test fun routesAudioToListener() {
+        val server = testServerSocketFactory().createServerSocket(0) as SSLServerSocket
+        val port = server.localPort
+        val pcm = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        thread {
+            server.use {
+                val sock = it.accept() as javax.net.ssl.SSLSocket
+                sock.startHandshake()
+                val input = DataInputStream(sock.getInputStream())
+                val len = input.readInt(); val frame = ByteArray(len); input.readFully(frame)  // HELLO
+                val out = sock.getOutputStream()
+                out.write(Protocol.encodeMessage(MsgType.AUDIO, pcm)); out.flush()
+                Thread.sleep(200); sock.close()
+            }
+        }
+        val latch = CountDownLatch(1)
+        var got: ByteArray? = null
+        val listener = object : StreamListener {
+            override fun onConfig(config: Protocol.Config) {}
+            override fun onVideo(video: Protocol.Video) {}
+            override fun onAudio(pcm: ByteArray) { got = pcm; latch.countDown() }
+        }
+        val client = TransportClient()
+        val tlsTrust = TlsTrust(FakePinStore())
+        val clientRunning = java.util.concurrent.atomic.AtomicBoolean(true)
+        val t = thread { client.run("127.0.0.1", port, 1920, 1080, 320, listener, { clientRunning.get() }, tlsTrust = tlsTrust) }
+        assertTrue(latch.await(3, TimeUnit.SECONDS))
+        assertArrayEquals(pcm, got)
+        // stop the client run loop
+        clientRunning.set(false)
+        t.join(2000)
+    }
+
     private fun beU32(x: Int) = byteArrayOf(
         (x ushr 24).toByte(), (x ushr 16).toByte(), (x ushr 8).toByte(), x.toByte())
     private fun beU64(x: Long) = ByteArray(8) { i -> (x ushr (56 - i * 8)).toByte() }

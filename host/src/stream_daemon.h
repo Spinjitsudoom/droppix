@@ -17,6 +17,7 @@ struct StreamConfig {
                                     // the caller can rebuild the source at new dims
   bool approve = false;        // gate non-localhost peers on an approve/deny reply
   ApprovalGate* gate = nullptr;  // stdin-fed approval channel (owned by stream_main)
+  bool audio = false;          // capture droppix-audio monitor and stream it
 };
 
 class StreamDaemon {

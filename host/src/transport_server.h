@@ -19,6 +19,7 @@ class TransportServer {
                    const std::vector<unsigned char>& extradata);
   bool send_video(uint64_t pts_us, bool keyframe,
                   const std::vector<unsigned char>& nal);
+  bool send_audio(const std::vector<unsigned char>& pcm);
   void poll_control();                 // respond to PING, dispatch INPUT, detect disconnect
   // Called for each INPUT message during poll_control (action, x_norm, y_norm).
   // INVARIANT: if the handler captures an object by reference, the caller MUST

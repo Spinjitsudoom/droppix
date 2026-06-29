@@ -9,6 +9,7 @@ struct Settings {
   int refresh_hz = 60;
   bool auto_adb_reverse = true;
   bool touch = false;   // enable tablet touch -> cursor (evdi only)
+  bool audio = false;   // capture droppix-audio sink and stream it to the tablet
   int orientation = 0;  // droppix output rotation degrees: 0/90/180/270 (evdi only)
   bool tls = true;          // pass --tls/--cert/--key to the streamer
   std::string certPath;     // PC's TLS cert (PEM)

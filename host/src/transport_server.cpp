@@ -141,6 +141,10 @@ bool TransportServer::send_video(uint64_t pts_us, bool key,
   return send_all(encode_message(MsgType::Video, encode_video(pts_us, key, nal)));
 }
 
+bool TransportServer::send_audio(const std::vector<unsigned char>& pcm) {
+  return send_all(encode_message(MsgType::Audio, pcm));
+}
+
 void TransportServer::poll_control() {
   if (client_fd_ < 0) return;
   bool tls_buffered = tls_ && ssl_ && SSL_pending(ssl_) > 0;

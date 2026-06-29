@@ -4,6 +4,7 @@
 #include "input_injector.h"
 #include "monitor_geometry.h"
 #include "orientation.h"
+#include "audio_streamer.h"
 #include <chrono>
 #include <cctype>
 #include <cstdio>
@@ -167,6 +168,16 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     }
   }
 
+  // Audio capture (opt-in via --audio): capture the droppix-audio sink monitor in
+  // the user session and stream it. Best-effort; never blocks the video path.
+  AudioStreamer audio;
+  if (cfg_.audio) {
+    if (audio.start(user_cmd_prefix()))
+      std::fprintf(stderr, "audio: capturing droppix-audio.monitor\n");
+    else
+      std::fprintf(stderr, "audio: capture unavailable (pw-record/droppix-audio missing)\n");
+  }
+
   auto t0 = std::chrono::steady_clock::now();
   int sent = 0;
   StatAccumulator encode_ms, frame_kb;
@@ -174,8 +185,13 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   auto last_report = std::chrono::steady_clock::now();
   // With touch on, poll the loop tightly so incoming touch is handled promptly
   // instead of being gated by the up-to-1s damage-driven frame wait.
-  const int frame_timeout = cfg_.touch ? 8 : 1000;
+  const int frame_timeout = (cfg_.touch || cfg_.audio) ? 8 : 1000;
   while (!stop && !restart_for_orientation && tx_.connected()) {
+    if (cfg_.audio) {
+      std::vector<std::vector<unsigned char>> chunks;
+      if (audio.drain(chunks))
+        for (auto& c : chunks) tx_.send_audio(c);
+    }
     Frame f = src_.next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
