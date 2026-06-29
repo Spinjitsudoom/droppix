@@ -66,6 +66,7 @@ MainWindow::MainWindow(QWidget* parent)
   orientation_->addItem("Portrait flipped (270°)", 270);
   autoReverse_ = new QCheckBox("Auto adb reverse on start"); autoReverse_->setChecked(true);
   touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
+  audio_ = new QCheckBox("Stream audio to tablet (route an app's output to 'droppix-audio')");
 
   auto* form = new QFormLayout;
   auto* srcRow = new QHBoxLayout;
@@ -83,6 +84,7 @@ MainWindow::MainWindow(QWidget* parent)
   form->addRow("Port:", port_);
   form->addRow("", autoReverse_);
   form->addRow("", touch_);
+  form->addRow("", audio_);
   form->setVerticalSpacing(10);
   form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
   auto* settingsBox = new QGroupBox("Settings");
@@ -222,6 +224,8 @@ MainWindow::MainWindow(QWidget* parent)
   adb_.refresh();
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
+
+  audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
 }
 
 void MainWindow::onDevicesChanged(const QList<MdnsDevice>& devices) {
@@ -264,6 +268,7 @@ Settings MainWindow::collectSettings() const {
   s.refresh_hz = refresh_->currentText().toInt();
   s.auto_adb_reverse = autoReverse_->isChecked();
   s.touch = touch_->isChecked();
+  s.audio = audio_->isChecked();
   s.orientation = orientation_->currentData().toInt();
   s.tls = true;
   s.certPath = cert_.certPath().toStdString();
@@ -280,6 +285,7 @@ void MainWindow::applySettings(const Settings& s) {
   { int i = orientation_->findData(s.orientation); orientation_->setCurrentIndex(i >= 0 ? i : 0); }
   autoReverse_->setChecked(s.auto_adb_reverse);
   touch_->setChecked(s.touch);
+  audio_->setChecked(s.audio);
 }
 
 void MainWindow::refreshProfiles() {

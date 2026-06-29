@@ -107,3 +107,15 @@ TEST(ArgsBuilder, NoTlsFlagsWhenTlsDisabled) {
   Command c = build_command(s, "/path/droppix_stream");
   EXPECT_FALSE(has(c.args, "--tls"));
 }
+
+TEST(ArgsBuilder, AudioFlagAppendedWhenEnabled) {
+  droppix::Settings s; s.source = droppix::Settings::Source::Evdi; s.audio = true;
+  auto c = droppix::build_command(s, "/usr/bin/droppix_stream");
+  bool has_audio = false;
+  for (auto& a : c.args) if (a == "--audio") has_audio = true;
+  EXPECT_TRUE(has_audio);
+
+  droppix::Settings s2; s2.source = droppix::Settings::Source::Evdi; s2.audio = false;
+  auto c2 = droppix::build_command(s2, "/usr/bin/droppix_stream");
+  for (auto& a : c2.args) EXPECT_NE(a, std::string("--audio"));
+}
