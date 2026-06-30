@@ -5,10 +5,13 @@ namespace droppix {
 
 bool AudioStreamer::start(const std::string& user_prefix) {
   if (running_) return false;
+  // parec (PulseAudio compat) reliably resolves the sink's ".monitor" device and
+  // emits headerless s16le PCM to stdout. NOTE: `pw-record --target=<name>.monitor`
+  // silently fails to bind the monitor here (captures digital silence), so use parec.
   const std::string cmd =
       user_prefix +
-      "pw-record --raw --target=droppix-audio.monitor "
-      "--format=s16 --rate=48000 --channels=2 --latency=20ms - 2>/dev/null";
+      "parec --device=droppix-audio.monitor "
+      "--format=s16le --rate=48000 --channels=2 2>/dev/null";
   FILE* p = ::popen(cmd.c_str(), "r");  // blocking; done OUTSIDE stop_mu_
   if (!p) return false;
   std::lock_guard<std::mutex> lk(stop_mu_);
