@@ -328,8 +328,7 @@ void MainWindow::setupAuth() {
 }
 
 void MainWindow::showAbout() {
-  // NOTE: the repo URL is finalized when the project is published to GitHub.
-  const QString repo = "https://github.com/yourusername/droppix";
+  const QString repo = "https://github.com/Spinjitsudoom/droppix";
   QDialog dlg(this);
   dlg.setWindowTitle("About droppix");
   auto* icon = new QLabel;
