@@ -117,6 +117,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
 
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;
+  tx_.send_overlay(cfg_.overlay ? 1 : 0);  // app shows its perf overlay only if asked
 
   // Identify the droppix output (for orientation and/or touch): prefer the
   // newly-appeared one (unambiguous), else fall back to a size match.

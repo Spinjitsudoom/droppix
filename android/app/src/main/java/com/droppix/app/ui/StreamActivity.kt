@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.view.OrientationEventListener
 import android.view.Surface
+import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import com.droppix.app.R
@@ -64,6 +65,8 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         setContentView(R.layout.activity_stream)
         surfaceView = findViewById(R.id.surface)
         overlay = findViewById(R.id.overlay)
+        overlay.visibility = View.GONE   // shown only if the host asks (Settings → performance overlay)
+        applyImmersive()
         orientationListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(angleDeg: Int) {
                 val code = orientationMapper.update(angleDeg, SystemClock.elapsedRealtime()) ?: return
@@ -71,6 +74,24 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 client?.sendOrientation(code)
             }
         }
+    }
+
+    // Hide the status + navigation bars for a true full-screen monitor; a swipe from
+    // the edge peeks them back, then they auto-hide again (immersive sticky).
+    private fun applyImmersive() {
+        @Suppress("DEPRECATION")
+        window.decorView.systemUiVisibility =
+            (View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) applyImmersive()
     }
 
     override fun onResume() {
@@ -131,6 +152,9 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                     decoder?.submit(video.nal, video.ptsUs)
                 }
                 override fun onAudio(pcm: ByteArray) { player.submit(pcm) }
+                override fun onOverlay(show: Boolean) {
+                    runOnUiThread { overlay.visibility = if (show) View.VISIBLE else View.GONE }
+                }
             }
             // The host re-accepts clients in a loop, so keep dialing until paused.
             while (running) {

@@ -49,6 +49,7 @@ add_executable(droppix_stream src/stream_main.cpp)
 target_link_libraries(droppix_stream PRIVATE droppix_core)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 find_package(Qt6 QUIET COMPONENTS Widgets Network)
 if(Qt6_FOUND)
   add_executable(droppix_gui
@@ -68,6 +69,8 @@ if(Qt6_FOUND)
     gui/approved_store.cpp
     gui/cert_manager.cpp
     gui/audio_sink.cpp
+    gui/settings_dialog.cpp
+    gui/resources.qrc
     src/mdns_browse.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)

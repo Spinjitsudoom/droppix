@@ -23,6 +23,7 @@ Command build_command(const Settings& s, const std::string& stream_bin) {
   a.push_back("--port");    a.push_back(std::to_string(s.port));
   a.push_back("--stats-json");
   if (s.audio) a.push_back("--audio");
+  if (s.overlay) a.push_back("--overlay");
   if (s.tls && !s.certPath.empty()) {
     a.push_back("--tls");
     a.push_back("--cert"); a.push_back(s.certPath);

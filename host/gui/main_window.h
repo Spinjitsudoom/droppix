@@ -17,6 +17,7 @@ class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
 class QListWidget; class QGroupBox;
 
 namespace droppix {
+class SettingsDialog;
 class MainWindow : public QMainWindow {
   Q_OBJECT
  public:
@@ -32,22 +33,21 @@ class MainWindow : public QMainWindow {
   void setRunningUi(bool running);
   void setStatusDot(const char* color);
   void setupAuth();              // install the polkit rule via one pkexec prompt
+  void showAbout();             // Help -> About developer-info dialog
   void onDevicesChanged(const QList<MdnsDevice>& devices);
   void onConnectToSelectedDevice();
 
-  // widgets
+  // widgets — the advanced options (fps/bitrate/port/refresh/orientation/auto-adb/
+  // overlay) now live in SettingsDialog, opened from the Settings menu.
   QRadioButton* srcTest_; QRadioButton* srcEvdi_;
-  QComboBox* resolution_; QSpinBox* fps_; QSpinBox* bitrate_; QSpinBox* port_;
-  QComboBox* refresh_;
-  QComboBox* orientation_;
-  QCheckBox* autoReverse_;
+  QComboBox* resolution_;
   QCheckBox* touch_;
   QCheckBox* audio_;
+  SettingsDialog* settingsDialog_;
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
   QLabel* pairingLabel_;
-  QWidget* authRow_; QLabel* authCaption_;   // "remember authentication" tip
   QPlainTextEdit* log_;
   QGroupBox* devicesBox_;
   QListWidget* devicesList_;

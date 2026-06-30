@@ -145,6 +145,10 @@ bool TransportServer::send_audio(const std::vector<unsigned char>& pcm) {
   return send_all(encode_message(MsgType::Audio, pcm));
 }
 
+bool TransportServer::send_overlay(uint8_t show) {
+  return send_all(encode_message(MsgType::Overlay, encode_overlay(show)));
+}
+
 void TransportServer::poll_control() {
   if (client_fd_ < 0) return;
   bool tls_buffered = tls_ && ssl_ && SSL_pending(ssl_) > 0;

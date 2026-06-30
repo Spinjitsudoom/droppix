@@ -20,6 +20,7 @@ class TransportServer {
   bool send_video(uint64_t pts_us, bool keyframe,
                   const std::vector<unsigned char>& nal);
   bool send_audio(const std::vector<unsigned char>& pcm);
+  bool send_overlay(uint8_t show);   // tell the app to show/hide the perf overlay
   void poll_control();                 // respond to PING, dispatch INPUT, detect disconnect
   // Called for each INPUT message during poll_control (action, x_norm, y_norm).
   // INVARIANT: if the handler captures an object by reference, the caller MUST

@@ -7,7 +7,7 @@ namespace droppix {
 
 enum class MsgType : uint8_t {
   Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6, Input = 7,
-  Orientation = 8, Audio = 9
+  Orientation = 8, Audio = 9, Overlay = 10
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.
@@ -69,5 +69,9 @@ bool decode_input(const std::vector<unsigned char>& body,
 // ORIENTATION (app->host): u8 code (0=0°, 1=90°, 2=180°, 3=270°).
 std::vector<unsigned char> encode_orientation(uint8_t code);
 bool decode_orientation(const std::vector<unsigned char>& body, uint8_t& code);
+
+// OVERLAY (host->app): u8 show (0=hide, 1=show the RTT/fps/decode perf overlay).
+std::vector<unsigned char> encode_overlay(uint8_t show);
+bool decode_overlay(const std::vector<unsigned char>& body, uint8_t& show);
 
 }  // namespace droppix

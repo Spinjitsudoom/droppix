@@ -18,6 +18,7 @@ struct StreamConfig {
   bool approve = false;        // gate non-localhost peers on an approve/deny reply
   ApprovalGate* gate = nullptr;  // stdin-fed approval channel (owned by stream_main)
   bool audio = false;          // capture droppix-audio monitor and stream it
+  bool overlay = false;        // tell the app to show its RTT/fps/decode overlay
 };
 
 class StreamDaemon {

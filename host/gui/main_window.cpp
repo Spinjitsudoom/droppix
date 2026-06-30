@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "args_builder.h"
+#include "settings_dialog.h"
 #include "style.h"
 #include <QtWidgets>
 #include <QCloseEvent>
@@ -26,9 +27,19 @@ MainWindow::MainWindow(QWidget* parent)
   streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
   const bool certsReady = cert_.ensure();
   setWindowTitle("droppix");
+  setWindowIcon(QIcon(":/icon.png"));
+  settingsDialog_ = new SettingsDialog(this);   // advanced options live in this dialog
+
+  // --- Menu bar: Settings (Preferences / Remember auth) + Help (About) ---
+  auto* settingsMenu = menuBar()->addMenu("&Settings");
+  settingsMenu->addAction("Preferences…", this, [this]{ settingsDialog_->exec(); });
+  settingsMenu->addAction("Remember authentication", this, &MainWindow::setupAuth);
+  auto* helpMenu = menuBar()->addMenu("&Help");
+  helpMenu->addAction("About droppix…", this, &MainWindow::showAbout);
 
   // --- Header ---
   auto* logo = new QLabel; logo->setObjectName("logo");
+  logo->setPixmap(QPixmap(":/logo.png").scaled(40, 40, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   auto* title = new QLabel("droppix"); title->setObjectName("header");
   auto* tagline = new QLabel("use a tablet as a second monitor"); tagline->setObjectName("tagline");
   auto* titleCol = new QVBoxLayout; titleCol->setSpacing(0);
@@ -55,16 +66,6 @@ MainWindow::MainWindow(QWidget* parent)
                          "1280x720", "1920x1080", "2560x1440",
                          "1280x800", "1920x1200", "2560x1600"});
   resolution_->setCurrentText("1920x1080");
-  fps_ = new QSpinBox; fps_->setRange(1, 120); fps_->setValue(30);
-  bitrate_ = new QSpinBox; bitrate_->setRange(500, 60000); bitrate_->setSuffix(" kbps"); bitrate_->setValue(8000);
-  port_ = new QSpinBox; port_->setRange(1024, 65535); port_->setValue(27000);
-  refresh_ = new QComboBox; refresh_->addItems({"30", "60"}); refresh_->setCurrentText("60");
-  orientation_ = new QComboBox;   // evdi only — rotates the droppix output via KWin
-  orientation_->addItem("Landscape (0°)", 0);
-  orientation_->addItem("Portrait (90°)", 90);
-  orientation_->addItem("Inverted (180°)", 180);
-  orientation_->addItem("Portrait flipped (270°)", 270);
-  autoReverse_ = new QCheckBox("Auto adb reverse on start"); autoReverse_->setChecked(true);
   touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
   audio_ = new QCheckBox("Stream audio to tablet (route an app's output to 'droppix-audio')");
 
@@ -73,21 +74,11 @@ MainWindow::MainWindow(QWidget* parent)
   srcRow->addWidget(srcTest_); srcRow->addSpacing(18); srcRow->addWidget(srcEvdi_); srcRow->addStretch();
   form->addRow("Source:", srcRow);
   form->addRow("Resolution:", resolution_);
-  auto* refreshOrient = new QHBoxLayout;
-  refreshOrient->addWidget(refresh_);
-  refreshOrient->addSpacing(12);
-  refreshOrient->addWidget(new QLabel("Orientation:"));
-  refreshOrient->addWidget(orientation_, 1);
-  form->addRow("Refresh (Hz):", refreshOrient);
-  form->addRow("FPS:", fps_);
-  form->addRow("Bitrate:", bitrate_);
-  form->addRow("Port:", port_);
-  form->addRow("", autoReverse_);
   form->addRow("", touch_);
   form->addRow("", audio_);
   form->setVerticalSpacing(10);
   form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  auto* settingsBox = new QGroupBox("Settings");
+  auto* settingsBox = new QGroupBox("Stream");
   settingsBox->setLayout(form);
 
   // --- Status row: colored dot + state + compact stats ---
@@ -109,16 +100,7 @@ MainWindow::MainWindow(QWidget* parent)
   startBtn_ = new QPushButton("▶  Start streaming");
   startBtn_->setObjectName("startButton");
 
-  // --- "remember authentication" tip (hidden once set up) ---
-  authRow_ = new QWidget;
-  authCaption_ = new QLabel("Start asks for your password each time.");
-  authCaption_->setObjectName("caption");
-  auto* authBtn = new QPushButton("Remember it");
-  auto* authLayout = new QHBoxLayout(authRow_);
-  authLayout->setContentsMargins(0, 0, 0, 0);
-  authLayout->addWidget(authCaption_); authLayout->addStretch(); authLayout->addWidget(authBtn);
-  if (QFile::exists(configDir() + "/auth_configured")) authRow_->hide();
-  connect(authBtn, &QPushButton::clicked, this, &MainWindow::setupAuth);
+  // (auth setup moved to the Settings menu → "Remember authentication")
 
   // --- Devices on network (mDNS-discovered tablets) ---
   devicesList_ = new QListWidget;
@@ -145,7 +127,6 @@ MainWindow::MainWindow(QWidget* parent)
   root->addWidget(deviceLabel_);
   root->addWidget(pairingLabel_);
   root->addWidget(startBtn_);
-  root->addWidget(authRow_);
   root->addWidget(devicesBox_);
   root->addWidget(logCaption);
   root->addWidget(log_, 1);
@@ -264,12 +245,9 @@ Settings MainWindow::collectSettings() const {
   s.source = srcEvdi_->isChecked() ? Settings::Source::Evdi : Settings::Source::TestPattern;
   const QStringList wh = resolution_->currentText().split('x');
   s.width = wh.value(0).toInt(); s.height = wh.value(1).toInt();
-  s.fps = fps_->value(); s.bitrate_kbps = bitrate_->value(); s.port = port_->value();
-  s.refresh_hz = refresh_->currentText().toInt();
-  s.auto_adb_reverse = autoReverse_->isChecked();
   s.touch = touch_->isChecked();
   s.audio = audio_->isChecked();
-  s.orientation = orientation_->currentData().toInt();
+  settingsDialog_->store(s);   // fps/bitrate/port/refresh/orientation/auto-adb/overlay
   s.tls = true;
   s.certPath = cert_.certPath().toStdString();
   s.keyPath = cert_.keyPath().toStdString();
@@ -280,12 +258,9 @@ void MainWindow::applySettings(const Settings& s) {
   srcEvdi_->setChecked(s.source == Settings::Source::Evdi);
   srcTest_->setChecked(s.source == Settings::Source::TestPattern);
   resolution_->setCurrentText(QString("%1x%2").arg(s.width).arg(s.height));
-  fps_->setValue(s.fps); bitrate_->setValue(s.bitrate_kbps); port_->setValue(s.port);
-  refresh_->setCurrentText(QString::number(s.refresh_hz));
-  { int i = orientation_->findData(s.orientation); orientation_->setCurrentIndex(i >= 0 ? i : 0); }
-  autoReverse_->setChecked(s.auto_adb_reverse);
   touch_->setChecked(s.touch);
   audio_->setChecked(s.audio);
+  settingsDialog_->load(s);   // fps/bitrate/port/refresh/orientation/auto-adb/overlay
 }
 
 void MainWindow::refreshProfiles() {
@@ -341,13 +316,39 @@ void MainWindow::setupAuth() {
   if (rc == 0) {
     QFile marker(configDir() + "/auth_configured");
     if (marker.open(QIODevice::WriteOnly)) { marker.write("1"); marker.close(); }
-    authCaption_->setText("✓ Authentication remembered — Start asks once per login.");
-    if (auto* btn = authRow_->findChild<QPushButton*>()) btn->hide();
     log_->appendPlainText("Authentication remembered. Start will prompt once per login, then stay quiet.");
   } else {
     log_->appendPlainText("Authentication setup was cancelled or failed (pkexec exit " +
                           QString::number(rc) + ").");
   }
+}
+
+void MainWindow::showAbout() {
+  // NOTE: the repo URL is finalized when the project is published to GitHub.
+  const QString repo = "https://github.com/yourusername/droppix";
+  QDialog dlg(this);
+  dlg.setWindowTitle("About droppix");
+  auto* icon = new QLabel;
+  icon->setPixmap(QPixmap(":/icon.png").scaled(72, 72, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+  icon->setAlignment(Qt::AlignTop);
+  auto* text = new QLabel(QString(
+      "<b style='font-size:16px'>droppix</b>&nbsp; v0.1<br>"
+      "<span style='color:#9aa5b1'>use a tablet as a second monitor</span><br><br>"
+      "Source &amp; releases:<br><a href='%1'>%1</a><br><br>"
+      "Built with Qt · evdi · x264 · PipeWire · MediaCodec<br>"
+      "Licensed under the <b>MIT License</b>.").arg(repo));
+  text->setOpenExternalLinks(true);
+  text->setTextInteractionFlags(Qt::TextBrowserInteraction);
+  text->setWordWrap(true);
+  auto* topRow = new QHBoxLayout;
+  topRow->addWidget(icon); topRow->addSpacing(16); topRow->addWidget(text, 1);
+  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
+  connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+  connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+  auto* root = new QVBoxLayout(&dlg);
+  root->addLayout(topRow);
+  root->addWidget(buttons);
+  dlg.exec();
 }
 
 void MainWindow::onStartStop() {

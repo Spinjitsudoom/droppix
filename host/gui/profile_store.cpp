@@ -33,6 +33,7 @@ static QJsonObject toJson(const Settings& s) {
   o["auto_adb_reverse"] = s.auto_adb_reverse;
   o["touch"] = s.touch;
   o["audio"] = s.audio;
+  o["overlay"] = s.overlay;
   o["orientation"] = s.orientation;
   return o;
 }
@@ -49,6 +50,7 @@ static Settings fromJson(const QJsonObject& o) {
   s.auto_adb_reverse = o["auto_adb_reverse"].toBool(s.auto_adb_reverse);
   s.touch = o["touch"].toBool(s.touch);
   s.audio = o["audio"].toBool(s.audio);
+  s.overlay = o["overlay"].toBool(s.overlay);
   s.orientation = o["orientation"].toInt(s.orientation);
   return s;
 }

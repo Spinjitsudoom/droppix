@@ -34,6 +34,7 @@ int main(int argc, char** argv) {
   bool test_pattern = false, adb_reverse = false, stats_json = false, touch = false;
   bool approve = false;
   bool audio = false;
+  bool overlay = false;
   bool tls = false;
   std::string cert, key;
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
@@ -62,6 +63,7 @@ int main(int argc, char** argv) {
     else if (a == "--cert") cert = sval();
     else if (a == "--key") key = sval();
     else if (a == "--audio") audio = true;
+    else if (a == "--overlay") overlay = true;
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
@@ -131,7 +133,7 @@ int main(int argc, char** argv) {
                      : static_cast<droppix::FrameSource&>(evdi);
     droppix::StreamDaemon daemon(src, enc, tx,
         {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth,
-         orientation, &g_orientation, approve, &g_gate, audio});
+         orientation, &g_orientation, approve, &g_gate, audio, overlay});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }

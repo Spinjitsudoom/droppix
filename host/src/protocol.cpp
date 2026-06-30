@@ -142,5 +142,13 @@ bool decode_orientation(const std::vector<unsigned char>& b, uint8_t& code) {
   code = b[0];
   return true;
 }
+std::vector<unsigned char> encode_overlay(uint8_t show) {
+  return {show};
+}
+bool decode_overlay(const std::vector<unsigned char>& b, uint8_t& show) {
+  if (b.size() != 1) return false;
+  show = b[0];
+  return true;
+}
 
 }  // namespace droppix

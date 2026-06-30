@@ -13,6 +13,7 @@ interface StreamListener {
     fun onConfig(config: Protocol.Config)
     fun onVideo(video: Protocol.Video)
     fun onAudio(pcm: ByteArray) {}
+    fun onOverlay(show: Boolean) {}
 }
 
 class TransportClient {
@@ -123,6 +124,7 @@ class TransportClient {
                                 stats.rttMs = (System.nanoTime() - bytesToLong(msg.body)) / 1_000_000.0
                             }
                             MsgType.AUDIO -> listener.onAudio(msg.body)
+                            MsgType.OVERLAY -> listener.onOverlay(msg.body.isNotEmpty() && msg.body[0].toInt() != 0)
                             MsgType.BYE -> return
                             else -> { /* ignore */ }
                         }
