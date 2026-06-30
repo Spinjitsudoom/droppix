@@ -70,23 +70,8 @@ MainWindow::MainWindow(QWidget* parent)
   profRow->addWidget(new QLabel("Profile:")); profRow->addWidget(profileBox_, 1);
   profRow->addWidget(saveBtn); profRow->addWidget(saveAsBtn); profRow->addWidget(delBtn);
 
-  // --- Stream group (source/test-pattern moved to the Settings dialog) ---
-  resolution_ = new QComboBox;
-  resolution_->addItems({"640x480", "800x600", "960x540", "1024x576", "1024x640",
-                         "1280x720", "1920x1080", "2560x1440",
-                         "1280x800", "1920x1200", "2560x1600"});
-  resolution_->setCurrentText("1920x1080");
-  touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
-  audio_ = new QCheckBox("Stream audio to tablet (route an app's output to 'droppix-audio')");
-
-  auto* form = new QFormLayout;
-  form->addRow("Resolution:", resolution_);
-  form->addRow("", touch_);
-  form->addRow("", audio_);
-  form->setVerticalSpacing(10);
-  form->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-  auto* settingsBox = new QGroupBox("Stream");
-  settingsBox->setLayout(form);
+  // (all stream options — source, resolution, touch, audio, fps/bitrate/port/refresh/
+  // orientation/auto-adb/overlay — live in the Settings dialog; open it via the gear icon)
 
   // --- Status row: colored dot + state + compact stats ---
   statusDot_   = new QLabel; statusDot_->setObjectName("statusDot");
@@ -129,7 +114,6 @@ MainWindow::MainWindow(QWidget* parent)
   root->setSpacing(12);
   root->addLayout(headerRow);
   root->addLayout(profRow);
-  root->addWidget(settingsBox);
   root->addLayout(statusRow);
   root->addWidget(deviceLabel_);
   root->addWidget(pairingLabel_);
@@ -249,11 +233,7 @@ void MainWindow::onConnectToSelectedDevice() {
 
 Settings MainWindow::collectSettings() const {
   Settings s;
-  const QStringList wh = resolution_->currentText().split('x');
-  s.width = wh.value(0).toInt(); s.height = wh.value(1).toInt();
-  s.touch = touch_->isChecked();
-  s.audio = audio_->isChecked();
-  settingsDialog_->store(s);   // source + fps/bitrate/port/refresh/orientation/auto-adb/overlay
+  settingsDialog_->store(s);   // source/resolution/touch/audio/fps/bitrate/port/refresh/orientation/auto-adb/overlay
   s.tls = true;
   s.certPath = cert_.certPath().toStdString();
   s.keyPath = cert_.keyPath().toStdString();
@@ -261,10 +241,7 @@ Settings MainWindow::collectSettings() const {
 }
 
 void MainWindow::applySettings(const Settings& s) {
-  resolution_->setCurrentText(QString("%1x%2").arg(s.width).arg(s.height));
-  touch_->setChecked(s.touch);
-  audio_->setChecked(s.audio);
-  settingsDialog_->load(s);   // fps/bitrate/port/refresh/orientation/auto-adb/overlay
+  settingsDialog_->load(s);    // source/resolution/touch/audio/fps/bitrate/port/refresh/orientation/auto-adb/overlay
 }
 
 void MainWindow::refreshProfiles() {

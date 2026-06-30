@@ -27,11 +27,14 @@ class SettingsDialog : public QDialog {
  private:
   QRadioButton* srcTest_;
   QRadioButton* srcEvdi_;
+  QComboBox* resolution_;
   QSpinBox* fps_;
   QSpinBox* bitrate_;
   QSpinBox* port_;
   QComboBox* refresh_;
   QComboBox* orientation_;
+  QCheckBox* touch_;
+  QCheckBox* audio_;
   QCheckBox* autoReverse_;
   QCheckBox* overlay_;
 };

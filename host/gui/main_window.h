@@ -37,11 +37,8 @@ class MainWindow : public QMainWindow {
   void onDevicesChanged(const QList<MdnsDevice>& devices);
   void onConnectToSelectedDevice();
 
-  // widgets — the advanced options (fps/bitrate/port/refresh/orientation/auto-adb/
-  // overlay) now live in SettingsDialog, opened from the Settings menu.
-  QComboBox* resolution_;
-  QCheckBox* touch_;
-  QCheckBox* audio_;
+  // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
+  // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
   SettingsDialog* settingsDialog_;
   QComboBox* profileBox_; QPushButton* startBtn_;
   QLabel* statusDot_;
