@@ -49,6 +49,12 @@ MainWindow::MainWindow(QWidget* parent)
   aboutBtn->setCursor(Qt::PointingHandCursor);
   connect(aboutBtn, &QToolButton::clicked, this, &MainWindow::showAbout);
   connect(settingsDialog_, &SettingsDialog::rememberAuthRequested, this, &MainWindow::setupAuth);
+  // Perf-overlay checkbox applies live: if a stream is running, push "overlay N" to the
+  // streamer's stdin so the tablet shows/hides it without a restart. store()/load() still
+  // persist the setting for the next launch.
+  connect(settingsDialog_, &SettingsDialog::overlayToggled, this, [this](bool on){
+    if (controller_.running()) controller_.writeLine(QString("overlay %1").arg(on ? 1 : 0));
+  });
 
   auto* headerRow = new QHBoxLayout;
   headerRow->addWidget(logo); headerRow->addSpacing(10);

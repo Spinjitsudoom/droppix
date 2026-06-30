@@ -22,6 +22,7 @@ class SettingsDialog : public QDialog {
 
  signals:
   void rememberAuthRequested();    // user clicked "Remember authentication"
+  void overlayToggled(bool show);  // perf-overlay checkbox flipped (apply live if streaming)
 
  private:
   QRadioButton* srcTest_;

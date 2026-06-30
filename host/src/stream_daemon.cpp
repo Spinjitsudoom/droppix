@@ -117,7 +117,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
 
   if (!enc_.open(w, h, cfg_.fps, cfg_.bitrate_kbps)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
   if (!tx_.send_config(w, h, cfg_.fps, enc_.extradata())) return false;
-  tx_.send_overlay(cfg_.overlay ? 1 : 0);  // app shows its perf overlay only if asked
+  // Seed the app's overlay from the live host-side toggle if present (so a reconnect
+  // keeps whatever the GUI last set), else the start-up flag. Tracked below so the
+  // stream loop can push later host-side changes mid-session.
+  int last_overlay = cfg_.live_overlay ? cfg_.live_overlay->load() : (cfg_.overlay ? 1 : 0);
+  tx_.send_overlay(last_overlay ? 1 : 0);  // app shows its perf overlay only if asked
 
   // Identify the droppix output (for orientation and/or touch): prefer the
   // newly-appeared one (unambiguous), else fall back to a size match.
@@ -188,6 +192,10 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // instead of being gated by the up-to-1s damage-driven frame wait.
   const int frame_timeout = (cfg_.touch || cfg_.audio) ? 8 : 1000;
   while (!stop && !restart_for_orientation && tx_.connected()) {
+    if (cfg_.live_overlay) {  // host-side overlay toggle changed -> tell the app (loop thread = single writer)
+      int ov = cfg_.live_overlay->load();
+      if (ov != last_overlay) { tx_.send_overlay(ov ? 1 : 0); last_overlay = ov; }
+    }
     if (cfg_.audio) {
       std::vector<std::vector<unsigned char>> chunks;
       if (audio.drain(chunks))

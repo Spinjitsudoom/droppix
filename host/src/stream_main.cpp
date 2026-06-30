@@ -1,3 +1,4 @@
+#include <atomic>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -24,6 +25,11 @@ static droppix::ApprovalGate g_gate;
 // Written by the daemon's orientation handler, read here to rebuild at new dims.
 // Single-threaded (handler runs in the daemon loop; we read between sessions).
 static int g_orientation = 0;
+
+// Host-side perf-overlay toggle (0/1). The GUI sends "overlay N" lines on stdin
+// (see the reader thread); the daemon loop reads this and pushes OVERLAY to the
+// app on change. Cross-thread (stdin thread writes, daemon loop reads) -> atomic.
+static std::atomic<int> g_overlay{0};
 
 int main(int argc, char** argv) {
   std::signal(SIGINT, on_sigint);
@@ -74,6 +80,7 @@ int main(int argc, char** argv) {
   if (refresh <= 0) refresh = 60;
   if (orientation != 90 && orientation != 180 && orientation != 270) orientation = 0;
   g_orientation = orientation / 90;   // initial code: 0/90/180/270 -> 0/1/2/3
+  g_overlay.store(overlay ? 1 : 0);   // seed the live toggle from the start-up flag
 
   droppix::TransportServer tx;
   if (!tx.listen(static_cast<uint16_t>(port))) {
@@ -103,7 +110,9 @@ int main(int argc, char** argv) {
       while (::read(STDIN_FILENO, &c, sizeof(c)) > 0) {
         if (c == '\n') {
           std::string id; bool allow = false;
-          if (droppix::parse_approval(buf, id, allow)) g_gate.submit(id, allow);
+          if (buf.rfind("overlay ", 0) == 0)            // "overlay 0" / "overlay 1": host-side toggle
+            g_overlay.store(buf.size() > 8 && buf[8] == '1' ? 1 : 0);
+          else if (droppix::parse_approval(buf, id, allow)) g_gate.submit(id, allow);
           buf.clear();
         } else {
           buf.push_back(c);
@@ -133,7 +142,7 @@ int main(int argc, char** argv) {
                      : static_cast<droppix::FrameSource&>(evdi);
     droppix::StreamDaemon daemon(src, enc, tx,
         {fps, bitrate, stats_json, touch, droppix::Rect{mx, my, mw, mh}, dtw, dth,
-         orientation, &g_orientation, approve, &g_gate, audio, overlay});
+         orientation, &g_orientation, approve, &g_gate, audio, overlay, &g_overlay});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }

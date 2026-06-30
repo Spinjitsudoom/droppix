@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <csignal>
 #include "frame_source.h"
 #include "encoder.h"
@@ -18,7 +19,9 @@ struct StreamConfig {
   bool approve = false;        // gate non-localhost peers on an approve/deny reply
   ApprovalGate* gate = nullptr;  // stdin-fed approval channel (owned by stream_main)
   bool audio = false;          // capture droppix-audio monitor and stream it
-  bool overlay = false;        // tell the app to show its RTT/fps/decode overlay
+  bool overlay = false;        // initial: tell the app to show its RTT/fps/decode overlay
+  std::atomic<int>* live_overlay = nullptr;  // host-side toggle (GUI "overlay N" on stdin);
+                                             // the loop pushes OVERLAY when this changes
 };
 
 class StreamDaemon {

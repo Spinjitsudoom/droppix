@@ -21,6 +21,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   orientation_->addItem("Portrait flipped (270°)", 270);
   autoReverse_ = new QCheckBox("Auto adb reverse on start"); autoReverse_->setChecked(true);
   overlay_ = new QCheckBox("Show performance overlay on the tablet (RTT / fps / decode)");
+  connect(overlay_, &QCheckBox::toggled, this, &SettingsDialog::overlayToggled);  // live toggle
 
   auto* form = new QFormLayout;
   form->setVerticalSpacing(10);
