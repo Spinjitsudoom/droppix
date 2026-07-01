@@ -201,6 +201,31 @@ MainWindow::MainWindow(QWidget* parent)
   refreshAdvertising();   // publish this PC on the network from launch (idle-discoverable)
 
   audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
+  setupTray();           // tray icon for "minimize to tray on close" (if a tray exists)
+}
+
+void MainWindow::setupTray() {
+  if (!QSystemTrayIcon::isSystemTrayAvailable()) return;   // no tray -> feature is a no-op
+  tray_ = new QSystemTrayIcon(QIcon(":/icon.png"), this);
+  tray_->setToolTip("Droppix");
+  auto* menu = new QMenu(this);
+  QAction* showAct = menu->addAction("Show Droppix");
+  connect(showAct, &QAction::triggered, this, [this]{
+    showNormal(); raise(); activateWindow(); tray_->hide();
+  });
+  menu->addSeparator();
+  QAction* quitAct = menu->addAction("Quit");
+  connect(quitAct, &QAction::triggered, this, [this]{ quitting_ = true; close(); });
+  tray_->setContextMenu(menu);
+  connect(tray_, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason r){
+    if (r == QSystemTrayIcon::Trigger || r == QSystemTrayIcon::DoubleClick) {
+      showNormal(); raise(); activateWindow(); tray_->hide();
+    }
+  });
+}
+
+bool MainWindow::minimizeToTrayRequested() const {
+  return QFile::exists(configDir() + "/minimize_on_close");
 }
 
 void MainWindow::onDevicesChanged(const QList<MdnsDevice>& devices) {
@@ -312,8 +337,8 @@ void MainWindow::restoreLastProfile() {
 
 void MainWindow::setupAuth() {
   // Install a polkit rule pre-authorizing this exact streamer binary for this user, so
-  // Start asks for the password once per login (AUTH_SELF_KEEP) instead of every time.
-  // One pkexec prompt now writes the rule as root.
+  // Start never asks for a password again (polkit.Result.YES — permanent, survives
+  // reboots). One pkexec prompt now writes the rule as root; after that, no prompts.
   const QString user = QString::fromLocal8Bit(qgetenv("USER"));
   const QString bin = QString::fromStdString(streamBin_);
   QString binAlt = bin;                                    // also match the /home <-> /var/home alias
@@ -327,7 +352,7 @@ void MainWindow::setupAuth() {
       "        subject.user == \"%1\" &&\n"
       "        (action.lookup(\"program\") == \"%2\" ||\n"
       "         action.lookup(\"program\") == \"%3\")) {\n"
-      "        return polkit.Result.AUTH_SELF_KEEP;\n"
+      "        return polkit.Result.YES;\n"
       "    }\n"
       "});\n").arg(user, bin, binAlt);
 
@@ -342,7 +367,7 @@ void MainWindow::setupAuth() {
   if (rc == 0) {
     QFile marker(configDir() + "/auth_configured");
     if (marker.open(QIODevice::WriteOnly)) { marker.write("1"); marker.close(); }
-    log_->appendPlainText("Authentication remembered. Start will prompt once per login, then stay quiet.");
+    log_->appendPlainText("Authentication remembered permanently. Start will never ask for a password again.");
   } else {
     log_->appendPlainText("Authentication setup was cancelled or failed (pkexec exit " +
                           QString::number(rc) + ").");
@@ -405,6 +430,20 @@ void MainWindow::setRunningUi(bool running) {
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {
+  // "Minimize to tray on close": hide to the tray instead of quitting (unless this
+  // close came from the tray's Quit action). The streamer keeps running in the
+  // background — matching the launch-at-login use case.
+  if (!quitting_ && tray_ && minimizeToTrayRequested()) {
+    hide();
+    tray_->show();
+    if (!trayHintShown_) {
+      tray_->showMessage("Droppix", "Still running in the tray — click to restore.",
+                         QSystemTrayIcon::Information, 3000);
+      trayHintShown_ = true;
+    }
+    event->ignore();
+    return;
+  }
   controller_.stop();          // don't orphan the streamer on quit
   advertiser_.stop();
   browser_.stop();

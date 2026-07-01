@@ -3,6 +3,47 @@
 
 namespace droppix {
 
+namespace {
+QString autostartPath() {
+  return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+         + "/autostart/droppix.desktop";
+}
+QString appConfigDir() {
+  return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+}
+QString minimizeMarkerPath() { return appConfigDir() + "/minimize_on_close"; }
+
+// Write (or remove) the XDG autostart entry that launches droppix at login.
+void setLaunchAtLogin(bool on) {
+  const QString path = autostartPath();
+  if (!on) { QFile::remove(path); return; }
+  QDir().mkpath(QFileInfo(path).absolutePath());
+  // For an AppImage, $APPIMAGE is the real .AppImage path; applicationFilePath()
+  // would point inside the mount, which is gone after exit.
+  QString exec = qEnvironmentVariable("APPIMAGE");
+  if (exec.isEmpty()) exec = QCoreApplication::applicationFilePath();
+  QFile f(path);
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QTextStream(&f)
+        << "[Desktop Entry]\n" << "Type=Application\n" << "Name=Droppix\n"
+        << "Comment=Use a tablet as a second monitor\n"
+        << "Exec=" << exec << "\n" << "Icon=droppix\n" << "Terminal=false\n"
+        << "X-GNOME-Autostart-enabled=true\n";
+  }
+}
+
+// Toggle the marker file MainWindow::closeEvent checks for minimize-to-tray.
+void setMinimizeOnClose(bool on) {
+  if (on) {
+    QDir().mkpath(appConfigDir());
+    QFile f(minimizeMarkerPath());
+    if (f.open(QIODevice::WriteOnly)) { f.write("1"); }
+  } else {
+    QFile::remove(minimizeMarkerPath());
+  }
+}
+}  // namespace
+
 SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   setWindowTitle("droppix — Settings");
   setModal(true);
@@ -49,7 +90,16 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   form->addRow("", audio_);
   form->addRow("", overlay_);
 
-  auto* rememberAuth = new QPushButton("Remember authentication (ask once per login)");
+  // --- App-level section (global prefs, file-backed; independent of profiles) ---
+  auto* appLabel = new QLabel("Application"); appLabel->setObjectName("caption");
+  launchAtLogin_ = new QCheckBox("Launch Droppix at login");
+  minimizeOnClose_ = new QCheckBox("Minimize to tray on close");
+  launchAtLogin_->setChecked(QFile::exists(autostartPath()));
+  minimizeOnClose_->setChecked(QFile::exists(minimizeMarkerPath()));
+  connect(launchAtLogin_, &QCheckBox::toggled, this, [](bool on){ setLaunchAtLogin(on); });
+  connect(minimizeOnClose_, &QCheckBox::toggled, this, [](bool on){ setMinimizeOnClose(on); });
+
+  auto* rememberAuth = new QPushButton("Remember authentication (never ask again)");
   connect(rememberAuth, &QPushButton::clicked, this, &SettingsDialog::rememberAuthRequested);
 
   auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close);
@@ -58,6 +108,11 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
 
   auto* root = new QVBoxLayout(this);
   root->addLayout(form);
+  root->addSpacing(6);
+  root->addWidget(appLabel);
+  root->addWidget(launchAtLogin_);
+  root->addWidget(minimizeOnClose_);
+  root->addSpacing(6);
   root->addWidget(rememberAuth);
   root->addStretch();
   root->addWidget(buttons);
