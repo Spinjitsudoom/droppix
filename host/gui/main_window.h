@@ -39,6 +39,7 @@ class MainWindow : public QMainWindow {
   void onUsbClientsChanged(const QList<UsbClient>& clients);
   void rebuildClientList();     // merge netDevices_ + usbClients_ into devicesList_
   void onConnectToSelectedDevice();
+  void refreshAdvertising();    // (re)publish _droppix._tcp for the current port; idempotent
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
@@ -59,6 +60,7 @@ class MainWindow : public QMainWindow {
   StreamController controller_;
   AdbManager adb_;
   MdnsAdvertiser advertiser_;
+  quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;
   UsbClientScanner usbScanner_;
   QList<MdnsDevice> netDevices_;   // last network-discovered clients

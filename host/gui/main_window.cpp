@@ -157,7 +157,10 @@ MainWindow::MainWindow(QWidget* parent)
   });
   connect(&controller_, &StreamController::runningChanged, this, [this](bool r){
     setRunningUi(r);
-    if (r) advertiser_.start(collectSettings().port); else advertiser_.stop();
+    // Keep advertising this PC whether idle or streaming so tablets can discover it
+    // either way (detection is bidirectional). On stream start, refresh in case the
+    // configured port changed; never stop on stream end — only at app close.
+    if (r) refreshAdvertising();
   });
   connect(&controller_, &StreamController::approvalRequested, this,
     [this](const QString& id, const QString& name, const QString& ip){
@@ -195,6 +198,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
+  refreshAdvertising();   // publish this PC on the network from launch (idle-discoverable)
 
   audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
 }
@@ -261,6 +265,15 @@ void MainWindow::onConnectToSelectedDevice() {
   pendingWakes_[addr] = QDateTime::currentMSecsSinceEpoch();
   QUdpSocket sock;
   sock.writeDatagram(dg, QHostAddress(addr), wakePort);
+}
+
+void MainWindow::refreshAdvertising() {
+  if (!advertiser_.available()) return;
+  const quint16 p = (quint16)collectSettings().port;
+  if (p == advertisedPort_) return;   // already publishing this port — no churn
+  advertiser_.stop();
+  advertiser_.start(p);
+  advertisedPort_ = p;
 }
 
 Settings MainWindow::collectSettings() const {
