@@ -33,6 +33,7 @@ add_library(droppix_core
   src/monitor_geometry.cpp
   src/input_injector.cpp
   src/mdns_browse.cpp
+  src/usb_scan.cpp
   src/audio_streamer.cpp
 )
 target_include_directories(droppix_core PUBLIC
@@ -66,12 +67,14 @@ if(Qt6_FOUND)
     gui/adb_manager.cpp
     gui/mdns_advertiser.cpp
     gui/mdns_browser.cpp
+    gui/usb_client_scanner.cpp
     gui/approved_store.cpp
     gui/cert_manager.cpp
     gui/audio_sink.cpp
     gui/settings_dialog.cpp
     gui/resources.qrc
     src/mdns_browse.cpp
+    src/usb_scan.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -109,6 +112,7 @@ add_executable(droppix_tests
   tests/test_approval.cpp
   tests/test_wake.cpp
   tests/test_mdns_browse.cpp
+  tests/test_usb_scan.cpp
   tests/test_pairing_code.cpp
   tests/test_audio_sink.cpp
   gui/stats_parser.cpp

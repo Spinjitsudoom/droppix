@@ -69,6 +69,14 @@ class ConnectActivity : AppCompatActivity() {
             status.text = "Connecting over USB..."
             connectTo("127.0.0.1", 27000)
         }
+
+        // Host-initiated USB connect: the PC launches us via
+        // `adb shell am start ... --ez usb_autoconnect true --ei usb_port <p>`,
+        // so we dial the reverse-tunnelled localhost with no tap on the tablet.
+        if (intent.getBooleanExtra("usb_autoconnect", false)) {
+            status.text = "Connecting over USB..."
+            connectTo("127.0.0.1", intent.getIntExtra("usb_port", 27000))
+        }
     }
 
     override fun onResume() {

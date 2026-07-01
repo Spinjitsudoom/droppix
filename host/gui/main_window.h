@@ -8,6 +8,7 @@
 #include "adb_manager.h"
 #include "mdns_advertiser.h"
 #include "mdns_browser.h"
+#include "usb_client_scanner.h"
 #include "approved_store.h"
 #include "cert_manager.h"
 #include "audio_sink.h"
@@ -35,6 +36,8 @@ class MainWindow : public QMainWindow {
   void setupAuth();              // install the polkit rule via one pkexec prompt
   void showAbout();             // Help -> About developer-info dialog
   void onDevicesChanged(const QList<MdnsDevice>& devices);
+  void onUsbClientsChanged(const QList<UsbClient>& clients);
+  void rebuildClientList();     // merge netDevices_ + usbClients_ into devicesList_
   void onConnectToSelectedDevice();
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
@@ -57,8 +60,10 @@ class MainWindow : public QMainWindow {
   AdbManager adb_;
   MdnsAdvertiser advertiser_;
   MdnsBrowser browser_;
+  UsbClientScanner usbScanner_;
+  QList<MdnsDevice> netDevices_;   // last network-discovered clients
+  QList<UsbClient> usbClients_;    // last USB-discovered clients
   QHash<QString, qint64> pendingWakes_;
-  QTimer* adbTimer_;
   std::string streamBin_;
 };
 }  // namespace droppix

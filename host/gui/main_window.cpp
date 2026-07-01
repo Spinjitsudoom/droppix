@@ -79,7 +79,8 @@ MainWindow::MainWindow(QWidget* parent)
   statusRow->addWidget(statusDot_); statusRow->addSpacing(8);
   statusRow->addWidget(streamLabel_); statusRow->addStretch();
   statusRow->addWidget(statsLabel_);
-  deviceLabel_ = new QLabel("Device: —"); deviceLabel_->setObjectName("caption");
+  deviceLabel_ = new QLabel; deviceLabel_->setObjectName("caption");
+  deviceLabel_->hide();   // shown only to surface an adb hint (unauthorized / not found)
   pairingLabel_ = new QLabel(certsReady
       ? "Pairing code: " + cert_.pairingCode()
       : "Pairing code: unavailable");
@@ -98,7 +99,7 @@ MainWindow::MainWindow(QWidget* parent)
   auto* devicesLayout = new QVBoxLayout;
   devicesLayout->addWidget(devicesList_);
   devicesLayout->addWidget(connectBtn_);
-  devicesBox_ = new QGroupBox("Devices on network");
+  devicesBox_ = new QGroupBox("Available clients");
   devicesBox_->setLayout(devicesLayout);
 
   auto* logCaption = new QLabel("Log"); logCaption->setObjectName("caption");
@@ -177,20 +178,21 @@ MainWindow::MainWindow(QWidget* parent)
       if (btn == QMessageBox::Yes) { approved_.approve(key); controller_.writeLine("approve " + key); }
       else controller_.writeLine("deny " + key);
     });
-  connect(&adb_, &AdbManager::deviceStatus, this, [this](const QString& st){ deviceLabel_->setText("Device: " + st); });
-
+  // Unified "Available clients" list: network (mDNS) + USB (adb) sources.
   connect(&browser_, &MdnsBrowser::devicesChanged, this, &MainWindow::onDevicesChanged);
+  connect(&usbScanner_, &UsbClientScanner::clientsChanged, this, &MainWindow::onUsbClientsChanged);
+  connect(&usbScanner_, &UsbClientScanner::statusChanged, this, [this](const QString& s){
+    deviceLabel_->setText(s);
+    deviceLabel_->setVisible(!s.isEmpty());   // hide when there's nothing to say
+  });
   connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::onConnectToSelectedDevice);
   connect(devicesList_, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem*){ onConnectToSelectedDevice(); });
 
   if (browser_.available()) browser_.start();
-  else devicesBox_->hide();
+  if (usbScanner_.available()) usbScanner_.start();
+  if (!browser_.available() && !usbScanner_.available()) devicesBox_->hide();
 
-  adbTimer_ = new QTimer(this);
-  connect(adbTimer_, &QTimer::timeout, this, [this]{ adb_.refresh(); });
-  adbTimer_->start(3000);
-  adb_.refresh();
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
 
@@ -198,15 +200,38 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::onDevicesChanged(const QList<MdnsDevice>& devices) {
+  netDevices_ = devices;
+  rebuildClientList();
+}
+
+void MainWindow::onUsbClientsChanged(const QList<UsbClient>& clients) {
+  usbClients_ = clients;
+  rebuildClientList();
+}
+
+// Repopulates the unified list from both sources (USB first, then network),
+// tagging each item with its transport + connect payload and preserving the
+// prior selection by label. Roles: UserRole = transport ("usb"/"net");
+// UserRole+1 = usb serial OR net address; UserRole+2 = net wake port.
+void MainWindow::rebuildClientList() {
   const QString prevSelected = devicesList_->currentItem()
       ? devicesList_->currentItem()->text() : QString();
   devicesList_->clear();
-  for (const auto& d : devices) {
+
+  for (const auto& c : usbClients_) {
+    auto* item = new QListWidgetItem(QString("%1 — USB").arg(c.model));
+    item->setData(Qt::UserRole, "usb");
+    item->setData(Qt::UserRole + 1, c.serial);
+    devicesList_->addItem(item);
+    if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
+  }
+  for (const auto& d : netDevices_) {
     const QString name = QString::fromStdString(d.name);
     const QString address = QString::fromStdString(d.address);
-    auto* item = new QListWidgetItem(QString("%1 (%2)").arg(name, address));
-    item->setData(Qt::UserRole, address);
-    item->setData(Qt::UserRole + 1, (uint)d.port);
+    auto* item = new QListWidgetItem(QString("%1 — %2").arg(name, address));
+    item->setData(Qt::UserRole, "net");
+    item->setData(Qt::UserRole + 1, address);
+    item->setData(Qt::UserRole + 2, (uint)d.port);
     devicesList_->addItem(item);
     if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
   }
@@ -215,13 +240,23 @@ void MainWindow::onDevicesChanged(const QList<MdnsDevice>& devices) {
 void MainWindow::onConnectToSelectedDevice() {
   auto* item = devicesList_->currentItem();
   if (!item) return;
-  const QString addr = item->data(Qt::UserRole).toString();
-  const quint16 wakePort = (quint16)item->data(Qt::UserRole + 1).toUInt();
+  const QString transport = item->data(Qt::UserRole).toString();
+  const int port = collectSettings().port;   // PC stream port the tablet will dial
+
+  if (transport == "usb") {
+    const QString serial = item->data(Qt::UserRole + 1).toString();
+    if (serial.isEmpty()) return;
+    if (!controller_.running()) onStartStop();
+    adb_.usbConnect(serial, port);            // adb reverse + launch app on the tablet
+    return;
+  }
+
+  // network: WAKE the tablet, which then dials the PC
+  const QString addr = item->data(Qt::UserRole + 1).toString();
+  const quint16 wakePort = (quint16)item->data(Qt::UserRole + 2).toUInt();
   if (addr.isEmpty()) return;
-
   if (!controller_.running()) onStartStop();
-
-  auto bytes = encode_wake((uint16_t)collectSettings().port);  // PC stream port the tablet will dial
+  auto bytes = encode_wake((uint16_t)port);
   QByteArray dg(reinterpret_cast<const char*>(bytes.data()), (int)bytes.size());
   pendingWakes_[addr] = QDateTime::currentMSecsSinceEpoch();
   QUdpSocket sock;
@@ -360,6 +395,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   controller_.stop();          // don't orphan the streamer on quit
   advertiser_.stop();
   browser_.stop();
+  usbScanner_.stop();
   QMainWindow::closeEvent(event);
 }
 }  // namespace droppix
