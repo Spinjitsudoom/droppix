@@ -15,7 +15,7 @@
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
-class QListWidget; class QGroupBox;
+class QListWidget; class QGroupBox; class QSystemTrayIcon;
 
 namespace droppix {
 class SettingsDialog;
@@ -40,6 +40,8 @@ class MainWindow : public QMainWindow {
   void rebuildClientList();     // merge netDevices_ + usbClients_ into devicesList_
   void onConnectToSelectedDevice();
   void refreshAdvertising();    // (re)publish _droppix._tcp for the current port; idempotent
+  bool minimizeToTrayRequested() const;   // reads the <config>/minimize_on_close marker
+  void setupTray();             // create the tray icon + Show/Quit menu (if a tray exists)
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
@@ -66,6 +68,9 @@ class MainWindow : public QMainWindow {
   QList<MdnsDevice> netDevices_;   // last network-discovered clients
   QList<UsbClient> usbClients_;    // last USB-discovered clients
   QHash<QString, qint64> pendingWakes_;
+  QSystemTrayIcon* tray_ = nullptr;   // present only if a system tray is available
+  bool quitting_ = false;             // true => closeEvent really quits (from tray Quit)
+  bool trayHintShown_ = false;        // show the "still running" balloon only once
   std::string streamBin_;
 };
 }  // namespace droppix
