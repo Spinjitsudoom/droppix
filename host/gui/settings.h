@@ -7,7 +7,7 @@ struct Settings {
   int width = 1280, height = 720;
   int fps = 30, bitrate_kbps = 8000, port = 27000;
   int refresh_hz = 60;
-  bool auto_adb_reverse = true;
+  bool auto_adb_reverse = true;   // always on; no GUI toggle (set true in SettingsDialog::store)
   bool touch = false;   // enable tablet touch -> cursor (evdi only)
   bool audio = false;   // capture droppix-audio sink and stream it to the tablet
   bool overlay = false; // tell the tablet to show its RTT/fps/decode overlay

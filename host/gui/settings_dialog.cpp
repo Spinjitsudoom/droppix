@@ -26,7 +26,6 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   orientation_->addItem("Portrait flipped (270°)", 270);
   touch_ = new QCheckBox("Touch input (evdi only — tap/drag the cursor)");
   audio_ = new QCheckBox("Stream audio to tablet (route an app's output to 'droppix-audio')");
-  autoReverse_ = new QCheckBox("Auto adb reverse on start"); autoReverse_->setChecked(true);
   overlay_ = new QCheckBox("Show performance overlay on the tablet (RTT / fps / decode)");
   connect(overlay_, &QCheckBox::toggled, this, &SettingsDialog::overlayToggled);  // live toggle
 
@@ -44,7 +43,6 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   form->addRow("Orientation (default):", orientation_);
   form->addRow("", touch_);
   form->addRow("", audio_);
-  form->addRow("", autoReverse_);
   form->addRow("", overlay_);
 
   auto* rememberAuth = new QPushButton("Remember authentication (ask once per login)");
@@ -73,7 +71,6 @@ void SettingsDialog::load(const Settings& s) {
   refresh_->setCurrentText(QString::number(s.refresh_hz));
   int i = orientation_->findData(s.orientation);
   orientation_->setCurrentIndex(i >= 0 ? i : 0);
-  autoReverse_->setChecked(s.auto_adb_reverse);
   overlay_->setChecked(s.overlay);
 }
 
@@ -88,7 +85,7 @@ void SettingsDialog::store(Settings& s) const {
   s.port = port_->value();
   s.refresh_hz = refresh_->currentText().toInt();
   s.orientation = orientation_->currentData().toInt();
-  s.auto_adb_reverse = autoReverse_->isChecked();
+  s.auto_adb_reverse = true;   // always on now (option removed from the GUI); USB just works
   s.overlay = overlay_->isChecked();
 }
 

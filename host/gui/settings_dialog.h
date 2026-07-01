@@ -35,7 +35,6 @@ class SettingsDialog : public QDialog {
   QComboBox* orientation_;
   QCheckBox* touch_;
   QCheckBox* audio_;
-  QCheckBox* autoReverse_;
   QCheckBox* overlay_;
 };
 
