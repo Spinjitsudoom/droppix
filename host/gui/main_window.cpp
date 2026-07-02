@@ -94,18 +94,12 @@ MainWindow::MainWindow(QWidget* parent)
 
   // --- Devices on network (mDNS-discovered tablets) ---
   devicesList_ = new QListWidget;
-  devicesList_->setMaximumHeight(120);
   connectBtn_ = new QPushButton("Connect");
   auto* devicesLayout = new QVBoxLayout;
   devicesLayout->addWidget(devicesList_);
   devicesLayout->addWidget(connectBtn_);
   devicesBox_ = new QGroupBox("Available clients");
   devicesBox_->setLayout(devicesLayout);
-
-  auto* logCaption = new QLabel("Log"); logCaption->setObjectName("caption");
-  log_ = new QPlainTextEdit; log_->setReadOnly(true);
-  log_->setMaximumBlockCount(1000);
-  log_->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
 
   auto* root = new QVBoxLayout;
   root->setContentsMargins(16, 16, 16, 16);
@@ -116,12 +110,10 @@ MainWindow::MainWindow(QWidget* parent)
   root->addWidget(deviceLabel_);
   root->addWidget(pairingLabel_);
   root->addWidget(startBtn_);
-  root->addWidget(devicesBox_);
-  root->addWidget(logCaption);
-  root->addWidget(log_, 1);
+  root->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
   auto* central = new QWidget; central->setLayout(root);
   setCentralWidget(central);
-  resize(600, 720);
+  resize(600, 560);
 
   // --- Wiring ---
   connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartStop);
@@ -142,7 +134,7 @@ MainWindow::MainWindow(QWidget* parent)
     Settings s; if (!n.isEmpty() && store_.load(n, s)) { applySettings(s); store_.setLastUsed(n); }
   });
 
-  connect(&controller_, &StreamController::logLine, this, [this](const QString& l){ log_->appendPlainText(l); });
+  connect(&controller_, &StreamController::logLine, this, [](const QString& l){ qInfo("%s", qUtf8Printable(l)); });
   connect(&controller_, &StreamController::statsReceived, this, [this](const Stats& s){
     if (s.client_connected) {
       setStatusDot(kDotConnected);
@@ -357,7 +349,10 @@ void MainWindow::setupAuth() {
       "});\n").arg(user, bin, binAlt);
 
   QTemporaryFile tmp;
-  if (!tmp.open()) { log_->appendPlainText("auth setup: could not create a temp file"); return; }
+  if (!tmp.open()) {
+    QMessageBox::warning(this, "Droppix", "Couldn't create a temporary file for auth setup.");
+    return;
+  }
   tmp.write(rule.toUtf8());
   tmp.flush();
 
@@ -367,10 +362,11 @@ void MainWindow::setupAuth() {
   if (rc == 0) {
     QFile marker(configDir() + "/auth_configured");
     if (marker.open(QIODevice::WriteOnly)) { marker.write("1"); marker.close(); }
-    log_->appendPlainText("Authentication remembered permanently. Start will never ask for a password again.");
+    QMessageBox::information(this, "Droppix",
+        "Authentication remembered permanently.\nStart will never ask for a password again.");
   } else {
-    log_->appendPlainText("Authentication setup was cancelled or failed (pkexec exit " +
-                          QString::number(rc) + ").");
+    QMessageBox::warning(this, "Droppix",
+        QString("Authentication setup was cancelled or failed (pkexec exit %1).").arg(rc));
   }
 }
 
@@ -406,7 +402,7 @@ void MainWindow::onStartStop() {
   Settings s = collectSettings();
   Command cmd = build_command(s, streamBin_);
   if (cmd.needs_adb_reverse) adb_.setupReverse(s.port);
-  log_->appendPlainText("$ " + QString::fromStdString(cmd.program) + " ...");
+  qInfo("$ %s ...", cmd.program.c_str());
   controller_.start(cmd);
 }
 

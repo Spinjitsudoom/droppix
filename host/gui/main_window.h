@@ -50,7 +50,6 @@ class MainWindow : public QMainWindow {
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
   QLabel* pairingLabel_;
-  QPlainTextEdit* log_;
   QGroupBox* devicesBox_;
   QListWidget* devicesList_;
   QPushButton* connectBtn_;
