@@ -32,9 +32,9 @@ class TransportClient {
     }
 
     // Thread-safe: called from the UI thread while run() reads on the net thread.
-    fun sendInput(action: Int, xNorm: Int, yNorm: Int, pressure: Int) {
+    fun sendTouch(contacts: List<com.droppix.app.protocol.Contact>) {
         val o = out ?: return
-        val msg = Protocol.encodeMessage(MsgType.INPUT, Protocol.encodeInput(action, xNorm, yNorm, pressure))
+        val msg = Protocol.encodeMessage(MsgType.TOUCH, Protocol.encodeTouch(contacts))
         submitSend(o, msg)
     }
 

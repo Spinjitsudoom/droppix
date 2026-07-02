@@ -131,6 +131,38 @@ TEST(Protocol, InputTooShortInvalid) {
   EXPECT_FALSE(decode_input({0, 0}, a, x, y, p));
 }
 
+TEST(Protocol, TouchRoundTrip) {
+  std::vector<TouchContact> in = {{0, 100, 200, 300}, {1, 40000, 50000, 1000}};
+  std::vector<TouchContact> out;
+  ASSERT_TRUE(decode_touch(encode_touch(in), out));
+  ASSERT_EQ(out.size(), 2u);
+  EXPECT_EQ(out[0].id, 0); EXPECT_EQ(out[0].x, 100); EXPECT_EQ(out[0].y, 200); EXPECT_EQ(out[0].pressure, 300);
+  EXPECT_EQ(out[1].id, 1); EXPECT_EQ(out[1].x, 40000); EXPECT_EQ(out[1].y, 50000); EXPECT_EQ(out[1].pressure, 1000);
+}
+TEST(Protocol, TouchEmptyMeansAllUp) {
+  auto body = encode_touch({});
+  ASSERT_EQ(body.size(), 1u); EXPECT_EQ(body[0], 0);
+  std::vector<TouchContact> out{{9, 9, 9, 9}};   // pre-filled; decode must clear it
+  ASSERT_TRUE(decode_touch(body, out));
+  EXPECT_TRUE(out.empty());
+}
+TEST(Protocol, TouchWireLayout) {
+  auto m = encode_message(MsgType::Touch, encode_touch({{2, 0x0102, 0x0304, 0x0506}}));
+  // len = 1(type)+1(count)+7(contact)=9; type=11; body = 01 | 02 0102 0304 0506 (big-endian)
+  ASSERT_EQ(m.size(), 4u + 9u);
+  EXPECT_EQ(m[3], 9); EXPECT_EQ(m[4], 11);
+  EXPECT_EQ(m[5], 0x01);                            // count
+  EXPECT_EQ(m[6], 0x02);                            // id
+  EXPECT_EQ(m[7], 0x01); EXPECT_EQ(m[8], 0x02);     // x
+  EXPECT_EQ(m[9], 0x03); EXPECT_EQ(m[10], 0x04);    // y
+  EXPECT_EQ(m[11], 0x05); EXPECT_EQ(m[12], 0x06);   // pressure
+}
+TEST(Protocol, TouchTruncatedInvalid) {
+  std::vector<TouchContact> out;
+  EXPECT_FALSE(decode_touch({1, 0x02, 0x01}, out));   // count=1 but only 2 body bytes
+  EXPECT_FALSE(decode_touch({}, out));
+}
+
 TEST(Protocol, OrientationRoundTrip) {
   for (uint8_t c : {uint8_t(0), uint8_t(1), uint8_t(2), uint8_t(3)}) {
     uint8_t out;

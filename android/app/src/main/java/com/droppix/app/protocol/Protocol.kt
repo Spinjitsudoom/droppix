@@ -1,13 +1,18 @@
 package com.droppix.app.protocol
 
 enum class MsgType(val code: Int) {
-    HELLO(1), CONFIG(2), VIDEO(3), PING(4), PONG(5), BYE(6), INPUT(7), ORIENTATION(8), AUDIO(9), OVERLAY(10);
+    HELLO(1), CONFIG(2), VIDEO(3), PING(4), PONG(5), BYE(6), INPUT(7), ORIENTATION(8),
+    AUDIO(9), OVERLAY(10), TOUCH(11);
     companion object {
         fun fromCode(c: Int): MsgType? = entries.firstOrNull { it.code == c }
     }
 }
 
 data class ParsedMessage(val type: MsgType, val body: ByteArray)
+
+// One finger in a multi-touch report: id (stable across a gesture), x/y in 0..65535 across
+// the display, pressure in 0..1023.
+data class Contact(val id: Int, val x: Int, val y: Int, val pressure: Int)
 
 object Protocol {
     const val VERSION = 2
@@ -50,6 +55,22 @@ object Protocol {
         out.add((xNorm ushr 8).toByte()); out.add(xNorm.toByte())
         out.add((yNorm ushr 8).toByte()); out.add(yNorm.toByte())
         out.add((pressure ushr 8).toByte()); out.add(pressure.toByte())
+        return out.toByteArray()
+    }
+
+    // TOUCH body: u8 count, then count x { u8 id, u16 x, u16 y, u16 pressure } (big-endian).
+    // The full set of active contacts each event (count 0 = all up); capped at 10.
+    fun encodeTouch(contacts: List<Contact>): ByteArray {
+        val n = minOf(contacts.size, 10)
+        val out = ArrayList<Byte>(1 + n * 7)
+        out.add(n.toByte())
+        for (i in 0 until n) {
+            val c = contacts[i]
+            out.add(c.id.toByte())
+            out.add((c.x ushr 8).toByte()); out.add(c.x.toByte())
+            out.add((c.y ushr 8).toByte()); out.add(c.y.toByte())
+            out.add((c.pressure ushr 8).toByte()); out.add(c.pressure.toByte())
+        }
         return out.toByteArray()
     }
 

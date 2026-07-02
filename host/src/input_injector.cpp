@@ -20,22 +20,28 @@ bool InputInjector::open() {
   fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
   if (fd_ < 0) { std::fprintf(stderr, "uinput open failed (need root); input disabled\n"); return false; }
 
-  // Declare a single-touch TOUCHSCREEN (absolute, maps to the screen) rather than
-  // a bare ABS pointer, which libinput would treat as a touchpad (relative).
+  // Declare a multi-touch TOUCHSCREEN (evdev protocol B, absolute/direct) rather than a bare
+  // ABS pointer, which libinput would treat as a touchpad. ABS_MT_* carry the per-finger
+  // contacts; ABS_X/Y/PRESSURE mirror the primary finger for single-touch emulation.
   ioctl(fd_, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
   ioctl(fd_, UI_SET_EVBIT, EV_KEY);
   ioctl(fd_, UI_SET_KEYBIT, BTN_TOUCH);
   ioctl(fd_, UI_SET_EVBIT, EV_ABS);
-  ioctl(fd_, UI_SET_ABSBIT, ABS_X);
-  ioctl(fd_, UI_SET_ABSBIT, ABS_Y);
-  ioctl(fd_, UI_SET_ABSBIT, ABS_PRESSURE);   // touch pressure (approximate on capacitive)
+  for (int code : {ABS_X, ABS_Y, ABS_PRESSURE,
+                   ABS_MT_SLOT, ABS_MT_TRACKING_ID, ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
+                   ABS_MT_PRESSURE}) {
+    ioctl(fd_, UI_SET_ABSBIT, code);
+  }
 
-  uinput_abs_setup ax{}; ax.code = ABS_X; ax.absinfo.minimum = 0; ax.absinfo.maximum = 65535;
-  ioctl(fd_, UI_ABS_SETUP, &ax);
-  uinput_abs_setup ay{}; ay.code = ABS_Y; ay.absinfo.minimum = 0; ay.absinfo.maximum = 65535;
-  ioctl(fd_, UI_ABS_SETUP, &ay);
-  uinput_abs_setup ap{}; ap.code = ABS_PRESSURE; ap.absinfo.minimum = 0; ap.absinfo.maximum = 1023;
-  ioctl(fd_, UI_ABS_SETUP, &ap);
+  auto abs = [&](int code, int min, int max) {
+    uinput_abs_setup a{}; a.code = code; a.absinfo.minimum = min; a.absinfo.maximum = max;
+    ioctl(fd_, UI_ABS_SETUP, &a);
+  };
+  abs(ABS_X, 0, 65535); abs(ABS_Y, 0, 65535); abs(ABS_PRESSURE, 0, 1023);
+  abs(ABS_MT_SLOT, 0, 9);                 // up to 10 simultaneous contacts
+  abs(ABS_MT_TRACKING_ID, 0, 65535);
+  abs(ABS_MT_POSITION_X, 0, 65535); abs(ABS_MT_POSITION_Y, 0, 65535);
+  abs(ABS_MT_PRESSURE, 0, 1023);
 
   uinput_setup us{};
   us.id.bustype = BUS_USB; us.id.vendor = 0x1209; us.id.product = 0xd701;
@@ -47,14 +53,31 @@ bool InputInjector::open() {
   return true;
 }
 
-void InputInjector::inject(uint8_t action, uint16_t x_norm, uint16_t y_norm, uint16_t pressure) {
+void InputInjector::inject(const std::vector<TouchContact>& contacts) {
   if (fd_ < 0) return;
   // Device is bound to the droppix output, so 0..65535 spans that monitor directly.
-  emit(fd_, EV_ABS, ABS_X, x_norm);
-  emit(fd_, EV_ABS, ABS_Y, y_norm);
-  emit(fd_, EV_ABS, ABS_PRESSURE, action == 2 ? 0 : pressure);  // 0 on release
-  if (action == 0) emit(fd_, EV_KEY, BTN_TOUCH, 1);       // touch down
-  else if (action == 2) emit(fd_, EV_KEY, BTN_TOUCH, 0);  // touch up
+  const MtSlots::Update u = slots_.update(contacts);
+
+  for (int slot : u.lifted) {                       // release vanished fingers
+    emit(fd_, EV_ABS, ABS_MT_SLOT, slot);
+    emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, -1);
+  }
+  for (const auto& a : u.active) {
+    emit(fd_, EV_ABS, ABS_MT_SLOT, a.slot);
+    if (a.isNew) emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, a.c.id);
+    emit(fd_, EV_ABS, ABS_MT_POSITION_X, a.c.x);
+    emit(fd_, EV_ABS, ABS_MT_POSITION_Y, a.c.y);
+    emit(fd_, EV_ABS, ABS_MT_PRESSURE, a.c.pressure);
+  }
+
+  const bool anyDown = !contacts.empty();
+  if (anyDown != anyDown_) { emit(fd_, EV_KEY, BTN_TOUCH, anyDown ? 1 : 0); anyDown_ = anyDown; }
+  if (anyDown) {                                     // single-touch emulation from the primary finger
+    const TouchContact& p = contacts.front();
+    emit(fd_, EV_ABS, ABS_X, p.x);
+    emit(fd_, EV_ABS, ABS_Y, p.y);
+    emit(fd_, EV_ABS, ABS_PRESSURE, p.pressure);
+  }
   emit(fd_, EV_SYN, SYN_REPORT, 0);
 }
 

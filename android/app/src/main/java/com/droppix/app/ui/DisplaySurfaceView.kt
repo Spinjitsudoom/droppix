@@ -2,9 +2,11 @@ package com.droppix.app.ui
 
 import android.content.Context
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import com.droppix.app.protocol.Contact
 
 class DisplaySurfaceView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null
@@ -15,8 +17,9 @@ class DisplaySurfaceView @JvmOverloads constructor(
         fun onSurfaceGone()
     }
 
-    // Single-pointer touch, normalized to 0..65535 of the view, sent to the host.
-    interface TouchListener { fun onTouch(action: Int, xNorm: Int, yNorm: Int, pressure: Int) }
+    // Multi-touch: the full set of active contacts (each normalized to 0..65535 of the view),
+    // sent to the host every event. An empty list means all fingers lifted.
+    interface TouchListener { fun onTouch(contacts: List<Contact>) }
 
     private var listener: SurfaceListener? = null
     private var touchListener: TouchListener? = null
@@ -27,27 +30,41 @@ class DisplaySurfaceView @JvmOverloads constructor(
 
     fun setTouchListener(l: TouchListener?) { touchListener = l }
 
-    override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+    override fun onTouchEvent(event: MotionEvent): Boolean {
         val l = touchListener ?: return false
-        val action = when (event.actionMasked) {
-            android.view.MotionEvent.ACTION_DOWN -> 0
-            android.view.MotionEvent.ACTION_MOVE -> 1
-            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> 2
+        val masked = event.actionMasked
+        when (masked) {
+            MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE,
+            MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP,
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {}
             else -> return false
         }
-        // Coalesce the high-rate MOVE stream so a drag can't flood the host; DOWN
-        // and UP are always sent (a dropped UP would stick the button).
-        if (action == 1) {
+        // Coalesce the high-rate MOVE stream so a drag can't flood the host; every finger
+        // add/remove is always sent (a dropped up would leave a finger stuck down).
+        if (masked == MotionEvent.ACTION_MOVE) {
             val now = System.currentTimeMillis()
             if (now - lastMoveSentMs < moveMinIntervalMs) return true
             lastMoveSentMs = now
         }
         val w = width.coerceAtLeast(1); val h = height.coerceAtLeast(1)
-        val xn = ((event.x / w).coerceIn(0f, 1f) * 65535f).toInt()
-        val yn = ((event.y / h).coerceIn(0f, 1f) * 65535f).toInt()
-        // Touch pressure (0..1023). Capacitive screens report an approximation; forward it.
-        val pn = (event.pressure.coerceIn(0f, 1f) * 1023f).toInt()
-        l.onTouch(action, xn, yn, pn)
+        val contacts = if (masked == MotionEvent.ACTION_CANCEL) {
+            emptyList()
+        } else {
+            // On a finger lift, exclude the pointer that is going up from the active set.
+            val liftIdx = if (masked == MotionEvent.ACTION_UP || masked == MotionEvent.ACTION_POINTER_UP)
+                event.actionIndex else -1
+            val list = ArrayList<Contact>(event.pointerCount)
+            for (i in 0 until event.pointerCount) {
+                if (i == liftIdx) continue
+                val xn = ((event.getX(i) / w).coerceIn(0f, 1f) * 65535f).toInt()
+                val yn = ((event.getY(i) / h).coerceIn(0f, 1f) * 65535f).toInt()
+                // Pressure 0..1023 (capacitive screens report an approximation).
+                val pn = (event.getPressure(i).coerceIn(0f, 1f) * 1023f).toInt()
+                list.add(Contact(event.getPointerId(i), xn, yn, pn))
+            }
+            list
+        }
+        l.onTouch(contacts)
         return true
     }
 

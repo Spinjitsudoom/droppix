@@ -98,8 +98,8 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         super.onResume()
         surfaceView.setSurfaceListener(this)  // fires onSurfaceReady if already valid
         surfaceView.setTouchListener(object : DisplaySurfaceView.TouchListener {
-            override fun onTouch(action: Int, xNorm: Int, yNorm: Int, pressure: Int) {
-                client?.sendInput(action, xNorm, yNorm, pressure)
+            override fun onTouch(contacts: List<com.droppix.app.protocol.Contact>) {
+                client?.sendTouch(contacts)
             }
         })
         uiHandler.post(overlayTick)

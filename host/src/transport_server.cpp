@@ -161,9 +161,16 @@ void TransportServer::poll_control() {
   while (parser_.next(m)) {
     if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
-    } else if (m.type == MsgType::Input && input_handler_) {
+    } else if (m.type == MsgType::Touch && touch_handler_) {
+      std::vector<TouchContact> contacts;
+      if (decode_touch(m.body, contacts)) touch_handler_(contacts);
+    } else if (m.type == MsgType::Input && touch_handler_) {
+      // Legacy single-pointer client: translate to a full-set touch (up => no contacts).
       uint8_t a; uint16_t x, y, p;
-      if (decode_input(m.body, a, x, y, p)) input_handler_(a, x, y, p);
+      if (decode_input(m.body, a, x, y, p)) {
+        if (a == 2) touch_handler_({});
+        else touch_handler_({TouchContact{0, x, y, p}});
+      }
     } else if (m.type == MsgType::Orientation && orientation_handler_) {
       uint8_t code;
       if (decode_orientation(m.body, code)) orientation_handler_(code);
