@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Droppix
+Comment=Use a tablet as a second monitor
+Exec=droppix_gui
+Icon=org.droppix.Droppix
+Categories=Utility;Network;
+Terminal=false

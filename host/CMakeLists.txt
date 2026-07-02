@@ -82,6 +82,9 @@ else()
 endif()
 
 # --- Tests (GoogleTest via FetchContent) ---
+# Off for offline/packaged builds (e.g. Flatpak), where FetchContent can't reach the network.
+option(DROPPIX_BUILD_TESTS "Build unit tests (needs network for GoogleTest)" ON)
+if(DROPPIX_BUILD_TESTS)
 include(FetchContent)
 FetchContent_Declare(googletest
   GIT_REPOSITORY https://github.com/google/googletest.git
@@ -136,3 +139,4 @@ if(Qt6_FOUND)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
   gtest_discover_tests(droppix_gui_tests)
 endif()
+endif()  # DROPPIX_BUILD_TESTS

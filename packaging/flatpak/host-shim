@@ -1,0 +1,9 @@
+#!/bin/sh
+# Installed on the Flatpak PATH under the names of the host tools droppix invokes
+# (kscreen-doctor, pkexec, adb, qdbus/qdbus6, avahi-publish-service, avahi-browse,
+# parec, pw-record, runuser). droppix cannot run these inside the sandbox (they drive
+# host KWin / polkit / PipeWire / avahi / USB), so each shim forwards the call to the
+# real tool on the host via flatpak-spawn. The invoked name ($0) selects the tool, so
+# droppix's existing QProcess("<tool>", args) calls transparently reach the host.
+tool="$(basename "$0")"
+exec flatpak-spawn --host "$tool" "$@"

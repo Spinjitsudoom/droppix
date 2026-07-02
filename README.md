@@ -50,6 +50,13 @@ ctest --test-dir build --output-on-failure
 bash packaging/appimage/build-appimage.sh   # run on the host; builds the binaries in the distrobox first
 ```
 
+**Flatpak** — full-function on the KDE runtime (`org.kde.Platform//6.10`, which provides Qt6). Builds x264 + ffmpeg-with-x264 + libevdi + droppix as modules. Because a sandbox can't run droppix's root/evdi streamer or reach host KWin/PipeWire/adb, the app reaches the host via `flatpak-spawn --host` (which effectively disables the sandbox — the AppImage delivers the same thing). Same host [Requirements](#requirements-host) apply.
+
+```bash
+bash packaging/flatpak/build-flatpak.sh      # installs to --user + drops a .flatpak in "complete builds/"
+flatpak run org.droppix.Droppix
+```
+
 **Android** (Android SDK + JDK 17; minSdk 21):
 
 ```bash

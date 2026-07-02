@@ -29,6 +29,31 @@ static bool copyOver(const QString& src, const QString& dst) {
   return QFile::copy(src, dst);
 }
 
+// --- Flatpak host bridge -------------------------------------------------------------
+// In a Flatpak the sandbox can't run droppix's root/evdi streamer or reach host KWin/
+// polkit/PipeWire/adb. The GUI reaches the host via `flatpak-spawn --host` (PATH shims
+// forward pkexec/adb/avahi; here we stage the streamer onto the host and mirror the cert).
+static bool inFlatpak() { return QFileInfo::exists("/.flatpak-info"); }
+
+static QString hostSpawnCapture(const QStringList& args) {   // `flatpak-spawn --host <args>` -> stdout
+  QProcess p;
+  p.start("flatpak-spawn", QStringList{"--host"} + args);
+  if (!p.waitForFinished(15000)) return {};
+  return QString::fromUtf8(p.readAllStandardOutput());
+}
+
+static QString shq(const QString& s) {   // single-quote for a host `sh -c`
+  QString q = s; q.replace("'", "'\\''"); return "'" + q + "'";
+}
+
+static void copyFileToHost(const QString& src, const QString& hostDst) {   // bytes over the spawn pipe
+  QFile f(src);
+  if (!f.open(QIODevice::ReadOnly)) return;
+  QProcess p;
+  p.start("flatpak-spawn", {"--host", "sh", "-c", "cat > " + shq(hostDst)});
+  if (p.waitForStarted(5000)) { p.write(f.readAll()); p.closeWriteChannel(); p.waitForFinished(10000); }
+}
+
 // When running from an AppImage, the bundled droppix_stream sits on a per-run FUSE mount
 // that root (pkexec) can't read and whose path changes each launch (breaking the permanent
 // polkit rule). Relocate it + its bundled libs to a stable, real path and use that. The
@@ -36,6 +61,27 @@ static bool copyOver(const QString& src, const QString& dst) {
 // no LD_LIBRARY_PATH or wrapper needed, and it works when pkexec'd as root.
 std::string MainWindow::resolveStreamBin() {
   const QString dev = QCoreApplication::applicationDirPath() + "/droppix_stream";
+
+  if (inFlatpak()) {
+    // Stage the bundled streamer runtime (droppix_stream + libs + LD_LIBRARY_PATH wrapper)
+    // onto the HOST, then run it there via the pkexec shim (flatpak-spawn --host). The host
+    // can't see /app, so we transfer the tarball's bytes over the flatpak-spawn stdio pipe.
+    const QString hostHome = hostSpawnCapture({"sh", "-c", "printf %s \"$HOME\""}).trimmed();
+    if (hostHome.isEmpty()) return dev.toStdString();
+    const QString rt = hostHome + "/.local/share/droppix/runtime";
+    QProcess p;
+    p.start("flatpak-spawn", {"--host", "sh", "-c",
+            "mkdir -p " + shq(rt) + " && tar xzf - -C " + shq(rt)});
+    if (p.waitForStarted(5000)) {
+      QFile tar("/app/share/droppix/droppix-runtime.tar.gz");
+      if (tar.open(QIODevice::ReadOnly)) { p.write(tar.readAll()); tar.close(); }
+      p.closeWriteChannel();
+      p.waitForFinished(30000);
+    }
+    flatpakHostRuntime_ = rt;
+    return (rt + "/bin/droppix_stream_host").toStdString();
+  }
+
   const QString appdir = qEnvironmentVariable("APPDIR");
   if (appdir.isEmpty()) return dev.toStdString();   // not an AppImage: use the sibling binary
 
@@ -63,6 +109,16 @@ std::string MainWindow::resolveStreamBin() {
   return QFileInfo::exists(dstBin) ? dstBin.toStdString() : dev.toStdString();
 }
 
+// Flatpak: mirror the freshly generated cert/key onto the host so the host-run streamer
+// (--cert/--key) can read them. No-op outside Flatpak (flatpakHostRuntime_ empty).
+void MainWindow::stageCertsToHost() {
+  if (flatpakHostRuntime_.isEmpty()) return;
+  flatpakHostCert_ = flatpakHostRuntime_ + "/cert.pem";
+  flatpakHostKey_  = flatpakHostRuntime_ + "/key.pem";
+  copyFileToHost(cert_.certPath(), flatpakHostCert_);
+  copyFileToHost(cert_.keyPath(),  flatpakHostKey_);
+}
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       store_(configDir()),
@@ -70,6 +126,7 @@ MainWindow::MainWindow(QWidget* parent)
       cert_(configDir()) {
   streamBin_ = resolveStreamBin();
   cert_.regenerate();   // fresh cert => new pairing code every launch (per-restart rotation)
+  stageCertsToHost();   // Flatpak: mirror cert/key to the host for the streamer (else no-op)
   setWindowTitle("Droppix");
   setWindowIcon(QIcon(":/icon.png"));
   settingsDialog_ = new SettingsDialog(this);   // advanced options live in this dialog
@@ -405,8 +462,14 @@ Settings MainWindow::collectSettings() const {
   Settings s;
   settingsDialog_->store(s);   // source/resolution/touch/audio/fps/bitrate/port/refresh/orientation/auto-adb/overlay
   s.tls = true;
-  s.certPath = cert_.certPath().toStdString();
-  s.keyPath = cert_.keyPath().toStdString();
+  // In a Flatpak the streamer runs on the host, so hand it the host-mirrored cert/key paths.
+  if (!flatpakHostCert_.isEmpty()) {
+    s.certPath = flatpakHostCert_.toStdString();
+    s.keyPath  = flatpakHostKey_.toStdString();
+  } else {
+    s.certPath = cert_.certPath().toStdString();
+    s.keyPath  = cert_.keyPath().toStdString();
+  }
   return s;
 }
 

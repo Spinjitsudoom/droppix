@@ -1,0 +1,97 @@
+app-id: org.droppix.Droppix
+runtime: org.kde.Platform
+runtime-version: '6.10'
+sdk: org.kde.Sdk
+command: droppix_gui
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --share=network
+  - --device=dri
+  # droppix drives host tools it cannot run in the sandbox (kscreen-doctor, pkexec,
+  # adb, parec, avahi-*, and the root evdi streamer). It reaches them via
+  # `flatpak-spawn --host`, which needs this permission. NOTE: this effectively
+  # disables the sandbox — see docs/.../2026-07-02-flatpak-design.md.
+  - --talk-name=org.freedesktop.Flatpak
+  - --filesystem=xdg-config/droppix_gui:create
+  - --filesystem=xdg-data/droppix:create
+
+modules:
+  # H.264 encoder — the runtime's ffmpeg is built WITHOUT libx264, so we build both.
+  - name: x264
+    buildsystem: simple
+    build-commands:
+      - ./configure --prefix=/app --enable-shared --enable-pic --disable-cli
+      - make -j$(nproc)
+      - make install
+    sources:
+      - type: git
+        url: https://code.videolan.org/videolan/x264.git
+        branch: stable
+
+  - name: ffmpeg
+    buildsystem: simple
+    build-commands:
+      - ./configure --prefix=/app --enable-shared --disable-static --enable-gpl
+        --enable-libx264 --disable-programs --disable-doc
+      - make -j$(nproc)
+      - make install
+    sources:
+      - type: archive
+        url: https://ffmpeg.org/releases/ffmpeg-7.1.tar.xz
+        sha256: 40973d44970dbc83ef302b0609f2e74982be2d85916dd2ee7472d30678a7abe6
+
+  # Userspace libevdi (the kernel module lives on the host; here we only need the .so).
+  - name: libevdi
+    buildsystem: simple
+    build-commands:
+      - make -C library
+      - install -Dm755 -t /app/lib library/libevdi.so.1 || install -Dm755 library/libevdi.so /app/lib/libevdi.so.1
+      - ln -sf libevdi.so.1 /app/lib/libevdi.so
+    sources:
+      - type: git
+        url: https://github.com/DisplayLink/evdi.git
+        tag: v1.14.10
+
+  - name: droppix
+    buildsystem: simple
+    build-commands:
+      - cmake -G Ninja -B _build -DCMAKE_BUILD_TYPE=Release -DDROPPIX_BUILD_TESTS=OFF
+        -DCMAKE_PREFIX_PATH=/app -DCMAKE_LIBRARY_PATH=/app/lib .
+      - ninja -C _build droppix_gui droppix_stream
+      - install -Dm755 _build/droppix_gui   /app/bin/droppix_gui
+      - install -Dm755 _build/droppix_stream /app/bin/droppix_stream
+      # Streamer runtime tarball: droppix_stream + the /app libs it links (ffmpeg/x264/evdi)
+      # + a wrapper that sets LD_LIBRARY_PATH. The GUI stages this onto the HOST filesystem
+      # (via flatpak-spawn) so the root evdi streamer can run there — flatpak-spawn --host
+      # can't see /app, and pkexec strips LD_LIBRARY_PATH, so the wrapper sets it itself.
+      - mkdir -p _stage/bin _stage/lib
+      - cp _build/droppix_stream _stage/bin/droppix_stream
+      - ldd _build/droppix_stream | awk '/=> \/app\/lib/ {print $3}' | xargs -r -I@ cp -L @ _stage/lib/
+      - printf '#!/bin/sh\nd=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexport LD_LIBRARY_PATH="$d/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec "$d/bin/droppix_stream" "$@"\n' > _stage/bin/droppix_stream_host
+      - chmod +x _stage/bin/droppix_stream_host
+      - tar czf droppix-runtime.tar.gz -C _stage .
+      - install -Dm644 droppix-runtime.tar.gz /app/share/droppix/droppix-runtime.tar.gz
+      # host-spawn shims: droppix calls these host tools by name; the shims forward them
+      # (and the root streamer) to the host via flatpak-spawn --host. Installed on PATH so
+      # the existing C++ QProcess calls transparently reach the host.
+      # The GUI needs host-spawn for pkexec (launch the root streamer), adb (USB
+      # discovery), and avahi (mDNS). openssl stays in-sandbox (cert gen + readback);
+      # kscreen-doctor/qdbus/parec/runuser are only invoked by the streamer, which
+      # already runs on the host, so they resolve natively there.
+      - install -Dm755 host-shim /app/bin/pkexec
+      - for t in adb avahi-publish-service avahi-browse; do ln -sf pkexec /app/bin/$t; done
+      - install -Dm644 icons/droppix-256.png /app/share/icons/hicolor/256x256/apps/org.droppix.Droppix.png
+      - install -Dm644 org.droppix.Droppix.desktop /app/share/applications/org.droppix.Droppix.desktop
+      - install -Dm644 org.droppix.Droppix.metainfo.xml /app/share/metainfo/org.droppix.Droppix.metainfo.xml
+    sources:
+      - type: dir
+        path: ../../host
+      - type: file
+        path: host-shim
+      - type: file
+        path: org.droppix.Droppix.desktop
+      - type: file
+        path: org.droppix.Droppix.metainfo.xml

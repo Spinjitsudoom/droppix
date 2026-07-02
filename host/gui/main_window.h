@@ -26,7 +26,8 @@ class MainWindow : public QMainWindow {
  protected:
   void closeEvent(QCloseEvent* event) override;
  private:
-  std::string resolveStreamBin();   // sibling binary, or the extracted stable copy under AppImage
+  std::string resolveStreamBin();   // sibling binary, extracted AppImage copy, or host-staged (Flatpak)
+  void stageCertsToHost();           // Flatpak: mirror cert/key to the host for the streamer
   Settings collectSettings() const;
   void applySettings(const Settings& s);
   void onStartStop();
@@ -74,6 +75,8 @@ class MainWindow : public QMainWindow {
   QList<MdnsDevice> netDevices_;   // last network-discovered clients
   QList<UsbClient> usbClients_;    // last USB-discovered clients
   QHash<QString, qint64> pendingWakes_;
+  QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to
+  QString flatpakHostCert_, flatpakHostKey_;   // Flatpak: host cert/key paths for the streamer
   QSystemTrayIcon* tray_ = nullptr;   // present only if a system tray is available
   bool quitting_ = false;             // true => closeEvent really quits (from tray Quit)
   bool trayHintShown_ = false;        // show the "still running" balloon only once
