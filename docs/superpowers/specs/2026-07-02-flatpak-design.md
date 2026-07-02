@@ -67,10 +67,11 @@ output → tablet. The plumbing is complete; a live device run is the remaining 
 
 - The test-pattern *Source* won't run from the Flatpak GUI (that path invokes the streamer
   in-sandbox, not via host-spawn); evdi is the intended path and goes through pkexec.
-- `setupAuth` ("remember auth permanently") writes a polkit rule via `pkexec install <tmp>`;
-  the tmp file is a sandbox path the host `install` can't read, so this is a known gap in
-  the Flatpak (streaming still prompts for the password each session unless configured on
-  the host).
+- Permanent auth ("Remember authentication") DOES work in the Flatpak: `setupAuth` detects
+  the sandbox and pipes the polkit rule's bytes to root over stdin
+  (`pkexec /bin/sh -c 'umask 022; cat > /etc/polkit-1/rules.d/49-droppix.rules'`) instead of
+  a temp-file path the host can't read. The rule matches the host-staged streamer wrapper
+  (= `streamBin_` in the Flatpak). One prompt, then passwordless — same as the AppImage.
 
 ## Out of scope
 

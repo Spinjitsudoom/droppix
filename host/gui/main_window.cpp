@@ -519,18 +519,34 @@ void MainWindow::setupAuth() {
       "    }\n"
       "});\n").arg(user, bin, binAlt);
 
-  QTemporaryFile tmp;
-  if (!tmp.open()) {
-    QMessageBox::warning(this, "Droppix", "Couldn't create a temporary file for auth setup.");
-    return;
+  static const QString kRulePath = QStringLiteral("/etc/polkit-1/rules.d/49-droppix.rules");
+  bool ok = false;
+  int rc = -1;
+  if (inFlatpak()) {
+    // The pkexec shim runs on the HOST, which can't read a sandbox temp-file path, so pipe
+    // the rule's bytes to root over stdin instead (flatpak-spawn/pkexec preserve stdin).
+    QProcess p;
+    p.start("pkexec", {"/bin/sh", "-c", "umask 022; cat > " + kRulePath});
+    if (p.waitForStarted(10000)) {
+      p.write(rule.toUtf8());
+      p.closeWriteChannel();
+      p.waitForFinished(-1);   // blocks on the polkit auth prompt, then the write
+      rc = (p.exitStatus() == QProcess::NormalExit) ? p.exitCode() : -1;
+      ok = (rc == 0);
+    }
+  } else {
+    // Normal / AppImage: pkexec installs the rule from a real temp-file path (mode 0644).
+    QTemporaryFile tmp;
+    if (!tmp.open()) {
+      QMessageBox::warning(this, "Droppix", "Couldn't create a temporary file for auth setup.");
+      return;
+    }
+    tmp.write(rule.toUtf8());
+    tmp.flush();
+    rc = QProcess::execute("pkexec", {"/usr/bin/install", "-m", "0644", tmp.fileName(), kRulePath});
+    ok = (rc == 0);
   }
-  tmp.write(rule.toUtf8());
-  tmp.flush();
-
-  // pkexec prompts once, then installs the rule as root (mode 0644 so polkitd can read it).
-  int rc = QProcess::execute("pkexec", {"/usr/bin/install", "-m", "0644", tmp.fileName(),
-                                        "/etc/polkit-1/rules.d/49-droppix.rules"});
-  if (rc == 0) {
+  if (ok) {
     QFile marker(configDir() + "/auth_configured");
     if (marker.open(QIODevice::WriteOnly)) { marker.write("1"); marker.close(); }
     QMessageBox::information(this, "Droppix",
