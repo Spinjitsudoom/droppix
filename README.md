@@ -12,13 +12,24 @@ Use an Android tablet as a **true extended monitor** (not a mirror) for a Linux/
 - **Audio sink** — route any app's audio to a dedicated PipeWire sink and it plays on the tablet (handy for e.g. Wii U gamepad audio in Cemu).
 - **Transports** — USB (`adb reverse`) or WiFi (mDNS discovery + 6-digit PIN pairing over TLS).
 
+## Requirements (host)
+
+droppix is deeply integrated with the host, so some things can't ship inside the AppImage and must be present on the machine:
+
+- **KDE Plasma 6 / KWin** — the GUI drives `kscreen-doctor` and `qdbus` to place/rotate the virtual output. (This also guarantees a Qt6 runtime, which is why the AppImage doesn't bundle Qt.)
+- **The `evdi` kernel module** — install via your distro / DKMS (a kernel module can't live in an AppImage). Required for the extended-monitor feature; USB/WiFi test-pattern works without it.
+- **polkit / `pkexec`** — the streamer runs as root for uinput + evdi.
+- **PipeWire** (`parec`) — for the audio-to-tablet sink.
+- **avahi-daemon** — for WiFi discovery (`avahi-publish`/`avahi-browse`).
+- **`adb`** — for USB connections.
+
 ## Layout
 
 | Path | What |
 |------|------|
 | `host/` | C++ streaming engine (`droppix_stream`) + Qt6 control-panel GUI (`droppix_gui`) |
 | `android/` | Native Kotlin client (MediaCodec decode, touch/orientation/audio back-channel) |
-| `packaging/` | Thin AppImage build script |
+| `packaging/` | AppImage build script |
 | `docs/` | Design specs + phased implementation plans |
 | `macos/` | Archived experimental macOS backend (not wired into the build) |
 
@@ -33,10 +44,10 @@ ctest --test-dir build --output-on-failure
 
 `droppix_stream` is the engine; `droppix_gui` supervises it. The evdi path needs root for uinput/virtual-display, so the GUI launches the engine via `pkexec`.
 
-**AppImage** (thin — relies on the host's Qt6 runtime):
+**AppImage** — bundles both binaries (`droppix_gui` + `droppix_stream`) and the codec/streaming libs (ffmpeg, x264, OpenSSL, libevdi), using the host's Qt6 (see [Requirements](#requirements-host)). On launch the streamer is relocated to `~/.local/share/droppix/runtime/` so the root (evdi) path works despite the AppImage's read-only mount.
 
 ```bash
-bash packaging/appimage/build-appimage.sh
+bash packaging/appimage/build-appimage.sh   # run on the host; builds the binaries in the distrobox first
 ```
 
 **Android** (Android SDK + JDK 17; minSdk 21):

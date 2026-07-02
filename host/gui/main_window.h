@@ -26,6 +26,7 @@ class MainWindow : public QMainWindow {
  protected:
   void closeEvent(QCloseEvent* event) override;
  private:
+  std::string resolveStreamBin();   // sibling binary, or the extracted stable copy under AppImage
   Settings collectSettings() const;
   void applySettings(const Settings& s);
   void onStartStop();

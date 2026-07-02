@@ -12,6 +12,9 @@
 #include <QHostAddress>
 #include <QDateTime>
 #include <QTimer>
+#include <QDir>
+#include <QFileInfo>
+#include <QStandardPaths>
 #include "wake.h"
 
 namespace droppix {
@@ -20,12 +23,52 @@ static QString configDir() {
   return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
 }
 
+// Copy src -> dst, overwriting; returns success. (QFile::copy won't overwrite.)
+static bool copyOver(const QString& src, const QString& dst) {
+  QFile::remove(dst);
+  return QFile::copy(src, dst);
+}
+
+// When running from an AppImage, the bundled droppix_stream sits on a per-run FUSE mount
+// that root (pkexec) can't read and whose path changes each launch (breaking the permanent
+// polkit rule). Relocate it + its bundled libs to a stable, real path and use that. The
+// bundled binary's RPATH is $ORIGIN/../lib, so from runtime/bin it finds runtime/lib —
+// no LD_LIBRARY_PATH or wrapper needed, and it works when pkexec'd as root.
+std::string MainWindow::resolveStreamBin() {
+  const QString dev = QCoreApplication::applicationDirPath() + "/droppix_stream";
+  const QString appdir = qEnvironmentVariable("APPDIR");
+  if (appdir.isEmpty()) return dev.toStdString();   // not an AppImage: use the sibling binary
+
+  const QString srcBin = appdir + "/usr/bin/droppix_stream";
+  const QString srcLib = appdir + "/usr/lib";
+  if (!QFileInfo::exists(srcBin)) return dev.toStdString();   // nothing bundled -> fall back
+
+  const QString runtime = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                          + "/droppix/runtime";
+  const QString dstBin = runtime + "/bin/droppix_stream";
+  const QString dstLib = runtime + "/lib";
+
+  // (Re)extract only when the destination is missing or older than the bundled copy.
+  if (!QFileInfo::exists(dstBin) ||
+      QFileInfo(dstBin).lastModified() < QFileInfo(srcBin).lastModified()) {
+    QDir().mkpath(runtime + "/bin");
+    QDir().mkpath(dstLib);
+    copyOver(srcBin, dstBin);
+    QFile::setPermissions(dstBin, QFileDevice::ReadOwner  | QFileDevice::WriteOwner | QFileDevice::ExeOwner |
+                                   QFileDevice::ReadGroup  | QFileDevice::ExeGroup |
+                                   QFileDevice::ReadOther  | QFileDevice::ExeOther);
+    const auto libs = QDir(srcLib).entryInfoList({"*.so*"}, QDir::Files);
+    for (const auto& fi : libs) copyOver(fi.absoluteFilePath(), dstLib + "/" + fi.fileName());
+  }
+  return QFileInfo::exists(dstBin) ? dstBin.toStdString() : dev.toStdString();
+}
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       store_(configDir()),
       approved_(configDir()),
       cert_(configDir()) {
-  streamBin_ = (QCoreApplication::applicationDirPath() + "/droppix_stream").toStdString();
+  streamBin_ = resolveStreamBin();
   cert_.regenerate();   // fresh cert => new pairing code every launch (per-restart rotation)
   setWindowTitle("Droppix");
   setWindowIcon(QIcon(":/icon.png"));
