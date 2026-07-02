@@ -75,6 +75,18 @@ class ProtocolTest {
             byteArrayOf(0, 0, 0, 8, 7, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06), m)
     }
 
+    @Test fun encodeTouchMatchesHostWireFormat() {
+        // one contact id=2, x=0x0102, y=0x0304, pressure=0x0506; body = [count 01][id 02][x][y][p];
+        // encodeMessage adds [00 00 00 09][0B]. Must match the C++ TouchWireLayout test.
+        val m = Protocol.encodeMessage(MsgType.TOUCH,
+            Protocol.encodeTouch(listOf(Contact(2, 0x0102, 0x0304, 0x0506))))
+        assertArrayEquals(
+            byteArrayOf(0, 0, 0, 9, 11, 0x01, 0x02, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06), m)
+    }
+    @Test fun encodeTouchEmptyMeansAllUp() {
+        assertArrayEquals(byteArrayOf(0), Protocol.encodeTouch(emptyList()))
+    }
+
     @Test fun encodeOrientationMatchesHostWireFormat() {
         // code=1 ; encodeMessage adds [00 00 00 02][08]
         val m = Protocol.encodeMessage(MsgType.ORIENTATION, Protocol.encodeOrientation(1))

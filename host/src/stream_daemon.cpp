@@ -157,11 +157,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // touchscreen (needs root) that KWin binds to the droppix output. OFF by default
   // so a geometry-query or uinput issue can never affect the display-only path.
   InputInjector injector;
-  tx_.set_input_handler(nullptr);  // drop any handler from a prior session (its injector is gone)
+  tx_.set_touch_handler(nullptr);  // drop any handler from a prior session (its injector is gone)
   if (cfg_.touch) {
     if (injector.open()) {
-      tx_.set_input_handler([&injector](uint8_t a, uint16_t x, uint16_t y, uint16_t p) {
-        injector.inject(a, x, y, p);
+      tx_.set_touch_handler([&injector](const std::vector<TouchContact>& contacts) {
+        injector.inject(contacts);
       });
       if (have_output) {
         std::fprintf(stderr, "input: binding touch -> output %s (%dx%d)\n",

@@ -21,13 +21,14 @@ class TransportServer {
                   const std::vector<unsigned char>& nal);
   bool send_audio(const std::vector<unsigned char>& pcm);
   bool send_overlay(uint8_t show);   // tell the app to show/hide the perf overlay
-  void poll_control();                 // respond to PING, dispatch INPUT, detect disconnect
-  // Called for each INPUT message during poll_control (action, x_norm, y_norm).
-  // INVARIANT: if the handler captures an object by reference, the caller MUST
-  // clear it (set_input_handler(nullptr)) before that object is destroyed —
-  // TransportServer outlives a single streaming session.
-  void set_input_handler(std::function<void(uint8_t, uint16_t, uint16_t, uint16_t)> h) {
-    input_handler_ = std::move(h);
+  void poll_control();                 // respond to PING, dispatch touch, detect disconnect
+  // Called for each TOUCH message during poll_control with the full active-contact set (a
+  // legacy single-pointer INPUT is delivered as a 1-contact set, or empty on release).
+  // INVARIANT: if the handler captures an object by reference, the caller MUST clear it
+  // (set_touch_handler(nullptr)) before that object is destroyed — TransportServer outlives
+  // a single streaming session.
+  void set_touch_handler(std::function<void(const std::vector<TouchContact>&)> h) {
+    touch_handler_ = std::move(h);
   }
   // Called for each ORIENTATION message during poll_control (code: 0/1/2/3 =>
   // 0/90/180/270). Same lifetime invariant as the input handler.
@@ -52,7 +53,7 @@ class TransportServer {
   uint16_t port_ = 0;
   std::string peer_ip_;
   MessageParser parser_;
-  std::function<void(uint8_t, uint16_t, uint16_t, uint16_t)> input_handler_;
+  std::function<void(const std::vector<TouchContact>&)> touch_handler_;
   std::function<void(uint8_t)> orientation_handler_;
 
   bool tls_ = false;

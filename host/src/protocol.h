@@ -7,7 +7,16 @@ namespace droppix {
 
 enum class MsgType : uint8_t {
   Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6, Input = 7,
-  Orientation = 8, Audio = 9, Overlay = 10
+  Orientation = 8, Audio = 9, Overlay = 10, Touch = 11
+};
+
+// One finger in a multi-touch report. id is the app's pointer id (stable across a
+// gesture); x/y are 0..65535 across the droppix monitor; pressure is 0..1023.
+struct TouchContact {
+  uint8_t id;
+  uint16_t x;
+  uint16_t y;
+  uint16_t pressure;
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.
@@ -67,6 +76,11 @@ std::vector<unsigned char> encode_input(uint8_t action, uint16_t x_norm, uint16_
                                         uint16_t pressure);
 bool decode_input(const std::vector<unsigned char>& body,
                   uint8_t& action, uint16_t& x_norm, uint16_t& y_norm, uint16_t& pressure);
+
+// TOUCH (app->host): u8 count, then count x { u8 id, u16 x, u16 y, u16 pressure }. Carries
+// the FULL set of active contacts each event (count 0 = all up); capped at 10 contacts.
+std::vector<unsigned char> encode_touch(const std::vector<TouchContact>& contacts);
+bool decode_touch(const std::vector<unsigned char>& body, std::vector<TouchContact>& contacts);
 
 // ORIENTATION (app->host): u8 code (0=0°, 1=90°, 2=180°, 3=270°).
 std::vector<unsigned char> encode_orientation(uint8_t code);

@@ -136,6 +136,35 @@ bool decode_input(const std::vector<unsigned char>& b,
   return true;
 }
 
+std::vector<unsigned char> encode_touch(const std::vector<TouchContact>& contacts) {
+  std::vector<unsigned char> b;
+  const size_t n = contacts.size() < 10 ? contacts.size() : 10;   // cap at 10 slots
+  b.push_back(static_cast<unsigned char>(n));
+  for (size_t i = 0; i < n; ++i) {
+    b.push_back(contacts[i].id);
+    put_u16(b, contacts[i].x);
+    put_u16(b, contacts[i].y);
+    put_u16(b, contacts[i].pressure);
+  }
+  return b;
+}
+bool decode_touch(const std::vector<unsigned char>& b, std::vector<TouchContact>& out) {
+  out.clear();
+  if (b.empty()) return false;
+  const uint8_t n = b[0];
+  if (b.size() != 1u + static_cast<size_t>(n) * 7u) return false;   // 7 bytes per contact
+  const unsigned char* p = b.data() + 1;
+  for (uint8_t i = 0; i < n; ++i, p += 7) {
+    TouchContact c;
+    c.id = p[0];
+    c.x = get_u16(p + 1);
+    c.y = get_u16(p + 3);
+    c.pressure = get_u16(p + 5);
+    out.push_back(c);
+  }
+  return true;
+}
+
 std::vector<unsigned char> encode_orientation(uint8_t code) {
   return {code};
 }
