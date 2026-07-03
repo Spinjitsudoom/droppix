@@ -17,6 +17,7 @@ class VirtualDisplay {
   evdi_handle handle_ = nullptr;
   int node_ = -1;
   bool connected_ = false;
+  int lock_fd_ = -1;   // flock held for this session's life to own node_ across processes
 };
 
 }  // namespace droppix
