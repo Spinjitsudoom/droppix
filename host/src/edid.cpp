@@ -40,7 +40,7 @@ static void write_dtd(unsigned char* d, const Timing& t) {
   d[17] = 0x1E;  // digital separate sync, +h +v
 }
 
-std::vector<unsigned char> build_edid(const Timing& t) {
+std::vector<unsigned char> build_edid(const Timing& t, uint32_t serial) {
   std::array<unsigned char, 128> e{};  // zero-initialised
 
   // Header (bytes 0-7).
@@ -51,8 +51,15 @@ std::vector<unsigned char> build_edid(const Timing& t) {
   // 'D'=4,'P'=16,'X'=24 -> (4<<10)|(16<<5)|24 = 0x1218.
   e[8]  = 0x12;
   e[9]  = 0x18;
-  // Product code (10-11), serial (12-15) left as 0/defaults.
+  // Product code (10-11).
   e[10] = 0x01; e[11] = 0x00;
+  // Serial number (12-15, little-endian): UNIQUE per session so KWin treats multiple droppix
+  // monitors as distinct displays. Identical serials get deduplicated -> only one output
+  // appears in Display settings and the others never composite (freeze on their last frame).
+  e[12] = serial & 0xFF;
+  e[13] = (serial >> 8) & 0xFF;
+  e[14] = (serial >> 16) & 0xFF;
+  e[15] = (serial >> 24) & 0xFF;
   e[16] = 0x01;  // week
   e[17] = 0x21;  // year 2023 (1990 + 0x21)
 

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include "frame_source.h"
 #include "virtual_display.h"
@@ -7,12 +8,15 @@
 namespace droppix {
 class EvdiFrameSource : public FrameSource {
  public:
-  EvdiFrameSource(int width, int height, int refresh_hz)
-      : width_(width), height_(height), refresh_hz_(refresh_hz) {}
+  // serial: unique EDID serial for this output (droppix passes the session port) so KWin
+  // treats concurrent droppix monitors as distinct displays instead of deduplicating them.
+  EvdiFrameSource(int width, int height, int refresh_hz, uint32_t serial = 0)
+      : width_(width), height_(height), refresh_hz_(refresh_hz), serial_(serial) {}
   bool start(int& width, int& height) override;
   Frame next(int timeout_ms) override;
  private:
   int width_, height_, refresh_hz_;
+  uint32_t serial_;
   VirtualDisplay display_;
   std::unique_ptr<Capturer> cap_;
 };
