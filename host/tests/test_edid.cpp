@@ -45,6 +45,24 @@ TEST(Edid, PixelClockEncodedLittleEndianIn10kHzUnits) {
   EXPECT_EQ(clk, 14850);            // 148.5 MHz
 }
 
+TEST(Edid, SerialWrittenLittleEndian) {
+  auto e = build_edid(timing_1080p60(), 0x11223344);
+  EXPECT_EQ(e[12], 0x44); EXPECT_EQ(e[13], 0x33); EXPECT_EQ(e[14], 0x22); EXPECT_EQ(e[15], 0x11);
+}
+TEST(Edid, DifferentSerialsGiveDistinctValidEdids) {
+  // Multiple droppix monitors must not share an EDID identity, or KWin merges them.
+  auto a = build_edid(timing_1080p60(), 27000);
+  auto b = build_edid(timing_1080p60(), 27001);
+  EXPECT_NE(a, b);
+  int sa = 0; for (auto x : a) sa += x; EXPECT_EQ(sa % 256, 0);   // checksum still valid
+  int sb = 0; for (auto x : b) sb += x; EXPECT_EQ(sb % 256, 0);
+  EXPECT_EQ(a.size(), 128u); EXPECT_EQ(b.size(), 128u);
+}
+TEST(Edid, DefaultSerialIsZero) {
+  auto e = build_edid(timing_1080p60());
+  EXPECT_EQ(e[12], 0); EXPECT_EQ(e[13], 0); EXPECT_EQ(e[14], 0); EXPECT_EQ(e[15], 0);
+}
+
 TEST(Edid, ManufacturerIdEncodesDPX) {
   auto e = build_edid(timing_1080p60());
   EXPECT_EQ(e[8], 0x12);

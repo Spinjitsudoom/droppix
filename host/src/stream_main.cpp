@@ -135,7 +135,11 @@ int main(int argc, char** argv) {
     if (w <= 0) w = width;
     if (h <= 0) h = height;
     if (test_pattern) return std::make_unique<droppix::TestPatternSource>(w, h, fps);
-    return std::make_unique<droppix::EvdiFrameSource>(w, h, refresh);
+    // Use the session's port as the EDID serial so each concurrent droppix monitor has a
+    // distinct EDID identity (identical serials make KWin dedupe them: only one output
+    // appears in Display settings, the rest stay frozen). Ports are unique per session.
+    return std::make_unique<droppix::EvdiFrameSource>(w, h, refresh,
+                                                      static_cast<uint32_t>(port));
   };
 
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
