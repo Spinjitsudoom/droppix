@@ -18,6 +18,12 @@ std::set<int> SessionManager::usedPorts() const {
   return p;
 }
 
+QSet<QString> SessionManager::keys() const {
+  QSet<QString> k;
+  for (const auto& s : sessions_) k.insert(s.key);
+  return k;
+}
+
 Session& SessionManager::add(const Session& s) {
   sessions_.append(s);
   return sessions_.last();

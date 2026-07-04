@@ -32,3 +32,12 @@ TEST(SessionManager, RemoveDropsOneAndFreesPort) {
   EXPECT_FALSE(m.has("a")); EXPECT_TRUE(m.has("b")); EXPECT_EQ(m.count(), 1);
   EXPECT_EQ(m.allocatePort(27000), 27000);   // 27000 freed
 }
+
+TEST(SessionManager, KeysListsActiveKeys) {
+  SessionManager m;
+  EXPECT_TRUE(m.keys().isEmpty());
+  m.add(mk("a", 27000)); m.add(mk("b", 27001));
+  EXPECT_EQ(m.keys(), (QSet<QString>{QString("a"), QString("b")}));
+  m.remove("a");
+  EXPECT_EQ(m.keys(), (QSet<QString>{QString("b")}));
+}

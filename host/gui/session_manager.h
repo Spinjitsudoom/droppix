@@ -1,5 +1,6 @@
 #pragma once
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <set>
 #include "port_alloc.h"
@@ -24,6 +25,7 @@ class SessionManager {
   bool has(const QString& key) const;
   Session* find(const QString& key);            // nullptr if none
   std::set<int> usedPorts() const;
+  QSet<QString> keys() const;   // keys of all active sessions
   int allocatePort(int base) const { return allocate_port(base, usedPorts()); }
   int count() const { return static_cast<int>(sessions_.size()); }
   Session& add(const Session& s);               // appends; ref valid until the next mutation
