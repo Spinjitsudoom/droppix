@@ -21,7 +21,9 @@ std::vector<std::string> split(const std::string& line, char delim) {
 // Extract the value of the `id=` TXT record from an avahi parseable txt field,
 // which looks like: "id=abc-123" "other=x"  (each record double-quoted).
 std::string parse_txt_id(const std::string& txt) {
-  const std::string key = "id=";
+  // Anchor to the quoted record boundary so a future attribute whose key
+  // merely ends in "id" (e.g. "uuid=x") can't be matched instead.
+  const std::string key = "\"id=";
   auto pos = txt.find(key);
   if (pos == std::string::npos) return "";
   pos += key.size();

@@ -379,7 +379,8 @@ void MainWindow::onUsbClientsChanged(const QList<UsbClient>& clients) {
 // Repopulates the unified list from both sources (USB first, then network),
 // tagging each item with its transport + connect payload and preserving the
 // prior selection by label. Roles: UserRole = transport ("usb"/"net");
-// UserRole+1 = usb serial OR net address; UserRole+2 = net wake port.
+// UserRole+1 = usb serial OR net address; UserRole+2 = net wake port;
+// UserRole+3 = net TXT id (net items only).
 void MainWindow::rebuildClientList() {
   const QString prevSelected = devicesList_->currentItem()
       ? devicesList_->currentItem()->text() : QString();

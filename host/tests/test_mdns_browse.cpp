@@ -33,3 +33,17 @@ TEST(MdnsBrowse, EmptyTxtGivesEmptyId) {
   ASSERT_EQ(v.size(), 1u);
   EXPECT_EQ(v[0].id, "");
 }
+
+TEST(MdnsBrowse, IdRecordAnchoredNotSubstring) {
+  auto v = parse_avahi_browse(
+    "=;eth0;IPv4;Nexus 10;_droppix-client._tcp;local;h;192.168.1.42;48000;\"uuid=zzz\" \"id=real-abc\"\n");
+  ASSERT_EQ(v.size(), 1u);
+  EXPECT_EQ(v[0].id, "real-abc");
+}
+
+TEST(MdnsBrowse, NoTxtFieldGivesEmptyId) {
+  auto v = parse_avahi_browse(
+    "=;eth0;IPv4;Nexus 10;_droppix-client._tcp;local;h;192.168.1.42;48000\n");
+  ASSERT_EQ(v.size(), 1u);
+  EXPECT_EQ(v[0].id, "");
+}
