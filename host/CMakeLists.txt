@@ -76,6 +76,7 @@ if(Qt6_FOUND)
     gui/settings_dialog.cpp
     gui/port_alloc.cpp
     gui/session_manager.cpp
+    gui/auto_connect.cpp
     gui/resources.qrc
     src/mdns_browse.cpp
     src/usb_scan.cpp
@@ -145,6 +146,8 @@ if(Qt6_FOUND)
     gui/tests/test_session_manager.cpp
     gui/session_manager.cpp
     gui/port_alloc.cpp
+    gui/tests/test_auto_connect.cpp
+    gui/auto_connect.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
