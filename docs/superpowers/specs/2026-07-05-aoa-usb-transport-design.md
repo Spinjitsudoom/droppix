@@ -138,3 +138,34 @@ Wi‑Fi/tethering entry points are untouched.
 - TLS over USB (dropped by decision — physical-cable trust).
 - Removing or changing the Wi‑Fi / USB-tethering transports (kept; AOA is additive).
 - Any change to streaming, evdi, multi-monitor, or the wire protocol.
+
+## M0 validation results (2026-07-06): **GO**
+
+Ran the throwaway spike (`spike/aoa/aoa_spike.c` + `AoaEchoActivity`) on the real
+Nexus 10. Confirmed:
+
+- **AOA protocol version 2** reported by the device.
+- **ACCESSORY_START switches it to accessory mode**; it re-enumerates as `18d1:2d01`
+  (accessory + adb).
+- The host **claims the interface and finds the bulk endpoints** (IN `0x85`, OUT `0x07`).
+- Android **auto-launches our `USB_ACCESSORY_ATTACHED` activity** (once "use by default"
+  is set) and `openAccessory` succeeds (`aoa-echo: accessory opened`).
+- `dumpsys usb` shows **Spacedesk's own AOA accessory filter**
+  (`manufacturer="datronicsoft", model="spacedesk"`) registered alongside ours —
+  confirming Spacedesk drives this exact device over AOA.
+
+Not cleanly captured: a **throughput number**. The throwaway blind-echo hit a setup race
+(the host claiming the interface stalls the app's naive read with `EIO`). This is a
+spike artifact, not a device limit — USB 2.0 is 480 Mbps carrying ~8 Mbps, and Spacedesk
+streams full video over this same path on this same tablet. Real throughput is measured
+in **M2/M4**, where the connection order and the actual protocol (not a two-process blind
+echo) define the data flow.
+
+**Decision: GO** — proceed to M1 (`ByteChannel` refactor) → M2 → M3 → M4.
+
+### State when paused
+- Branch `feat/aoa-usb-transport` holds: this spec, the M0 plan, and the throwaway spike
+  (`spike/aoa/`, `AoaEchoActivity`, `accessory_filter.xml`, the manifest entry). The spike
+  is NOT production — M2 replaces `aoa_spike`'s handshake with `AoaChannel`; M4 replaces
+  `AoaEchoActivity` with the real `UsbAccessory` transport.
+- Resume by planning M1 with writing-plans, then executing M1–M4.
