@@ -1,9 +1,11 @@
 #pragma once
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <vector>
 #include <openssl/ssl.h>
+#include "byte_channel.h"
 #include "protocol.h"
 
 namespace droppix {
@@ -13,6 +15,9 @@ class TransportServer {
   bool listen(uint16_t port);          // 0 = ephemeral
   uint16_t port() const { return port_; }
   bool accept_client(int timeout_ms);
+  // Adopt an already-connected byte stream (e.g. an AOA USB channel) instead of accepting
+  // a TCP client. accept_client() uses this internally with a SocketChannel.
+  void adopt_channel(std::unique_ptr<ByteChannel> ch, std::string peer = "");
   bool read_hello(uint32_t& version, uint32_t& w, uint32_t& h, uint32_t& density,
                   std::string& name, std::string& id, int timeout_ms);
   bool send_config(uint32_t w, uint32_t h, uint32_t fps,
@@ -35,7 +40,7 @@ class TransportServer {
   void set_orientation_handler(std::function<void(uint8_t)> h) {
     orientation_handler_ = std::move(h);
   }
-  bool connected() const { return client_fd_ >= 0; }
+  bool connected() const { return channel_ && channel_->connected(); }
   std::string peer_ip() const { return peer_ip_; }
   void close_all();
   // Enables TLS for all subsequent accepted clients. Call BEFORE accept_client.
@@ -44,12 +49,8 @@ class TransportServer {
 
  private:
   bool send_all(const std::vector<unsigned char>& bytes);
-  bool wait_readable(int fd, int timeout_ms);
-  ssize_t conn_recv(void* buf, size_t n);
-  bool conn_send_all(const unsigned char* p, size_t n);
 
   int listen_fd_ = -1;
-  int client_fd_ = -1;
   uint16_t port_ = 0;
   std::string peer_ip_;
   MessageParser parser_;
@@ -59,6 +60,6 @@ class TransportServer {
   bool tls_ = false;
   std::string cert_, key_;
   SSL_CTX* ctx_ = nullptr;
-  SSL* ssl_ = nullptr;
+  std::unique_ptr<ByteChannel> channel_;   // the live client connection (socket or AOA)
 };
 }  // namespace droppix

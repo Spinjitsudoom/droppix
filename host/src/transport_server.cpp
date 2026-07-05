@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstring>
 #include <openssl/err.h>
+#include "socket_channel.h"
 
 namespace droppix {
 
@@ -33,12 +34,6 @@ bool TransportServer::listen(uint16_t port) {
   return true;
 }
 
-bool TransportServer::wait_readable(int fd, int timeout_ms) {
-  if (fd < 0) return false;
-  pollfd pfd{fd, POLLIN, 0};
-  return ::poll(&pfd, 1, timeout_ms) > 0 && (pfd.revents & POLLIN);
-}
-
 void TransportServer::enable_tls(const std::string& cert, const std::string& key) {
   cert_ = cert; key_ = key; tls_ = true;
   ctx_ = SSL_CTX_new(TLS_server_method());
@@ -57,60 +52,46 @@ void TransportServer::enable_tls(const std::string& cert, const std::string& key
   }
 }
 
-ssize_t TransportServer::conn_recv(void* buf, size_t n) {
-  return tls_ ? static_cast<ssize_t>(SSL_read(ssl_, buf, static_cast<int>(n)))
-              : ::recv(client_fd_, buf, n, 0);
-}
-
-bool TransportServer::conn_send_all(const unsigned char* p, size_t n) {
-  while (n) {
-    ssize_t w = tls_ ? static_cast<ssize_t>(SSL_write(ssl_, p, static_cast<int>(n)))
-                      : ::send(client_fd_, p, n, MSG_NOSIGNAL);
-    if (w <= 0) return false;
-    p += w;
-    n -= static_cast<size_t>(w);
-  }
-  return true;
+void TransportServer::adopt_channel(std::unique_ptr<ByteChannel> ch, std::string peer) {
+  channel_ = std::move(ch);
+  peer_ip_ = std::move(peer);
 }
 
 bool TransportServer::accept_client(int timeout_ms) {
   close_all();  // drop any prior client so its fd can't leak on a new accept
-  if (!wait_readable(listen_fd_, timeout_ms)) return false;
+  if (listen_fd_ < 0) return false;
+  pollfd pfd{listen_fd_, POLLIN, 0};
+  if (::poll(&pfd, 1, timeout_ms) <= 0 || !(pfd.revents & POLLIN)) return false;
+
   sockaddr_in cli{};
   socklen_t cli_len = sizeof(cli);
-  client_fd_ = ::accept(listen_fd_, (sockaddr*)&cli, &cli_len);
-  if (client_fd_ < 0) return false;
+  int fd = ::accept(listen_fd_, (sockaddr*)&cli, &cli_len);
+  if (fd < 0) return false;
   char buf[INET_ADDRSTRLEN] = {0};
-  if (inet_ntop(AF_INET, &cli.sin_addr, buf, sizeof(buf))) {
-    peer_ip_ = buf;
-  } else {
-    peer_ip_.clear();
-  }
+  std::string peer = inet_ntop(AF_INET, &cli.sin_addr, buf, sizeof(buf)) ? buf : "";
   int yes = 1;
-  setsockopt(client_fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+  setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
 
+  SSL* ssl = nullptr;
   if (tls_) {
-    ssl_ = SSL_new(ctx_);
-    if (!ssl_) {
-      std::fprintf(stderr, "tls: SSL_new failed\n");
-      ERR_print_errors_fp(stderr);
-      ::close(client_fd_); client_fd_ = -1;
-      return false;
+    ssl = SSL_new(ctx_);
+    if (!ssl) {
+      std::fprintf(stderr, "tls: SSL_new failed\n"); ERR_print_errors_fp(stderr);
+      ::close(fd); return false;
     }
-    SSL_set_fd(ssl_, client_fd_);
-    if (SSL_accept(ssl_) <= 0) {
-      std::fprintf(stderr, "tls: SSL_accept failed\n");
-      ERR_print_errors_fp(stderr);
-      SSL_free(ssl_); ssl_ = nullptr;
-      ::close(client_fd_); client_fd_ = -1;
-      return false;
+    SSL_set_fd(ssl, fd);
+    if (SSL_accept(ssl) <= 0) {
+      std::fprintf(stderr, "tls: SSL_accept failed\n"); ERR_print_errors_fp(stderr);
+      SSL_free(ssl); ::close(fd); return false;
     }
   }
+  adopt_channel(std::make_unique<SocketChannel>(fd, ssl), std::move(peer));
   return true;
 }
 
 bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, uint32_t& density,
                                  std::string& name, std::string& id, int timeout_ms) {
+  if (!channel_) return false;
   unsigned char buf[1024];
   ParsedMessage m;
   for (;;) {
@@ -118,16 +99,16 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
       if (m.type != MsgType::Hello) continue;
       return decode_hello(m.body, version, w, h, density, name, id);
     }
-    if (!wait_readable(client_fd_, timeout_ms)) return false;
-    ssize_t n = conn_recv(buf, sizeof(buf));
+    if (!channel_->wait_readable(timeout_ms)) return false;
+    ssize_t n = channel_->recv(buf, sizeof(buf));
     if (n <= 0) { close_all(); return false; }
     parser_.feed(buf, static_cast<size_t>(n));
   }
 }
 
 bool TransportServer::send_all(const std::vector<unsigned char>& bytes) {
-  if (client_fd_ < 0) return false;
-  if (!conn_send_all(bytes.data(), bytes.size())) { close_all(); return false; }
+  if (!channel_ || !channel_->connected()) return false;
+  if (!channel_->send_all(bytes.data(), bytes.size())) { close_all(); return false; }
   return true;
 }
 
@@ -150,11 +131,9 @@ bool TransportServer::send_overlay(uint8_t show) {
 }
 
 void TransportServer::poll_control() {
-  if (client_fd_ < 0) return;
-  bool tls_buffered = tls_ && ssl_ && SSL_pending(ssl_) > 0;
-  if (!tls_buffered && !wait_readable(client_fd_, 0)) return;
+  if (!channel_ || !channel_->wait_readable(0)) return;
   unsigned char buf[1024];
-  ssize_t n = conn_recv(buf, sizeof(buf));
+  ssize_t n = channel_->recv(buf, sizeof(buf));
   if (n <= 0) { close_all(); return; }
   parser_.feed(buf, static_cast<size_t>(n));
   ParsedMessage m;
@@ -179,8 +158,7 @@ void TransportServer::poll_control() {
 }
 
 void TransportServer::close_all() {
-  if (ssl_) { SSL_shutdown(ssl_); SSL_free(ssl_); ssl_ = nullptr; }
-  if (client_fd_ >= 0) { ::close(client_fd_); client_fd_ = -1; }
+  if (channel_) { channel_->close(); channel_.reset(); }
 }
 
 TransportServer::~TransportServer() {
