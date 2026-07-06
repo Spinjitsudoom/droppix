@@ -31,6 +31,19 @@ std::unique_ptr<AoaChannel> aoa_connect(const std::string& serial) {
   libusb_context* ctx = nullptr;
   if (libusb_init(&ctx)) return nullptr;
 
+  // 0) If a previous attempt left a device stuck in accessory mode, reset it back to normal
+  // so we can run the handshake fresh (the non-accessory search below then finds it).
+  {
+    libusb_device_handle* acc = libusb_open_device_with_vid_pid(ctx, GOOGLE_VID, ACC_PID1);
+    if (!acc) acc = libusb_open_device_with_vid_pid(ctx, GOOGLE_VID, ACC_PID0);
+    if (acc) {
+      libusb_reset_device(acc);
+      libusb_close(acc);
+      timespec ts{1, 500 * 1000 * 1000};   // give it time to re-enumerate to the default config
+      nanosleep(&ts, nullptr);
+    }
+  }
+
   // 1) Find the target Android (still in non-accessory mode) and open it.
   libusb_device_handle* h = nullptr;
   libusb_device** list;

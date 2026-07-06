@@ -174,6 +174,9 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 // errors before any video arrives: the host's interface-claim can EIO the first
                 // read (M0 finding). One connection; finishes when the cable is unplugged.
                 val usb = getSystemService(Context.USB_SERVICE) as UsbManager
+                // Let the host finish claiming the interface before we open the accessory — opening
+                // mid-claim EIOs the first read (M0: opening late, after a manual tap, avoided it).
+                Thread.sleep(1200)
                 var attempt = 0
                 while (running && attempt < 20) {
                     attempt++
