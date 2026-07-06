@@ -11,6 +11,7 @@ message(STATUS "Using libevdi: ${EVDI_LIB}")
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavcodec libavutil libswscale)
+pkg_check_modules(LIBUSB REQUIRED IMPORTED_TARGET libusb-1.0)  # AOA USB transport
 find_package(Threads REQUIRED)
 find_package(OpenSSL REQUIRED)
 
@@ -38,13 +39,14 @@ add_library(droppix_core
   src/mdns_browse.cpp
   src/audio_streamer.cpp
   src/tether_discovery.cpp
+  src/aoa_channel.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
   third_party/evdi
   third_party/stb
 )
-target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG PkgConfig::LIBUSB OpenSSL::SSL OpenSSL::Crypto)
 
 add_executable(droppix_spike src/spike_main.cpp)
 target_link_libraries(droppix_spike PRIVATE droppix_core)
