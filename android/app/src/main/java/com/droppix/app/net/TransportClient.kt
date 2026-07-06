@@ -5,6 +5,8 @@ import com.droppix.app.protocol.MsgType
 import com.droppix.app.protocol.Protocol
 import com.droppix.app.stats.RateMeter
 import com.droppix.app.stats.StatsSink
+import java.io.InputStream
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLSocket
@@ -56,6 +58,8 @@ class TransportClient {
         } catch (_: java.util.concurrent.RejectedExecutionException) { /* sender shut down */ }
     }
 
+    // Wi-Fi/localhost path: open a TLS socket (pinning the host cert for non-localhost), then
+    // run the protocol over its streams.
     fun run(host: String, port: Int, width: Int, height: Int, density: Int,
             listener: StreamListener, isRunning: () -> Boolean,
             stats: StatsSink? = null, pingIntervalMs: Long = 1000,
@@ -78,15 +82,26 @@ class TransportClient {
             }
 
             socket.soTimeout = 1000  // periodic wakeups so isRunning() is checked
+            runOverChannel(socket.getInputStream(), socket.getOutputStream(),
+                width, height, density, listener, isRunning, stats, pingIntervalMs, name, id)
+        } finally {
+            try { socket.close() } catch (_: Exception) {}
+        }
+    }
 
-            val outStream = socket.getOutputStream()
-            out = outStream
-            val input = socket.getInputStream()
-
+    // Transport-agnostic protocol loop: sends HELLO, then reads CONFIG/VIDEO/AUDIO/OVERLAY and
+    // answers PING while isRunning(). Used over a TLS socket (run) or a USB-accessory FD (AOA).
+    // The caller owns `input`/`output` and closes them; this only nulls `out` on exit.
+    fun runOverChannel(input: InputStream, output: OutputStream, width: Int, height: Int, density: Int,
+                       listener: StreamListener, isRunning: () -> Boolean,
+                       stats: StatsSink? = null, pingIntervalMs: Long = 1000,
+                       name: String = "", id: String = "") {
+        try {
+            out = output
             synchronized(sendLock) {
-                outStream.write(Protocol.encodeMessage(MsgType.HELLO,
+                output.write(Protocol.encodeMessage(MsgType.HELLO,
                     Protocol.encodeHello(Protocol.VERSION, width, height, density, name, id)))
-                outStream.flush()
+                output.flush()
             }
 
             val parser = MessageParser()
@@ -97,8 +112,8 @@ class TransportClient {
                 val nowMs = System.currentTimeMillis()
                 if (stats != null && nowMs - lastPing >= pingIntervalMs) {
                     synchronized(sendLock) {
-                        outStream.write(Protocol.encodeMessage(MsgType.PING, longToBytes(System.nanoTime())))
-                        outStream.flush()
+                        output.write(Protocol.encodeMessage(MsgType.PING, longToBytes(System.nanoTime())))
+                        output.flush()
                     }
                     lastPing = nowMs
                 }
@@ -118,7 +133,7 @@ class TransportClient {
                             }
                             MsgType.PING -> {
                                 val pong = Protocol.encodeMessage(MsgType.PONG, msg.body)
-                                synchronized(sendLock) { outStream.write(pong); outStream.flush() }
+                                synchronized(sendLock) { output.write(pong); output.flush() }
                             }
                             MsgType.PONG -> if (stats != null && msg.body.size >= 8) {
                                 stats.rttMs = (System.nanoTime() - bytesToLong(msg.body)) / 1_000_000.0
@@ -136,7 +151,6 @@ class TransportClient {
             }
         } finally {
             out = null
-            try { socket.close() } catch (_: Exception) {}
         }
     }
 }
