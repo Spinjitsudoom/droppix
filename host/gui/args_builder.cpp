@@ -3,7 +3,8 @@
 namespace droppix {
 
 Command build_command(const Settings& s, const std::string& stream_bin,
-                      int port, const std::string& touch_name) {
+                      int port, const std::string& touch_name,
+                      const std::string& usb_aoa_serial) {
   const int use_port = (port >= 0) ? port : s.port;
   const std::string tname = touch_name.empty() ? "droppix-touch" : touch_name;
   std::vector<std::string> a;  // droppix_stream's own arguments
@@ -30,7 +31,11 @@ Command build_command(const Settings& s, const std::string& stream_bin,
   a.push_back("--stats-json");
   if (s.audio) a.push_back("--audio");
   if (s.overlay) a.push_back("--overlay");
-  if (s.tls && !s.certPath.empty()) {
+  if (!usb_aoa_serial.empty()) {
+    // USB/AOA session: stream over the cable, no TLS (physical trust). The streamer
+    // internally skips listen/TLS when --usb-aoa is set; --port is still harmless.
+    a.push_back("--usb-aoa"); a.push_back(usb_aoa_serial);
+  } else if (s.tls && !s.certPath.empty()) {
     a.push_back("--tls");
     a.push_back("--cert"); a.push_back(s.certPath);
     a.push_back("--key");  a.push_back(s.keyPath);

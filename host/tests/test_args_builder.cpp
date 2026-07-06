@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <algorithm>
 #include "args_builder.h"
 
 using namespace droppix;
@@ -129,4 +130,44 @@ TEST(ArgsBuilder, AudioFlagAppendedWhenEnabled) {
   droppix::Settings s2; s2.source = droppix::Settings::Source::Evdi; s2.audio = false;
   auto c2 = droppix::build_command(s2, "/usr/bin/droppix_stream");
   for (auto& a : c2.args) EXPECT_NE(a, std::string("--audio"));
+}
+
+TEST(ArgsBuilder, UsbAoaAddsSerialAndOmitsTls) {
+  droppix::Settings s;
+  s.source = droppix::Settings::Source::Evdi;
+  s.tls = true;
+  s.certPath = "/tmp/cert.pem";
+  s.keyPath = "/tmp/key.pem";
+  auto c = droppix::build_command(s, "/opt/droppix_stream", 27001, "droppix-touch-27001",
+                                  "R32D204ZH6J");
+  // evdi -> pkexec wrapper; args include the binary first.
+  EXPECT_EQ(c.program, "pkexec");
+  auto has = [&](const std::string& flag) {
+    return std::find(c.args.begin(), c.args.end(), flag) != c.args.end();
+  };
+  // --usb-aoa <serial> present, in order.
+  auto it = std::find(c.args.begin(), c.args.end(), "--usb-aoa");
+  ASSERT_NE(it, c.args.end());
+  ASSERT_NE(std::next(it), c.args.end());
+  EXPECT_EQ(*std::next(it), "R32D204ZH6J");
+  // TLS omitted for the cable.
+  EXPECT_FALSE(has("--tls"));
+  EXPECT_FALSE(has("--cert"));
+  // evdi flags still present.
+  EXPECT_TRUE(has("--refresh"));
+  EXPECT_TRUE(has("--width"));
+}
+
+TEST(ArgsBuilder, NoUsbAoaByDefault) {
+  droppix::Settings s;
+  s.source = droppix::Settings::Source::Evdi;
+  s.tls = true;
+  s.certPath = "/tmp/cert.pem";
+  s.keyPath = "/tmp/key.pem";
+  auto c = droppix::build_command(s, "/opt/droppix_stream", 27000, "droppix-touch");
+  auto has = [&](const std::string& flag) {
+    return std::find(c.args.begin(), c.args.end(), flag) != c.args.end();
+  };
+  EXPECT_FALSE(has("--usb-aoa"));
+  EXPECT_TRUE(has("--tls"));   // unchanged behavior when no serial
 }
