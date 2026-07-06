@@ -11,6 +11,8 @@
 #include "mdns_advertiser.h"
 #include "mdns_browser.h"
 #include "tether_scanner.h"
+#include "aoa_scanner.h"
+#include "aoa_known_store.h"
 #include "approved_store.h"
 #include "cert_manager.h"
 #include "audio_sink.h"
@@ -47,6 +49,7 @@ class MainWindow : public QMainWindow {
   void showAbout();             // Help -> About developer-info dialog
   void onDevicesChanged(const QList<MdnsDevice>& devices);
   void onTetherClientsChanged(const QList<TetherClient>& clients);
+  void onAoaClientsChanged(const QList<AoaClient>& clients);
   void rebuildClientList();     // merge netDevices_ + tetherClients_ into devicesList_
   void onConnectToSelectedDevice();
   // Start a monitor for one specific device. quietIfBusy=true suppresses the
@@ -81,6 +84,7 @@ class MainWindow : public QMainWindow {
 
   ProfileStore store_;
   ApprovedStore approved_;
+  AoaKnownStore knownAoa_;
   CertManager cert_;
   DroppixAudioSink audioSink_;
   SessionManager sessions_;     // one session (= streamer = monitor) per connected tablet
@@ -88,8 +92,10 @@ class MainWindow : public QMainWindow {
   quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;
   TetherScanner tetherScanner_;
+  AoaScanner aoaScanner_;
   QList<MdnsDevice> netDevices_;   // last network-discovered clients
   QList<TetherClient> tetherClients_;   // last USB-tether-discovered clients
+  QList<AoaClient> aoaClients_;   // last USB-discovered AOA tablets
   QTimer autoConnectTimer_;   // debounces discovery bursts before auto-connecting
   QHash<QString, qint64> pendingWakes_;
   QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to

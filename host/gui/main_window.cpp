@@ -125,6 +125,7 @@ MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent),
       store_(configDir()),
       approved_(configDir()),
+      knownAoa_(configDir()),
       cert_(configDir()) {
   streamBin_ = resolveStreamBin();
   cert_.regenerate();   // fresh cert => new pairing code every launch (per-restart rotation)
@@ -252,6 +253,7 @@ MainWindow::MainWindow(QWidget* parent)
   // Unified "Available clients" list: network (mDNS) + USB-tether (UDP probe) sources.
   connect(&browser_, &MdnsBrowser::devicesChanged, this, &MainWindow::onDevicesChanged);
   connect(&tetherScanner_, &TetherScanner::clientsChanged, this, &MainWindow::onTetherClientsChanged);
+  connect(&aoaScanner_, &AoaScanner::clientsChanged, this, &MainWindow::onAoaClientsChanged);
   connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::onConnectToSelectedDevice);
   connect(devicesList_, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem*){ onConnectToSelectedDevice(); });
@@ -262,6 +264,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   if (browser_.available()) browser_.start();
   tetherScanner_.start();   // always available (no external tool); keeps the devices list live
+  aoaScanner_.start();   // poll USB for AOA-capable tablets while idle
 
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
@@ -276,7 +279,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 void MainWindow::showPairingPopup(const QString& ip) {
-  if (ip == "127.0.0.1") return;   // USB / localhost is pairing-exempt — no code needed
+  if (ip.isEmpty() || ip == "127.0.0.1") return;   // USB / AOA / localhost: no pairing code
   if (!pairingPopup_) {
     pairingPopup_ = new QDialog(this);
     pairingPopup_->setWindowTitle("Pairing");
@@ -371,6 +374,12 @@ void MainWindow::onTetherClientsChanged(const QList<TetherClient>& clients) {
   autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
 }
 
+void MainWindow::onAoaClientsChanged(const QList<AoaClient>& clients) {
+  aoaClients_ = clients;
+  rebuildClientList();
+  autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
+}
+
 // Repopulates the unified list from both sources (USB-tether first, then mDNS/network) —
 // both connect via the net/WAKE path, tagging each item with its connect payload and
 // preserving the prior selection by label. Roles: UserRole = transport (always "net");
@@ -386,6 +395,18 @@ void MainWindow::rebuildClientList() {
     item->setData(Qt::UserRole + 1, t.address);
     item->setData(Qt::UserRole + 2, (uint)t.wakePort);
     item->setData(Qt::UserRole + 3, t.id);
+    devicesList_->addItem(item);
+    if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
+  }
+  for (const auto& a : aoaClients_) {
+    if (a.accessoryMode) continue;                    // owned-by-session / transient
+    if (sessions_.has("usb-aoa:" + a.serial)) continue;  // already streaming this tablet
+    const QString name = a.product.isEmpty() ? a.serial : a.product;
+    auto* item = new QListWidgetItem(QString("%1 — USB").arg(name));
+    item->setData(Qt::UserRole, "usb-aoa");
+    item->setData(Qt::UserRole + 1, a.serial);        // ident = serial
+    item->setData(Qt::UserRole + 2, (uint)0);         // no wake port
+    item->setData(Qt::UserRole + 3, a.serial);        // id = serial (known-store key)
     devicesList_->addItem(item);
     if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
   }
@@ -424,13 +445,18 @@ bool MainWindow::connectDevice(const QString& key, const QString& label, const Q
   }
   const int port = sessions_.allocatePort(collectSettings().port);
   if (port < 0) { if (!quietIfBusy) QMessageBox::information(this, "Droppix", "Monitor limit reached (4)."); return false; }
-  const QString addr = ident;
-  auto direct = [this, addr, wakePort, port]{
-    auto bytes = encode_wake((uint16_t)port);
-    QByteArray dg(reinterpret_cast<const char*>(bytes.data()), (int)bytes.size());
-    pendingWakes_[addr] = QDateTime::currentMSecsSinceEpoch();
-    QUdpSocket sock; sock.writeDatagram(dg, QHostAddress(addr), wakePort);
-  };
+  std::function<void()> direct;
+  if (transport == "usb-aoa") {
+    direct = []{};   // accessory auto-launches the app; nothing to send
+  } else {
+    const QString addr = ident;
+    direct = [this, addr, wakePort, port]{
+      auto bytes = encode_wake((uint16_t)port);
+      QByteArray dg(reinterpret_cast<const char*>(bytes.data()), (int)bytes.size());
+      pendingWakes_[addr] = QDateTime::currentMSecsSinceEpoch();
+      QUdpSocket sock; sock.writeDatagram(dg, QHostAddress(addr), wakePort);
+    };
+  }
   startSession(key, label, transport, port, id, direct);
   return true;
 }
@@ -440,17 +466,22 @@ void MainWindow::evaluateAutoConnect() {
   QList<AutoConnectCandidate> cands;
   for (int i = 0; i < devicesList_->count(); ++i) {
     auto* it = devicesList_->item(i);
-    const QString addr = it->data(Qt::UserRole + 1).toString();
+    const QString transport = it->data(Qt::UserRole).toString();
+    const QString ident = it->data(Qt::UserRole + 1).toString();
     const QString id = it->data(Qt::UserRole + 3).toString();
-    cands.push_back({QString("net:") + addr, id, !id.isEmpty() && approved_.isApproved(id)});
+    const bool eligible = (transport == "usb-aoa")
+        ? knownAoa_.contains(ident)                       // physical-trust: streamed before
+        : (!id.isEmpty() && approved_.isApproved(id));    // net: paired/approved
+    cands.push_back({transport + ":" + ident, id, eligible});
   }
   const QList<QString> toConnect = devicesToConnect(true, cands, sessions_.keys(), sessions_.ids());
   for (const QString& key : toConnect) {
-    const QString addr = key.mid(4);
     for (int i = 0; i < devicesList_->count(); ++i) {
       auto* it = devicesList_->item(i);
-      if (it->data(Qt::UserRole + 1).toString() != addr) continue;
-      connectDevice(key, it->text(), "net", addr,
+      const QString transport = it->data(Qt::UserRole).toString();
+      const QString ident = it->data(Qt::UserRole + 1).toString();
+      if (transport + ":" + ident != key) continue;
+      connectDevice(key, it->text(), transport, ident,
                     (quint16)it->data(Qt::UserRole + 2).toUInt(),
                     it->data(Qt::UserRole + 3).toString(), /*quietIfBusy=*/true);
       break;
@@ -608,7 +639,8 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   Settings s = collectSettings();
   if (sessions_.count() > 0) s.audio = false;   // audio single-session (shared droppix-audio sink)
   const std::string tname = ("droppix-touch-" + QString::number(port)).toStdString();
-  Command cmd = build_command(s, streamBin_, port, tname);
+  const std::string aoaSerial = (transport == "usb-aoa") ? id.toStdString() : std::string();
+  Command cmd = build_command(s, streamBin_, port, tname, aoaSerial);
   qInfo("$ %s ... (:%d)", cmd.program.c_str(), port);
   c->start(cmd);
 
@@ -629,8 +661,11 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
 
 void MainWindow::wireSession(StreamController* c, const QString& key) {
   connect(c, &StreamController::logLine, this, [](const QString& l){ qInfo("%s", qUtf8Printable(l)); });
-  connect(c, &StreamController::statsReceived, this, [this](const Stats& s){
-    if (s.client_connected) anyConnected_ = true;
+  connect(c, &StreamController::statsReceived, this, [this, key](const Stats& s){
+    if (s.client_connected) {
+      anyConnected_ = true;
+      if (key.startsWith("usb-aoa:")) knownAoa_.add(key.mid(8));   // enable future auto-start
+    }
     updateStatus();
   });
   connect(c, &StreamController::runningChanged, this, [this, key](bool r){
