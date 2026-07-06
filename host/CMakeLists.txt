@@ -81,6 +81,7 @@ if(Qt6_FOUND)
     gui/port_alloc.cpp
     gui/session_manager.cpp
     gui/auto_connect.cpp
+    gui/aoa_known_store.cpp
     gui/resources.qrc
     src/mdns_browse.cpp
     src/tether_discovery.cpp
@@ -154,6 +155,8 @@ if(Qt6_FOUND)
     gui/port_alloc.cpp
     gui/tests/test_auto_connect.cpp
     gui/auto_connect.cpp
+    gui/tests/test_aoa_known_store.cpp
+    gui/aoa_known_store.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
