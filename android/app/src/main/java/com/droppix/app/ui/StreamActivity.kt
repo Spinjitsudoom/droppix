@@ -12,6 +12,11 @@ import android.view.Surface
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
+import android.content.Context
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
+import java.io.FileInputStream
+import java.io.FileOutputStream
 import com.droppix.app.R
 import com.droppix.app.audio.AudioPlayer
 import com.droppix.app.decode.VideoDecoder
@@ -31,6 +36,10 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
 
     private val host by lazy { intent.getStringExtra("host") ?: "127.0.0.1" }
     private val port by lazy { intent.getIntExtra("port", 27000) }
+    // Set only when the system launched us from a USB_ACCESSORY_ATTACHED intent => stream over AOA.
+    private val aoaAccessory: UsbAccessory? by lazy {
+        intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
+    }
 
     @Volatile private var running = false
     @Volatile private var surface: Surface? = null
@@ -133,6 +142,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             val c = TransportClient()
             val tlsTrust = TlsTrust(this@StreamActivity)
             client = c
+            var sawVideo = false
             val player = AudioPlayer().apply { start() }
             audioPlayer = player
             val listener = object : StreamListener {
@@ -149,6 +159,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                     }
                 }
                 override fun onVideo(video: Protocol.Video) {
+                    sawVideo = true
                     decoder?.submit(video.nal, video.ptsUs)
                 }
                 override fun onAudio(pcm: ByteArray) { player.submit(pcm) }
@@ -156,29 +167,63 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                     runOnUiThread { overlay.visibility = if (show) View.VISIBLE else View.GONE }
                 }
             }
-            // The host re-accepts clients in a loop, so keep dialing until paused.
-            while (running) {
-                try {
-                    Log.i(TAG, "connecting to $host:$port")
-                    c.run(host, port, 1920, 1080,
-                        resources.displayMetrics.densityDpi, listener, { running }, stats,
-                        name = DeviceIdentity.displayName(this@StreamActivity),
-                        id = DeviceIdentity.stableId(this@StreamActivity),
-                        tlsTrust = tlsTrust)
-                    Log.i(TAG, "stream session ended")
-                } catch (e: CertChangedException) {
-                    Log.w(TAG, "cert changed for $host: ${e.message}")
-                    running = false
-                    runOnUiThread { showCertChangedDialog(tlsTrust) }
-                } catch (e: IllegalStateException) {
-                    Log.w(TAG, "not paired for $host: ${e.message}")
-                    running = false
-                    runOnUiThread { finish() }
-                } catch (e: Exception) {
-                    Log.w(TAG, "connect/stream failed: ${e.message}")
+            val acc = aoaAccessory
+            if (acc != null) {
+                // AOA (USB cable): open the accessory and stream the protocol over its FD
+                // streams — no TLS/PIN (the cable is the trust boundary). Retry the open if it
+                // errors before any video arrives: the host's interface-claim can EIO the first
+                // read (M0 finding). One connection; finishes when the cable is unplugged.
+                val usb = getSystemService(Context.USB_SERVICE) as UsbManager
+                var attempt = 0
+                while (running && attempt < 20) {
+                    attempt++
+                    sawVideo = false
+                    val pfd = usb.openAccessory(acc)
+                    if (pfd == null) { Log.w(TAG, "aoa: openAccessory null ($attempt)"); Thread.sleep(200); continue }
+                    try {
+                        Log.i(TAG, "aoa: streaming (attempt $attempt)")
+                        c.runOverChannel(FileInputStream(pfd.fileDescriptor),
+                            FileOutputStream(pfd.fileDescriptor), 1920, 1080,
+                            resources.displayMetrics.densityDpi, listener, { running }, stats,
+                            name = DeviceIdentity.displayName(this@StreamActivity),
+                            id = DeviceIdentity.stableId(this@StreamActivity))
+                        Log.i(TAG, "aoa: session ended")
+                    } catch (e: Exception) {
+                        Log.w(TAG, "aoa: attempt $attempt ended: ${e.message}")
+                    } finally {
+                        decoder?.release(); decoder = null
+                        try { pfd.close() } catch (_: Exception) {}
+                    }
+                    if (sawVideo) break     // real data flowed then ended -> done
+                    Thread.sleep(200)       // errored before any video -> retry the open
                 }
-                decoder?.release(); decoder = null
-                if (running) Thread.sleep(1000)  // back off before retrying
+                running = false
+                runOnUiThread { finish() }
+            } else {
+                // The host re-accepts clients in a loop, so keep dialing until paused.
+                while (running) {
+                    try {
+                        Log.i(TAG, "connecting to $host:$port")
+                        c.run(host, port, 1920, 1080,
+                            resources.displayMetrics.densityDpi, listener, { running }, stats,
+                            name = DeviceIdentity.displayName(this@StreamActivity),
+                            id = DeviceIdentity.stableId(this@StreamActivity),
+                            tlsTrust = tlsTrust)
+                        Log.i(TAG, "stream session ended")
+                    } catch (e: CertChangedException) {
+                        Log.w(TAG, "cert changed for $host: ${e.message}")
+                        running = false
+                        runOnUiThread { showCertChangedDialog(tlsTrust) }
+                    } catch (e: IllegalStateException) {
+                        Log.w(TAG, "not paired for $host: ${e.message}")
+                        running = false
+                        runOnUiThread { finish() }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "connect/stream failed: ${e.message}")
+                    }
+                    decoder?.release(); decoder = null
+                    if (running) Thread.sleep(1000)  // back off before retrying
+                }
             }
             client = null
             c.close()

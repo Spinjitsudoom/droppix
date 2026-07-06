@@ -22,13 +22,11 @@
         </activity>
         <activity
             android:name=".ui.StreamActivity"
-            android:exported="false"
+            android:exported="true"
             android:screenOrientation="fullSensor"
             android:configChanges="orientation|screenSize|keyboardHidden"
-            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen" />
-        <activity
-            android:name=".ui.AoaEchoActivity"
-            android:exported="true">
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+            <!-- Launched by the system on USB_ACCESSORY_ATTACHED to stream over the cable (AOA). -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
             </intent-filter>
