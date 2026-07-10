@@ -25,6 +25,11 @@ struct DesktopBackend {
   virtual std::vector<OutputInfo> outputs() = 0;              // enabled outputs w/ geometry
   virtual void map_touch(const std::string& output,
                          const std::string& touch_dev) = 0;   // best-effort; may no-op
+  // Called once the droppix output is identified. Wayland compositors adopt/place evdi
+  // outputs themselves (default no-op); X11 must do it explicitly (reverse-PRIME provider
+  // link + placement, or the desktop shows black). Returns true if the layout may have
+  // changed so the caller re-queries geometry.
+  virtual bool adopt_output(const std::string& output) { (void)output; return false; }
 };
 
 // KDE Plasma: today's behavior, relocated (kscreen-doctor -o + KWin InputDevice DBus).
@@ -33,6 +38,16 @@ class KWinBackend : public DesktopBackend {
   const char* name() const override { return "kwin"; }
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
+};
+
+// Non-KDE X11 desktops (Cinnamon, XFCE, MATE, GNOME-on-Xorg, i3, ...): xrandr for
+// output geometry, `xinput map-to-output` to pin the touchscreen to the droppix output.
+class X11Backend : public DesktopBackend {
+ public:
+  const char* name() const override { return "x11"; }
+  std::vector<OutputInfo> outputs() override;
+  void map_touch(const std::string& output, const std::string& touch_dev) override;
+  bool adopt_output(const std::string& output) override;
 };
 
 // Unknown/unsupported compositor: display still works (evdi is compositor-driven);
@@ -44,11 +59,13 @@ class GenericBackend : public DesktopBackend {
   void map_touch(const std::string& output, const std::string& touch_dev) override;
 };
 
-enum class BackendKind { KWin, Generic };
+enum class BackendKind { KWin, X11, Generic };
 
 // PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
-// (empty desktop AND kscreen-doctor present) -> KWin; otherwise Generic.
-BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen);
+// (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
+// xrandr+xinput available -> X11; otherwise Generic.
+BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
+                                bool x11_session, bool has_x11_tools);
 
 // Detect the desktop (env + `command -v kscreen-doctor`), pick the backend, log it.
 std::shared_ptr<DesktopBackend> make_desktop_backend();

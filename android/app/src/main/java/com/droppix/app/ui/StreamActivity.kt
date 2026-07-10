@@ -172,7 +172,10 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                 // AOA (USB cable): open the accessory and stream the protocol over its FD
                 // streams — no TLS/PIN (the cable is the trust boundary). Retry the open if it
                 // errors before any video arrives: the host's interface-claim can EIO the first
-                // read (M0 finding). One connection; finishes when the cable is unplugged.
+                // read (M0 finding). Keep serving across session ends (host restart, USB hiccup,
+                // orientation-driven restream) like the Wi-Fi path does — a successful session
+                // resets the retry budget, so we only give up after 20 CONSECUTIVE failures
+                // (~4s), which is what an actual unplug looks like (openAccessory returns null).
                 val usb = getSystemService(Context.USB_SERVICE) as UsbManager
                 // Let the host finish claiming the interface before we open the accessory — opening
                 // mid-claim EIOs the first read (M0: opening late, after a manual tap, avoided it).
@@ -197,8 +200,8 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                         decoder?.release(); decoder = null
                         try { pfd.close() } catch (_: Exception) {}
                     }
-                    if (sawVideo) break     // real data flowed then ended -> done
-                    Thread.sleep(200)       // errored before any video -> retry the open
+                    if (sawVideo) attempt = 0  // real session ended -> reconnect with a fresh budget
+                    Thread.sleep(200)
                 }
                 running = false
                 runOnUiThread { finish() }

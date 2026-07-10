@@ -402,13 +402,13 @@ void MainWindow::rebuildClientList() {
   }
   // Count display names among listable AOA tablets so identical-model duplicates can be
   // disambiguated by a serial tail (two "Nexus 10 — USB" rows would otherwise be identical).
+  // NOTE: accessory mode alone does NOT mean "owned by a session" — a device can be left
+  // in accessory mode by an ended session (nothing reverts it), so the only reliable
+  // ownership check is an actual active session for this serial, below.
   QHash<QString, int> aoaNameCount;
-  for (const auto& a : aoaClients_) {
-    if (a.accessoryMode) continue;
+  for (const auto& a : aoaClients_)
     aoaNameCount[a.product.isEmpty() ? a.serial : a.product]++;
-  }
   for (const auto& a : aoaClients_) {
-    if (a.accessoryMode) continue;                    // owned-by-session / transient
     if (sessions_.has("usb-aoa:" + a.serial)) continue;  // already streaming this tablet
     const QString name = a.product.isEmpty() ? a.serial : a.product;
     const QString label = aoaNameCount.value(name) > 1
@@ -486,8 +486,16 @@ void MainWindow::evaluateAutoConnect() {
         : (!id.isEmpty() && approved_.isApproved(id));    // net: paired/approved
     cands.push_back({transport + ":" + ident, id, eligible});
   }
-  const QList<QString> toConnect = devicesToConnect(true, cands, sessions_.keys(), sessions_.ids());
-  for (const QString& key : toConnect) {
+  QList<ActiveSessionRef> active;
+  for (const auto& s : sessions_.list()) active.push_back({s.key, s.id});
+  const AutoConnectPlan plan = devicesToConnect(true, cands, active);
+  // USB takeover: stop the tablet's Wi-Fi session; the re-armed evaluation connects the
+  // cable once the teardown has removed the session.
+  for (const QString& key : plan.disconnect)
+    if (Session* s = sessions_.find(key))
+      if (s->controller) s->controller->stop();
+  if (!plan.disconnect.isEmpty()) autoConnectTimer_.start();
+  for (const QString& key : plan.connect) {
     for (int i = 0; i < devicesList_->count(); ++i) {
       auto* it = devicesList_->item(i);
       const QString transport = it->data(Qt::UserRole).toString();

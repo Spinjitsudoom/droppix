@@ -2,3 +2,9 @@ build/
 host/build/
 compile_commands.json
 complete builds/
+
+# compiled spike binaries (only the sources are tracked)
+spike/**/aoa_spike
+
+# personal scratch notes
+im lazy

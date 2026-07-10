@@ -56,6 +56,78 @@ TEST(MonitorGeometry, NoNewOutputWhenUnchanged) {
   EXPECT_FALSE(select_new_output(outs, outs, r));
 }
 
+// Real `xrandr --query` shape: header lines at column 0, indented mode lines,
+// a global "Screen N:" line, optional "primary", and disconnected outputs.
+static const char* kXrandrSample =
+  "Screen 0: minimum 320 x 200, current 3840 x 1080, maximum 16384 x 16384\n"
+  "eDP-1 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis) 309mm x 173mm\n"
+  "   1920x1080     60.05*+  60.05\n"
+  "   1280x720      60.05\n"
+  "HDMI-1 disconnected (normal left inverted right x axis y axis)\n"
+  "DVI-I-1-1 connected 1920x1080+1920+0 (normal left inverted right x axis y axis) 0mm x 0mm\n"
+  "   1920x1080     60.00*\n";
+
+TEST(MonitorGeometry, ParsesXrandrOutputs) {
+  auto outs = parse_xrandr_outputs(kXrandrSample);
+  ASSERT_EQ(outs.size(), 3u);
+  EXPECT_EQ(outs[0].name, "eDP-1");
+  EXPECT_TRUE(outs[0].enabled);   // "primary" token must be skipped, not break parsing
+  EXPECT_EQ(outs[0].geom.x, 0); EXPECT_EQ(outs[0].geom.w, 1920); EXPECT_EQ(outs[0].geom.h, 1080);
+  EXPECT_EQ(outs[1].name, "HDMI-1");
+  EXPECT_FALSE(outs[1].enabled);
+  EXPECT_EQ(outs[2].name, "DVI-I-1-1");
+  EXPECT_TRUE(outs[2].enabled);
+  EXPECT_EQ(outs[2].geom.x, 1920);
+}
+TEST(MonitorGeometry, XrandrConnectedButInactiveIsDisabled) {
+  // Connected with no active mode: no WxH+X+Y before the "(...)" flags.
+  auto outs = parse_xrandr_outputs(
+    "eDP-1 connected (normal left inverted right x axis y axis)\n");
+  ASSERT_EQ(outs.size(), 1u);
+  EXPECT_FALSE(outs[0].enabled);
+}
+TEST(MonitorGeometry, XrandrFeedsSelectNewOutput) {
+  // The backend-agnostic diff helper works on xrandr-parsed outputs unchanged.
+  auto before = parse_xrandr_outputs(
+    "eDP-1 connected primary 1920x1080+0+0 (normal) 309mm x 173mm\n");
+  auto after = parse_xrandr_outputs(
+    "eDP-1 connected primary 1920x1080+0+0 (normal) 309mm x 173mm\n"
+    "DVI-I-1-1 connected 1920x1080+1920+0 (normal) 0mm x 0mm\n");
+  Rect r;
+  ASSERT_TRUE(select_new_output(before, after, r));
+  EXPECT_EQ(r.x, 1920); EXPECT_EQ(r.w, 1920); EXPECT_EQ(r.h, 1080);
+}
+
+TEST(MonitorGeometry, SameSizePreexistingScreenNeverWinsSizeMatch) {
+  // Laptop panel (eDP-1) and the tablet share 1920x1080. eDP-1 was enabled BEFORE the
+  // source created its monitor, so it must not be picked; the new DVI-I-1-1 must win.
+  auto before = parse_xrandr_outputs(
+    "eDP-1 connected primary 1920x1080+0+0 (normal) 309mm x 173mm\n");
+  auto after = parse_xrandr_outputs(
+    "eDP-1 connected primary 1920x1080+0+0 (normal) 309mm x 173mm\n"
+    "DVI-I-1-1 connected 1920x1080+1920+0 (normal) 480mm x 270mm\n");
+  OutputInfo o;
+  ASSERT_TRUE(select_droppix(after, before, 1920, 1080, o));
+  EXPECT_EQ(o.name, "DVI-I-1-1");
+}
+TEST(MonitorGeometry, X11EvdiConnectorNamePreferredEvenAcrossRestart) {
+  // Session restart: the droppix output already existed in `before` (teardown lag).
+  // The DVI-I-1-<n> secondary-GPU signature still identifies it.
+  auto outs = parse_xrandr_outputs(
+    "eDP-1 connected primary 1920x1080+0+0 (normal) 309mm x 173mm\n"
+    "DVI-I-1-1 connected 1920x1080+1920+0 (normal) 480mm x 270mm\n");
+  OutputInfo o;
+  ASSERT_TRUE(select_droppix(outs, outs, 1920, 1080, o));
+  EXPECT_EQ(o.name, "DVI-I-1-1");
+}
+TEST(MonitorGeometry, RealDviPortWithoutProviderSuffixNotPreferred) {
+  // "DVI-I-1" (no trailing -<n>) is a physical port; enabled-in-before excludes it.
+  auto outs = parse_xrandr_outputs(
+    "DVI-I-1 connected primary 1920x1080+0+0 (normal) 509mm x 286mm\n");
+  OutputInfo o;
+  EXPECT_FALSE(select_droppix(outs, outs, 1920, 1080, o));
+}
+
 TEST(MonitorGeometry, StripsAnsiColorCodes) {
   // kscreen-doctor colorizes output even through a pipe; the parser must cope.
   std::string colored =

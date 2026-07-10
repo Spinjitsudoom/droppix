@@ -7,6 +7,7 @@
 #include "audio_streamer.h"
 #include <chrono>
 #include <cstdio>
+#include <future>
 #include <string>
 #include <thread>
 
@@ -66,15 +67,48 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   int last_overlay = cfg_.live_overlay ? cfg_.live_overlay->load() : (cfg_.overlay ? 1 : 0);
   tx_.send_overlay(last_overlay ? 1 : 0);  // app shows its perf overlay only if asked
 
+  // Once the evdi source is live, any desktop query/command that makes X re-probe
+  // outputs blocks on THIS process answering the evdi connector probe. A plain blocking
+  // call here would deadlock until its timeout ("xrandr query returned 0 bytes"), so run
+  // backend calls on a helper thread while this thread keeps servicing evdi events.
+  auto serviced = [&](auto fn) {
+    auto fut = std::async(std::launch::async, fn);
+    while (fut.wait_for(std::chrono::milliseconds(0)) != std::future_status::ready)
+      src_->next(50);   // pump evdi so X's probe gets its answer
+    return fut.get();
+  };
+  auto query_outputs = [&]() {
+    return serviced([this]{ return desktop_->outputs(); });
+  };
+
   // Identify the droppix output (for orientation and/or touch): prefer the
-  // newly-appeared one (unambiguous), else fall back to a size match.
-  auto after_outputs = desktop_->outputs();
+  // newly-appeared one (unambiguous), else fall back to a size match. Right after the
+  // evdi mode-set the desktop can be mid-reconfigure (X11 GPU hotplug) — retry briefly.
+  auto after_outputs = query_outputs();
   OutputInfo droppix;
   bool found_output = select_new_output(before_outputs, after_outputs, droppix) ||
-                      select_droppix(after_outputs, w, h, droppix);
+                      select_droppix(after_outputs, before_outputs, w, h, droppix);
+  for (int tries = 0; !found_output && !before_outputs.empty() && tries < 10; ++tries) {
+    src_->next(500);
+    after_outputs = query_outputs();
+    found_output = select_new_output(before_outputs, after_outputs, droppix) ||
+                   select_droppix(after_outputs, before_outputs, w, h, droppix);
+  }
   const bool have_output = found_output && safe_output_name(droppix.name);
   if (!found_output)
     std::fprintf(stderr, "warning: could not identify the droppix output\n");
+
+  // X11 must explicitly adopt the new output (reverse-PRIME link + placement); Wayland
+  // backends no-op. Adoption moves outputs, so refresh the identified geometry after.
+  if (have_output) {
+    std::string out_name = droppix.name;
+    bool adopted = serviced([this, out_name]{ return desktop_->adopt_output(out_name); });
+    if (adopted) {
+      after_outputs = query_outputs();
+      for (const auto& o : after_outputs)
+        if (o.name == droppix.name) { droppix = o; break; }
+    }
+  }
 
   // Auto-orientation: the tablet reports its physical orientation. The stream is
   // landscape- or portrait-SHAPED (this session's w/h); when the tablet crosses the

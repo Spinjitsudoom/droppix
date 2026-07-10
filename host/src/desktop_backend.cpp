@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <pwd.h>
+#include <unistd.h>
 
 namespace droppix {
 
@@ -14,7 +15,8 @@ std::string user_session_prefix() {
   const std::string env =
       "env XDG_RUNTIME_DIR=/run/user/" + u + " "
       "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/" + u + "/bus "
-      "WAYLAND_DISPLAY=wayland-0 ";
+      "WAYLAND_DISPLAY=wayland-0 "
+      "DISPLAY=:0 ";   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
   struct passwd* pw = getpwuid(static_cast<uid_t>(std::atoi(u.c_str())));
   if (pw && pw->pw_name) return std::string("runuser -u ") + pw->pw_name + " -- " + env;
   return "sudo -u '#" + u + "' " + env;
@@ -70,6 +72,79 @@ void KWinBackend::map_touch(const std::string& output_name, const std::string& t
   std::system(cmd.c_str());
 }
 
+std::vector<OutputInfo> X11Backend::outputs() {
+  std::string out;
+  // timeout 8: during a GPU hotplug (the evdi output appearing) X blocks queries while
+  // it re-probes outputs; 3s gets killed mid-reconfigure and returns nothing.
+  std::string cmd = "timeout 8 " + user_session_prefix() + "xrandr --query 2>/dev/null";
+  FILE* p = popen(cmd.c_str(), "r");
+  if (p) {
+    char buf[4096]; size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), p)) > 0) out.append(buf, n);
+    pclose(p);
+  }
+  std::fprintf(stderr, "input: xrandr query returned %zu bytes\n", out.size());
+  return parse_xrandr_outputs(out);
+}
+
+// Pin the droppix touch device to the droppix output via `xinput map-to-output`.
+// Retries while X registers the new uinput device (mirrors KWinBackend's wait on
+// ListTouch). Both names pass safe_output_name, so bare interpolation is safe.
+void X11Backend::map_touch(const std::string& output_name, const std::string& touch_name) {
+  if (!safe_output_name(output_name)) return;
+  if (!safe_output_name(touch_name)) return;
+  // map-to-output bakes the output's CURRENT geometry into the device's transform matrix,
+  // so binding before adopt_output's placement has settled in X pins touch to the output's
+  // stale position (wrong screen). Once the device appears, RE-APPLY the mapping until the
+  // target output's geometry stops changing (idempotent + cheap), so the final binding
+  // reflects the settled layout.
+  const std::string inner =
+      "N=" + output_name + "; T=" + touch_name + "; "
+      "geom() { xrandr --query 2>/dev/null | awk -v n=\"$N\" \"\\$1==n{"
+      "for(i=1;i<=NF;i++) if(\\$i ~ /[0-9]+x[0-9]+\\+[0-9]+\\+[0-9]+/){print \\$i; exit}}\"; }; "
+      "found=0; last=; stable=0; "
+      "for i in $(seq 1 25); do "
+      "if xinput list --name-only 2>/dev/null | grep -Fxq \"$T\"; then found=1; "
+      "xinput map-to-output \"$T\" \"$N\" 2>&1 | sed \"s/^/[touch-bind] map-to-output: /\" >&2; "
+      "g=$(geom); "
+      "if [ -n \"$g\" ] && [ \"$g\" = \"$last\" ]; then stable=$((stable+1)); "
+      "[ \"$stable\" -ge 3 ] && { echo \"[touch-bind] mapped $T -> $N @ $g\" >&2; exit 0; }; "
+      "else stable=0; fi; last=$g; "
+      "fi; sleep 0.2; done; "
+      "[ \"$found\" = 1 ] && echo \"[touch-bind] mapped $T -> $N (layout unsettled)\" >&2 || "
+      "echo \"[touch-bind] $T not found via xinput after retries\" >&2";
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + inner + "'";
+  std::system(cmd.c_str());
+}
+
+// Adopt the just-appeared droppix output on X11. Xorg hot-adds the evdi card as a
+// second GPU but nothing renders into it until it is linked to the primary GPU as a
+// reverse-PRIME sink; and the desktop's auto-reconfigure can scramble the layout
+// (black screens). So: link the providers, place the droppix output right of the
+// primary, and re-assert the primary — an explicit, sane layout.
+bool X11Backend::adopt_output(const std::string& output_name) {
+  if (!safe_output_name(output_name)) return false;
+  const std::string inner =
+      "N=" + output_name + "; "
+      // 1) Reverse-PRIME link: any provider beyond 0 sinks from provider 0.
+      "np=$(xrandr --listproviders 2>/dev/null | grep -c \"^Provider\"); "
+      "i=1; while [ \"$i\" -lt \"${np:-1}\" ]; do "
+      "xrandr --setprovideroutputsource \"$i\" 0 2>&1 | sed \"s/^/[output-adopt] provider $i: /\" >&2; "
+      "i=$((i+1)); done; "
+      // 2) Find the primary (or any other connected) output to anchor the layout.
+      "P=$(xrandr --query 2>/dev/null | awk \"/ connected primary/{print \\$1; exit}\"); "
+      "[ -z \"$P\" ] || [ \"$P\" = \"$N\" ] && "
+      "P=$(xrandr --query 2>/dev/null | awk -v d=\"$N\" \"\\$2==\\\"connected\\\" && \\$1!=d {print \\$1; exit}\"); "
+      "[ -z \"$P\" ] && { echo \"[output-adopt] no anchor output found\" >&2; exit 0; }; "
+      // 3) Explicit layout: droppix right of the primary, primary stays primary.
+      "xrandr --output \"$N\" --auto --right-of \"$P\" 2>&1 | sed \"s/^/[output-adopt] place: /\" >&2; "
+      "xrandr --output \"$P\" --auto --primary 2>&1 | sed \"s/^/[output-adopt] primary: /\" >&2; "
+      "echo \"[output-adopt] $N placed right-of $P\" >&2";
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + inner + "'";
+  std::system(cmd.c_str());
+  return true;
+}
+
 // Unsupported compositor: logs a warning and no-ops (display still works via evdi).
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
@@ -77,12 +152,14 @@ void GenericBackend::map_touch(const std::string& output, const std::string& tou
                        "display works, touch not bound\n");
 }
 
-BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen) {
+BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
+                                bool x11_session, bool has_x11_tools) {
   std::string d;
   for (char c : xdg_current_desktop) d.push_back(static_cast<char>(std::tolower((unsigned char)c)));
   if (d.find("kde") != std::string::npos || d.find("plasma") != std::string::npos)
     return BackendKind::KWin;
   if (d.empty() && has_kscreen) return BackendKind::KWin;
+  if (x11_session && has_x11_tools) return BackendKind::X11;
   return BackendKind::Generic;
 }
 
@@ -95,11 +172,29 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
     const char* xdg = std::getenv("XDG_CURRENT_DESKTOP");
     const std::string desktop = xdg ? xdg : "";
     const bool has_kscreen = std::system("command -v kscreen-doctor >/dev/null 2>&1") == 0;
+    // Is the user's session X11? XDG_SESSION_TYPE when present (plain user run); under
+    // pkexec/sudo that env is gone, so probe sockets: a Wayland socket in the invoking
+    // user's runtime dir means Wayland (XWayland also creates the X socket, so check
+    // Wayland FIRST), otherwise the X socket means a real X11 session.
+    const bool x11_session = []{
+      const char* st = std::getenv("XDG_SESSION_TYPE");
+      if (st && *st) return std::string(st) == "x11";
+      const char* uid = std::getenv("PKEXEC_UID");
+      if (!uid || !*uid) uid = std::getenv("SUDO_UID");
+      if (uid && *uid) {
+        const std::string wl = "/run/user/" + std::string(uid) + "/wayland-0";
+        if (access(wl.c_str(), F_OK) == 0) return false;
+      }
+      return access("/tmp/.X11-unix/X0", F_OK) == 0;
+    }();
+    const bool has_x11_tools =
+        std::system("command -v xrandr >/dev/null 2>&1 && command -v xinput >/dev/null 2>&1") == 0;
     std::shared_ptr<DesktopBackend> b;
-    if (select_backend_kind(desktop, has_kscreen) == BackendKind::KWin)
-      b = std::make_shared<KWinBackend>();
-    else
-      b = std::make_shared<GenericBackend>();
+    switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools)) {
+      case BackendKind::KWin: b = std::make_shared<KWinBackend>(); break;
+      case BackendKind::X11:  b = std::make_shared<X11Backend>();  break;
+      default:                b = std::make_shared<GenericBackend>();
+    }
     std::fprintf(stderr, "desktop backend: %s\n", b->name());
     return b;
   }();

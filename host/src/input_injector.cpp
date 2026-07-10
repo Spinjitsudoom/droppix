@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdio>
 #include <chrono>
+#include <ctime>
 #include <algorithm>
 
 namespace droppix {
@@ -137,7 +138,26 @@ void InputInjector::right_click(uint16_t x_norm, uint16_t y_norm) {
 }
 
 InputInjector::~InputInjector() {
-  if (fd_ >= 0) { ioctl(fd_, UI_DEV_DESTROY); ::close(fd_); }
+  if (fd_ >= 0) {
+    // Lift any fingers still down BEFORE destroying the device: Xorg segfaults if a
+    // touch device vanishes mid-contact (its touch bookkeeping is freed under the
+    // active sequence). This fires on every session teardown — orientation restarts
+    // routinely happen while a finger is on the glass. Release directly (not via
+    // inject()) so the two-finger-tap detector can't fire a spurious right-click.
+    const MtSlots::Update u = slots_.update({});
+    const bool wasDown = !u.lifted.empty() || anyDown_;
+    for (int slot : u.lifted) {
+      emit(fd_, EV_ABS, ABS_MT_SLOT, slot);
+      emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, -1);
+    }
+    if (anyDown_) emit(fd_, EV_KEY, BTN_TOUCH, 0);
+    emit(fd_, EV_SYN, SYN_REPORT, 0);
+    if (wasDown) {   // give the server a beat to drain the release before the node vanishes
+      timespec ts{0, 50 * 1000 * 1000};
+      nanosleep(&ts, nullptr);
+    }
+    ioctl(fd_, UI_DEV_DESTROY); ::close(fd_);
+  }
   if (rc_fd_ >= 0) { ioctl(rc_fd_, UI_DEV_DESTROY); ::close(rc_fd_); }
 }
 }  // namespace droppix
