@@ -189,3 +189,35 @@ TEST(Protocol, AudioMessageFraming) {
   std::vector<unsigned char> expected = {0,0,0,5, 9, 0xDE,0xAD,0xBE,0xEF};
   EXPECT_EQ(m, expected);
 }
+
+TEST(Protocol, HelloV4RoundTrip) {
+  auto body = droppix::encode_hello(4, 1280, 720, 160, "tab", "id-1",
+                                    /*fps=*/30, /*audio=*/1, /*orient=*/1);
+  uint32_t ver, w, h, d, fps; uint8_t audio, orient; std::string name, id;
+  ASSERT_TRUE(droppix::decode_hello(body, ver, w, h, d, fps, audio, orient, name, id));
+  EXPECT_EQ(ver, 4u); EXPECT_EQ(w, 1280u); EXPECT_EQ(h, 720u); EXPECT_EQ(d, 160u);
+  EXPECT_EQ(fps, 30u); EXPECT_EQ(audio, 1); EXPECT_EQ(orient, 1);
+  EXPECT_EQ(name, "tab"); EXPECT_EQ(id, "id-1");
+}
+
+TEST(Protocol, HelloV3BackCompatDecodesSentinels) {
+  // A v3 body: no fps/audio/orientation, strings right after density.
+  std::vector<unsigned char> b;
+  auto u32 = [&](uint32_t x){ b.push_back(x>>24); b.push_back(x>>16); b.push_back(x>>8); b.push_back(x); };
+  auto u16 = [&](uint16_t x){ b.push_back(x>>8); b.push_back(x); };
+  u32(3); u32(1920); u32(1080); u32(96);
+  std::string name="old", id="oid"; u16(name.size()); b.insert(b.end(), name.begin(), name.end());
+  u16(id.size()); b.insert(b.end(), id.begin(), id.end());
+  uint32_t ver, w, h, d, fps; uint8_t audio, orient; std::string n2, i2;
+  ASSERT_TRUE(droppix::decode_hello(b, ver, w, h, d, fps, audio, orient, n2, i2));
+  EXPECT_EQ(ver, 3u); EXPECT_EQ(w, 1920u); EXPECT_EQ(h, 1080u);
+  EXPECT_EQ(fps, 0u); EXPECT_EQ(audio, 0); EXPECT_EQ(orient, 0);   // sentinels
+  EXPECT_EQ(n2, "old"); EXPECT_EQ(i2, "oid");
+}
+
+TEST(Protocol, HelloSevenArgOverloadStillWorks) {
+  auto body = droppix::encode_hello(4, 800, 600, 96, "a", "b");   // trailing defaults
+  uint32_t ver, w, h, d; std::string name, id;
+  ASSERT_TRUE(droppix::decode_hello(body, ver, w, h, d, name, id));  // 7-arg overload
+  EXPECT_EQ(w, 800u); EXPECT_EQ(name, "a"); EXPECT_EQ(id, "b");
+}

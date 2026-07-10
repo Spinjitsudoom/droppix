@@ -62,25 +62,42 @@ bool MessageParser::next(ParsedMessage& out) {
 }
 
 std::vector<unsigned char> encode_hello(uint32_t version, uint32_t w, uint32_t h,
-                                        uint32_t d, const std::string& name, const std::string& id) {
+                                        uint32_t d, const std::string& name, const std::string& id,
+                                        uint32_t fps, uint8_t audio_wanted, uint8_t orientation_code) {
   std::vector<unsigned char> b;
   put_u32(b, version); put_u32(b, w); put_u32(b, h); put_u32(b, d);
+  if (version >= 4) {
+    put_u32(b, fps); b.push_back(audio_wanted); b.push_back(orientation_code);
+  }
   put_u16(b, (uint16_t)name.size()); b.insert(b.end(), name.begin(), name.end());
   put_u16(b, (uint16_t)id.size());   b.insert(b.end(), id.begin(),   id.end());
   return b;
 }
 bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
-                  uint32_t& w, uint32_t& h, uint32_t& d, std::string& name, std::string& id) {
+                  uint32_t& w, uint32_t& h, uint32_t& d, uint32_t& fps,
+                  uint8_t& audio_wanted, uint8_t& orientation_code,
+                  std::string& name, std::string& id) {
   if (b.size() < 16) return false;
   version = get_u32(b.data()); w = get_u32(b.data()+4);
   h = get_u32(b.data()+8); d = get_u32(b.data()+12);
+  fps = 0; audio_wanted = 0; orientation_code = 0;
   name.clear(); id.clear();
   size_t p = 16;
+  if (version >= 4) {
+    if (b.size() < 22) return true;              // truncated v4 fixed block: keep sentinels
+    fps = get_u32(b.data()+16); audio_wanted = b[20]; orientation_code = b[21];
+    p = 22;
+  }
   if (b.size() >= p+2) { uint16_t n = get_u16(b.data()+p); p += 2;
     if (b.size() >= p+n) { name.assign(b.begin()+p, b.begin()+p+n); p += n; } else return true; }
   if (b.size() >= p+2) { uint16_t n = get_u16(b.data()+p); p += 2;
     if (b.size() >= p+n) { id.assign(b.begin()+p, b.begin()+p+n); } }
   return true;
+}
+bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
+                  uint32_t& w, uint32_t& h, uint32_t& d, std::string& name, std::string& id) {
+  uint32_t fps; uint8_t audio, orient;
+  return decode_hello(b, version, w, h, d, fps, audio, orient, name, id);
 }
 
 std::vector<unsigned char> encode_config(uint32_t w, uint32_t h, uint32_t fps,

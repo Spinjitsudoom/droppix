@@ -20,7 +20,7 @@ struct TouchContact {
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.
-constexpr uint32_t kProtocolVersion = 3;
+constexpr uint32_t kProtocolVersion = 4;
 
 // NOTE: the encoder uses x264 repeat-headers, so SPS/PPS travel IN-BAND ahead of
 // each IDR. The CONFIG message's extradata is therefore typically empty and a
@@ -47,12 +47,20 @@ class MessageParser {
 };
 
 // Payload codecs (all integers big-endian).
-// HELLO v3: u32 version, u32 width, u32 height, u32 density, then u16-prefixed
-// name and id strings. decode_hello stays back-compatible with a bare 16-byte
-// v2 body (no name/id), yielding empty name/id in that case.
+// HELLO v4: u32 version, u32 width, u32 height, u32 density, u32 fps, u8 audio_wanted,
+// u8 orientation_code, then u16-prefixed name and id strings. Back-compatible with v3 bodies
+// (fps/audio/orientation default to 0) and v2 bodies (no name/id).
 std::vector<unsigned char> encode_hello(uint32_t version, uint32_t width,
                                         uint32_t height, uint32_t density,
-                                        const std::string& name, const std::string& id);
+                                        const std::string& name, const std::string& id,
+                                        uint32_t fps = 0, uint8_t audio_wanted = 0,
+                                        uint8_t orientation_code = 0);
+// Full v4 decode. Back-compatible with v3/v2 bodies (fps/audio/orientation come back 0).
+bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
+                  uint32_t& width, uint32_t& height, uint32_t& density,
+                  uint32_t& fps, uint8_t& audio_wanted, uint8_t& orientation_code,
+                  std::string& name, std::string& id);
+// Back-compat overload for callers that don't need the new fields.
 bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
                   uint32_t& width, uint32_t& height, uint32_t& density,
                   std::string& name, std::string& id);
