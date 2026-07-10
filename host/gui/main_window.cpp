@@ -174,8 +174,10 @@ MainWindow::MainWindow(QWidget* parent)
   profRow->addWidget(new QLabel("Profile:")); profRow->addWidget(profileBox_, 1);
   profRow->addWidget(saveBtn); profRow->addWidget(saveAsBtn); profRow->addWidget(delBtn);
 
-  // (all stream options — source, resolution, touch, audio, fps/bitrate/port/refresh/
-  // orientation/auto-adb/overlay — live in the Settings dialog; open it via the gear icon)
+  // (stream options — source, touch, bitrate/port/refresh/auto-adb/overlay — live in
+  // the Settings dialog, open it via the gear icon. Resolution/fps/audio/orientation
+  // are now client-driven per session via HELLO; Settings keeps them only as
+  // pre-v4-client fallback defaults, no longer user-editable here.)
 
   // --- Status row: colored dot + state + compact stats ---
   statusDot_   = new QLabel; statusDot_->setObjectName("statusDot");
@@ -520,7 +522,7 @@ void MainWindow::refreshAdvertising() {
 
 Settings MainWindow::collectSettings() const {
   Settings s;
-  settingsDialog_->store(s);   // source/resolution/touch/audio/fps/bitrate/port/refresh/orientation/auto-adb/overlay
+  settingsDialog_->store(s);   // source/touch/bitrate/port/refresh/auto-adb/overlay (resolution/fps/audio/orientation stay at Settings defaults; client-driven)
   s.tls = true;
   // In a Flatpak the streamer runs on the host, so hand it the host-mirrored cert/key paths.
   if (!flatpakHostCert_.isEmpty()) {
@@ -534,7 +536,7 @@ Settings MainWindow::collectSettings() const {
 }
 
 void MainWindow::applySettings(const Settings& s) {
-  settingsDialog_->load(s);    // source/resolution/touch/audio/fps/bitrate/port/refresh/orientation/auto-adb/overlay
+  settingsDialog_->load(s);    // source/touch/bitrate/port/refresh/auto-adb/overlay (resolution/fps/audio/orientation have no UI anymore)
 }
 
 void MainWindow::refreshProfiles() {
@@ -657,7 +659,6 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   auto* c = new StreamController(this);
   wireSession(c, key);
   Settings s = collectSettings();
-  if (sessions_.count() > 0) s.audio = false;   // audio single-session (shared droppix-audio sink)
   const std::string tname = ("droppix-touch-" + QString::number(port)).toStdString();
   const std::string aoaSerial = (transport == "usb-aoa") ? id.toStdString() : std::string();
   Command cmd = build_command(s, streamBin_, port, tname, aoaSerial);

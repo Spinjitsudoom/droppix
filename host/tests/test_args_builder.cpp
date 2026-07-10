@@ -120,7 +120,10 @@ TEST(ArgsBuilder, NoTlsFlagsWhenTlsDisabled) {
   EXPECT_FALSE(has(c.args, "--tls"));
 }
 
-TEST(ArgsBuilder, AudioFlagAppendedWhenEnabled) {
+TEST(ArgsBuilder, AudioFlagAlwaysPassedAsCapability) {
+  // --audio is now emitted unconditionally: it's a capability advertisement, not a
+  // request. The streamer only captures audio if the client's HELLO asks for it
+  // (and wins the audio lock), regardless of s.audio.
   droppix::Settings s; s.source = droppix::Settings::Source::Evdi; s.audio = true;
   auto c = droppix::build_command(s, "/usr/bin/droppix_stream");
   bool has_audio = false;
@@ -129,7 +132,9 @@ TEST(ArgsBuilder, AudioFlagAppendedWhenEnabled) {
 
   droppix::Settings s2; s2.source = droppix::Settings::Source::Evdi; s2.audio = false;
   auto c2 = droppix::build_command(s2, "/usr/bin/droppix_stream");
-  for (auto& a : c2.args) EXPECT_NE(a, std::string("--audio"));
+  bool has_audio2 = false;
+  for (auto& a : c2.args) if (a == "--audio") has_audio2 = true;
+  EXPECT_TRUE(has_audio2);
 }
 
 TEST(ArgsBuilder, UsbAoaAddsSerialAndOmitsTls) {

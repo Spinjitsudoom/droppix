@@ -28,14 +28,10 @@ class SettingsDialog : public QDialog {
  private:
   QRadioButton* srcTest_;
   QRadioButton* srcEvdi_;
-  QComboBox* resolution_;
-  QSpinBox* fps_;
   QSpinBox* bitrate_;
   QSpinBox* port_;
   QComboBox* refresh_;
-  QComboBox* orientation_;
   QCheckBox* touch_;
-  QCheckBox* audio_;
   QCheckBox* overlay_;
   QCheckBox* autoConnect_;
   // App-level prefs (global, NOT per-profile): persisted as files, not via load/store.

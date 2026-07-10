@@ -30,7 +30,7 @@ Command build_command(const Settings& s, const std::string& stream_bin,
   a.push_back("--bitrate"); a.push_back(std::to_string(s.bitrate_kbps));
   a.push_back("--port");    a.push_back(std::to_string(use_port));
   a.push_back("--stats-json");
-  if (s.audio) a.push_back("--audio");
+  a.push_back("--audio");   // capability only; the streamer captures iff the client's HELLO asks
   if (s.overlay) a.push_back("--overlay");
   if (!usb_aoa_serial.empty()) {
     // USB/AOA session: stream over the cable, no TLS (physical trust). The streamer
