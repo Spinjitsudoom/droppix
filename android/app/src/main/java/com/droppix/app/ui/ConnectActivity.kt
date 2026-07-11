@@ -30,6 +30,7 @@ class ConnectActivity : AppCompatActivity() {
     private lateinit var connectBtn: Button
     private lateinit var status: TextView
     private lateinit var reconnectBtn: Button
+    private lateinit var settingsBtn: Button
 
     private lateinit var discovery: Discovery
     private lateinit var wakeService: WakeService
@@ -47,6 +48,7 @@ class ConnectActivity : AppCompatActivity() {
         connectBtn = findViewById(R.id.connect_btn)
         status = findViewById(R.id.status)
         reconnectBtn = findViewById(R.id.reconnect_btn)
+        settingsBtn = findViewById(R.id.settings_btn)
 
         discovery = Discovery(this)
         wakeService = WakeService(this)
@@ -62,6 +64,9 @@ class ConnectActivity : AppCompatActivity() {
         connectBtn.setOnClickListener { onConnectClicked() }
         updateReconnectRow()
         reconnectBtn.setOnClickListener { onReconnectClicked() }
+        settingsBtn.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
     }
 
     override fun onResume() {

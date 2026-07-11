@@ -21,6 +21,9 @@
             </intent-filter>
         </activity>
         <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false" />
+        <activity
             android:name=".ui.StreamActivity"
             android:exported="true"
             android:screenOrientation="fullSensor"
