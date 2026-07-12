@@ -5,7 +5,9 @@ import android.content.Context
 // Per-device display prefs the Android client sends to the host in HELLO v4. width/height == 0
 // means "use this device's native screen resolution" (resolved at connect time). Rotation is
 // NOT here — Android keeps its sensor auto-rotate.
-data class AppSettings(val width: Int = 0, val height: Int = 0, val fps: Int = 60, val audio: Boolean = false)
+data class AppSettings(
+    val width: Int = 0, val height: Int = 0, val fps: Int = 60, val audio: Boolean = false,
+    val bitrateKbps: Int = 8000, val rotationLocked: Boolean = false, val showOverlay: Boolean = false)
 
 object Resolutions {
     // Presets offered in the UI, in addition to "Native". Landscape-oriented (width >= height).
@@ -24,8 +26,11 @@ class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("droppix", Context.MODE_PRIVATE)
     fun load(): AppSettings = AppSettings(
         width = prefs.getInt("res_w", 0), height = prefs.getInt("res_h", 0),
-        fps = prefs.getInt("fps", 60), audio = prefs.getBoolean("audio", false))
+        fps = prefs.getInt("fps", 60), audio = prefs.getBoolean("audio", false),
+        bitrateKbps = prefs.getInt("bitrate", 8000), rotationLocked = prefs.getBoolean("rot_lock", false),
+        showOverlay = prefs.getBoolean("overlay", false))
     fun save(s: AppSettings) = prefs.edit()
         .putInt("res_w", s.width).putInt("res_h", s.height)
-        .putInt("fps", s.fps).putBoolean("audio", s.audio).apply()
+        .putInt("fps", s.fps).putBoolean("audio", s.audio)
+        .putInt("bitrate", s.bitrateKbps).putBoolean("rot_lock", s.rotationLocked).putBoolean("overlay", s.showOverlay).apply()
 }

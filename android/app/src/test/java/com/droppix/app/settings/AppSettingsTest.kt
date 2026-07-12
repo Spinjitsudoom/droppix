@@ -16,4 +16,8 @@ class AppSettingsTest {
         val s = AppSettings()
         assertEquals(0, s.width); assertEquals(60, s.fps); assertFalse(s.audio)
     }
+    @Test fun newDefaults() {
+        val s = AppSettings()
+        assertEquals(8000, s.bitrateKbps); assertFalse(s.rotationLocked); assertFalse(s.showOverlay)
+    }
 }
