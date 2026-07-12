@@ -43,6 +43,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     }
 
     @Volatile private var running = false
+    @Volatile private var rotationLocked = false
     @Volatile private var surface: Surface? = null
     private var netThread: Thread? = null
     @Volatile private var decoder: VideoDecoder? = null
@@ -87,7 +88,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
             override fun onOrientationChanged(angleDeg: Int) {
                 val code = orientationMapper.update(angleDeg, SystemClock.elapsedRealtime()) ?: return
                 Log.i(TAG, "orientation -> $code")
-                client?.sendOrientation(code)
+                if (!rotationLocked) client?.sendOrientation(code)
             }
         }
     }
@@ -155,6 +156,13 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         val (sendW, sendH) = com.droppix.app.settings.Resolutions.resolve(settings, real.widthPixels, real.heightPixels)
         val sendFps = settings.fps
         val sendAudio = if (settings.audio) 1 else 0
+        val sendBitrate = settings.bitrateKbps
+        rotationLocked = settings.rotationLocked
+        requestedOrientation = if (settings.rotationLocked)
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        else
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        overlay.visibility = if (settings.showOverlay) View.VISIBLE else View.GONE
         netThread = thread(name = "droppix-net") {
             val c = TransportClient()
             val tlsTrust = TlsTrust(this@StreamActivity)
@@ -208,7 +216,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                         c.runOverChannel(FileInputStream(pfd.fileDescriptor),
                             FileOutputStream(pfd.fileDescriptor), sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
-                            8000, // TODO(Task 7): use AppSettings bitrate
+                            sendBitrate,
                             listener, { running }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity))
@@ -231,7 +239,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
                         Log.i(TAG, "connecting to $host:$port")
                         c.run(host, port, sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
-                            8000, // TODO(Task 7): use AppSettings bitrate
+                            sendBitrate,
                             listener, { running }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity),
