@@ -105,6 +105,10 @@ void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
   ioctl(rc_fd_, UI_SET_EVBIT, EV_KEY);
   ioctl(rc_fd_, UI_SET_KEYBIT, BTN_LEFT);
   ioctl(rc_fd_, UI_SET_KEYBIT, BTN_RIGHT);
+  ioctl(rc_fd_, UI_SET_KEYBIT, BTN_MIDDLE);
+  ioctl(rc_fd_, UI_SET_EVBIT, EV_REL);
+  ioctl(rc_fd_, UI_SET_RELBIT, REL_WHEEL);
+  ioctl(rc_fd_, UI_SET_RELBIT, REL_HWHEEL);
   ioctl(rc_fd_, UI_SET_EVBIT, EV_ABS);
   ioctl(rc_fd_, UI_SET_ABSBIT, ABS_X);
   ioctl(rc_fd_, UI_SET_ABSBIT, ABS_Y);
@@ -121,19 +125,44 @@ void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
   }
 }
 
+// Map a tap/pointer coordinate (0..65535 on the droppix monitor) into desktop pixels.
+// Extracted verbatim from right_click's original body so all aux-device injectors
+// (right_click, scroll, mouse_button) place the pointer identically.
+int InputInjector::scale_x(uint16_t x_norm) const {
+  int px = outX_ + static_cast<int>(static_cast<int64_t>(x_norm) * outW_ / 65535);
+  return std::clamp(px, 0, deskW_ - 1);
+}
+int InputInjector::scale_y(uint16_t y_norm) const {
+  int py = outY_ + static_cast<int>(static_cast<int64_t>(y_norm) * outH_ / 65535);
+  return std::clamp(py, 0, deskH_ - 1);
+}
+
 void InputInjector::right_click(uint16_t x_norm, uint16_t y_norm) {
   if (rc_fd_ < 0 || outW_ <= 0 || outH_ <= 0) return;
-  // Map the tap (0..65535 on the droppix monitor) into desktop pixels.
-  int px = outX_ + static_cast<int>(static_cast<int64_t>(x_norm) * outW_ / 65535);
-  int py = outY_ + static_cast<int>(static_cast<int64_t>(y_norm) * outH_ / 65535);
-  px = std::clamp(px, 0, deskW_ - 1);
-  py = std::clamp(py, 0, deskH_ - 1);
-  emit(rc_fd_, EV_ABS, ABS_X, px);
-  emit(rc_fd_, EV_ABS, ABS_Y, py);
+  emit(rc_fd_, EV_ABS, ABS_X, scale_x(x_norm));
+  emit(rc_fd_, EV_ABS, ABS_Y, scale_y(y_norm));
   emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
   emit(rc_fd_, EV_KEY, BTN_RIGHT, 1);
   emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
   emit(rc_fd_, EV_KEY, BTN_RIGHT, 0);
+  emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
+}
+
+void InputInjector::scroll(int dx, int dy, uint16_t x_norm, uint16_t y_norm) {
+  if (rc_fd_ < 0) return;
+  emit(rc_fd_, EV_ABS, ABS_X, scale_x(x_norm));
+  emit(rc_fd_, EV_ABS, ABS_Y, scale_y(y_norm));
+  if (dx) emit(rc_fd_, EV_REL, REL_HWHEEL, dx);
+  if (dy) emit(rc_fd_, EV_REL, REL_WHEEL, dy);
+  emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
+}
+
+void InputInjector::mouse_button(uint8_t button, bool down, uint16_t x_norm, uint16_t y_norm) {
+  if (rc_fd_ < 0) return;
+  int code = (button == 2) ? BTN_MIDDLE : BTN_RIGHT;   // 1=right, 2=middle
+  emit(rc_fd_, EV_ABS, ABS_X, scale_x(x_norm));
+  emit(rc_fd_, EV_ABS, ABS_Y, scale_y(y_norm));
+  emit(rc_fd_, EV_KEY, code, down ? 1 : 0);
   emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
 }
 

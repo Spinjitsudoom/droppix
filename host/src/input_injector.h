@@ -21,9 +21,16 @@ class InputInjector {
   // (a desktop-ranged absolute device) used for two-finger-tap -> BTN_RIGHT. No-op when the
   // desktop bounds are unknown — right-click stays disabled; normal touch is unaffected.
   void set_geometry(int out_x, int out_y, int out_w, int out_h, int desktop_w, int desktop_h);
+  // Scroll wheel and extra mouse buttons on the same absolute pointer device used for
+  // right-click. x_norm/y_norm are 0..65535 on the droppix output, same as right_click.
+  void scroll(int dx, int dy, uint16_t x_norm, uint16_t y_norm);
+  void mouse_button(uint8_t button, bool down, uint16_t x_norm, uint16_t y_norm);
 
  private:
   void right_click(uint16_t x_norm, uint16_t y_norm);
+  // Shared 0..65535 -> desktop-pixel scaling used by right_click/scroll/mouse_button.
+  int scale_x(uint16_t x_norm) const;
+  int scale_y(uint16_t y_norm) const;
   int fd_ = -1;        // multi-touch touchscreen
   int rc_fd_ = -1;     // right-click absolute pointer
   MtSlots slots_;
