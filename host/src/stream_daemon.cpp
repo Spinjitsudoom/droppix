@@ -39,6 +39,8 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
                cver, cw, ch, hfps, haudio, hori, cname.c_str(), cid.c_str());
   const SessionParams sp = select_session_params(cver, hfps, haudio, hori,
                                                  hbitrate, cfg_.fps, cfg_.audio, cfg_.orientation, cfg_.bitrate_kbps);
+  std::fprintf(stderr, "session params: fps=%d bitrate=%d orient=%d audio=%d\n",
+               sp.fps, sp.bitrate, sp.orientation, sp.audio ? 1 : 0);
 
   // Approval gates real remote (Wi-Fi) peers only. An empty peer ip means USB/AOA
   // (adopt_channel over the cable) — physically trusted, like localhost — so it must
