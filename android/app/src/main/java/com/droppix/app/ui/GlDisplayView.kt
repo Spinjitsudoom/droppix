@@ -42,7 +42,24 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     // the decode target); here the decode target is a separate SurfaceTexture-backed Surface
     // created in GlRenderer.onSurfaceCreated, so it is tracked explicitly to preserve the same
     // "fires onSurfaceReady immediately if already valid" contract for a listener registered late.
+    // Written on the GL thread (onSurfaceCreated), read on the UI thread (maybeDeliverSurface).
     @Volatile private var lastSurface: Surface? = null
+
+    // UI-thread-only dedupe guard: the surface already delivered to the current listener. Both
+    // delivery triggers (onSurfaceCreated's post, setSurfaceListener's post) route through
+    // maybeDeliverSurface() on the UI thread; whichever runs first delivers and records the
+    // surface here, and the second no-ops. Prevents onSurfaceReady firing twice for one surface
+    // (which would spin up a second decode pipeline on a live surface — black screen / crash).
+    private var deliveredSurface: Surface? = null
+
+    // Deliver onSurfaceReady exactly once per (listener, surface) pair. MUST run on the UI thread.
+    private fun maybeDeliverSurface() {
+        val l = surfaceListener ?: return
+        val s = lastSurface ?: return
+        if (deliveredSurface === s) return
+        deliveredSurface = s
+        l.onSurfaceReady(s)
+    }
 
     fun setTouchListener(l: TouchListener?) { touchListener = l }
 
@@ -85,12 +102,14 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     }
 
     // Register (or clear with null) the lifecycle listener. If the decode surface is already
-    // valid (e.g. re-registering after a settings round-trip), onSurfaceReady fires immediately —
+    // valid (e.g. re-registering after a settings round-trip), onSurfaceReady still fires —
     // same contract as DisplaySurfaceView.setSurfaceListener, adapted to lastSurface (see above).
+    // Delivery is posted (not synchronous) so it runs on the UI thread and shares the single
+    // idempotent maybeDeliverSurface() path with onSurfaceCreated's post, deduping via
+    // deliveredSurface so the surface is never delivered twice.
     fun setSurfaceListener(l: SurfaceListener?) {
         surfaceListener = l
-        val s = lastSurface
-        if (l != null && s != null && s.isValid) l.onSurfaceReady(s)
+        if (l != null) post { maybeDeliverSurface() }
     }
 
     // GLSurfaceView already implements SurfaceHolder.Callback internally to drive its GL
@@ -99,6 +118,9 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     // the on-screen surface being torn down.
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         super.surfaceDestroyed(holder)
+        // Clear the dedupe guard so a later recreated surface — even one the JVM reuses as an
+        // object-equal instance — is not wrongly suppressed by maybeDeliverSurface.
+        deliveredSurface = null
         surfaceListener?.onSurfaceGone()
     }
 
@@ -153,8 +175,9 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             surfaceTexture = st
             val surface = Surface(st)
             lastSurface = surface
-            // Hand the decode Surface to the activity on the UI thread.
-            post { surfaceListener?.onSurfaceReady(surface) }
+            // Hand the decode Surface to the activity on the UI thread, deduped via
+            // maybeDeliverSurface so a concurrent setSurfaceListener post can't double-deliver.
+            post { maybeDeliverSurface() }
         }
 
         override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) = GLES20.glViewport(0, 0, w, h)
