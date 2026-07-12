@@ -20,8 +20,8 @@ import javax.microedition.khronos.opengles.GL10
 class GlDisplayView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null)
     : GLSurfaceView(context, attrs) {
 
-    // ---- ported from DisplaySurfaceView (verbatim): SurfaceListener, TouchListener,
-    // ---- setSurfaceListener/setTouchListener, and the full onTouchEvent contacts logic ----
+    // ---- ported from the prior SurfaceView-based display view (verbatim): SurfaceListener,
+    // ---- TouchListener, setSurfaceListener/setTouchListener, and the full onTouchEvent contacts logic ----
 
     interface SurfaceListener {
         fun onSurfaceReady(surface: Surface)
@@ -37,8 +37,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     private var lastMoveSentMs = 0L
     private val moveMinIntervalMs = 12L   // coalesce MOVEs to ~80 Hz max
 
-    // Tracks the most recent SurfaceTexture-backed decode Surface. DisplaySurfaceView tracked
-    // readiness via holder.surface (the SurfaceView's own on-screen surface, which doubled as
+    // Tracks the most recent SurfaceTexture-backed decode Surface. The prior SurfaceView-based
+    // view tracked readiness via holder.surface (the SurfaceView's own on-screen surface, which doubled as
     // the decode target); here the decode target is a separate SurfaceTexture-backed Surface
     // created in GlRenderer.onSurfaceCreated, so it is tracked explicitly to preserve the same
     // "fires onSurfaceReady immediately if already valid" contract for a listener registered late.
@@ -103,7 +103,7 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
 
     // Register (or clear with null) the lifecycle listener. If the decode surface is already
     // valid (e.g. re-registering after a settings round-trip), onSurfaceReady still fires —
-    // same contract as DisplaySurfaceView.setSurfaceListener, adapted to lastSurface (see above).
+    // same contract as the prior SurfaceView-based view's setSurfaceListener, adapted to lastSurface (see above).
     // Delivery is posted (not synchronous) so it runs on the UI thread and shares the single
     // idempotent maybeDeliverSurface() path with onSurfaceCreated's post, deduping via
     // deliveredSurface so the surface is never delivered twice.
@@ -114,7 +114,7 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
 
     // GLSurfaceView already implements SurfaceHolder.Callback internally to drive its GL
     // thread; overriding surfaceDestroyed (chaining to super so EGL teardown still happens)
-    // lets us signal onSurfaceGone at the same trigger point DisplaySurfaceView used —
+    // lets us signal onSurfaceGone at the same trigger point the prior SurfaceView-based view used —
     // the on-screen surface being torn down.
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         super.surfaceDestroyed(holder)

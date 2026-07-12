@@ -30,7 +30,7 @@ import com.droppix.app.protocol.Protocol
 import com.droppix.app.stats.StatsSink
 import kotlin.concurrent.thread
 
-class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
+class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     private companion object {
         const val TAG = "droppix"
     }
@@ -50,7 +50,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     @Volatile private var decoder: VideoDecoder? = null
     @Volatile private var client: TransportClient? = null
     @Volatile private var audioPlayer: AudioPlayer? = null
-    private lateinit var surfaceView: DisplaySurfaceView
+    private lateinit var surfaceView: GlDisplayView
 
     // Auto-orientation: the Activity follows the sensor (manifest fullSensor) so Android
     // rotates the display naturally. We detect the physical orientation and report it; on
@@ -77,7 +77,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         setContentView(R.layout.activity_stream)
         surfaceView = findViewById(R.id.surface)
         // In-stream entry point to Settings. Must be a real overlay View (topmost FrameLayout
-        // child) rather than a long-press on the surface: DisplaySurfaceView.onTouchEvent
+        // child) rather than a long-press on the surface: GlDisplayView.onTouchEvent
         // consumes MotionEvents without calling super, so View long-press detection never runs.
         findViewById<Button>(R.id.settings_overlay_btn).setOnClickListener {
             startActivity(android.content.Intent(this, SettingsActivity::class.java))
@@ -115,7 +115,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
     override fun onResume() {
         super.onResume()
         surfaceView.setSurfaceListener(this)  // fires onSurfaceReady if already valid
-        surfaceView.setTouchListener(object : DisplaySurfaceView.TouchListener {
+        surfaceView.setTouchListener(object : GlDisplayView.TouchListener {
             override fun onTouch(contacts: List<com.droppix.app.protocol.Contact>) {
                 client?.sendTouch(contacts)
             }
@@ -133,7 +133,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         stopStreaming()
     }
 
-    // --- DisplaySurfaceView.SurfaceListener (UI thread) ---
+    // --- GlDisplayView.SurfaceListener (UI thread) ---
     override fun onSurfaceReady(surface: Surface) {
         this.surface = surface
         startStreaming()
@@ -152,6 +152,7 @@ class StreamActivity : Activity(), DisplaySurfaceView.SurfaceListener {
         // the just-saved settings here, so a settings change made mid-stream reconnects with the
         // new resolution/fps/audio. (onPause already stopped the previous session.)
         val settings = com.droppix.app.settings.SettingsStore(this).load()
+        surfaceView.flipHorizontal = settings.flipHorizontal
         val real = android.util.DisplayMetrics()
         @Suppress("DEPRECATION") windowManager.defaultDisplay.getRealMetrics(real)
         val (sendW, sendH) = com.droppix.app.settings.Resolutions.resolve(settings, real.widthPixels, real.heightPixels)

@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <com.droppix.app.ui.DisplaySurfaceView
+    <com.droppix.app.ui.GlDisplayView
         android:id="@+id/surface"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
@@ -21,10 +21,10 @@
         android:fontFamily="monospace"
         android:text="" />
 
-    <!-- Topmost child of the FrameLayout, drawn above DisplaySurfaceView, so it receives
-         its own touch dispatch (DisplaySurfaceView.onTouchEvent never sees these taps).
+    <!-- Topmost child of the FrameLayout, drawn above GlDisplayView, so it receives
+         its own touch dispatch (GlDisplayView.onTouchEvent never sees these taps).
          This is the in-stream entry point to SettingsActivity; a long-press on the surface
-         cannot work because DisplaySurfaceView consumes MotionEvents without calling super. -->
+         cannot work because GlDisplayView consumes MotionEvents without calling super. -->
     <Button
         android:id="@+id/settings_overlay_btn"
         android:layout_width="wrap_content"
