@@ -122,4 +122,22 @@ class ProtocolTest {
         assertEquals(0, b[16].toInt() and 0xFF); assertEquals(1, b[17].toInt() and 0xFF) // name len at 16
         assertEquals('a'.code, b[18].toInt() and 0xFF)
     }
+
+    @Test fun helloV5CarriesBitrate() {
+        val b = Protocol.encodeHello(5, 1280, 720, 160, "n", "i",
+                                     fps = 30, audioWanted = 1, orientationCode = 1, bitrateKbps = 12000)
+        fun u32(o: Int) = ((b[o].toInt() and 0xFF) shl 24) or ((b[o+1].toInt() and 0xFF) shl 16) or
+                          ((b[o+2].toInt() and 0xFF) shl 8) or (b[o+3].toInt() and 0xFF)
+        assertEquals(5, u32(0)); assertEquals(30, u32(16))
+        assertEquals(1, b[20].toInt() and 0xFF); assertEquals(1, b[21].toInt() and 0xFF)
+        assertEquals(12000, u32(22))                                   // bitrate
+        assertEquals(0, b[26].toInt() and 0xFF); assertEquals(1, b[27].toInt() and 0xFF)  // name-len @26
+        assertEquals('n'.code, b[28].toInt() and 0xFF)
+    }
+
+    @Test fun helloV4OmitsBitrate() {
+        val b = Protocol.encodeHello(4, 1280, 720, 160, "n", "i", fps = 30, audioWanted = 1, orientationCode = 1)
+        assertEquals(0, b[22].toInt() and 0xFF); assertEquals(1, b[23].toInt() and 0xFF)  // name-len @22
+        assertEquals('n'.code, b[24].toInt() and 0xFF)
+    }
 }
