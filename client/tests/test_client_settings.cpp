@@ -25,3 +25,10 @@ TEST(ClientSettings, BitrateDefaultAndRoundTrip) {
   s.bitrate_kbps = 16000; droppix::ClientSettingsStore::save(s);
   EXPECT_EQ(droppix::ClientSettingsStore::load().bitrate_kbps, 16000);
 }
+TEST(ClientSettings, FlipDefaultAndRoundTrip) {
+  static int argc = 0; static QCoreApplication app(argc, nullptr);
+  QSettings::setDefaultFormat(QSettings::IniFormat);   // avoid touching the real config
+  droppix::ClientSettings s; EXPECT_FALSE(s.flip_horizontal);
+  s.flip_horizontal = true; droppix::ClientSettingsStore::save(s);
+  EXPECT_TRUE(droppix::ClientSettingsStore::load().flip_horizontal);
+}
