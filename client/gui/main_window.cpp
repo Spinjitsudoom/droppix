@@ -141,6 +141,7 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   const uint32_t fps = static_cast<uint32_t>(settings_.fps);
   const uint8_t audio = settings_.audio ? 1 : 0;
   const uint8_t orient = static_cast<uint8_t>(rotation_to_code(settings_.rotation));
+  const uint32_t bitrate = static_cast<uint32_t>(settings_.bitrate_kbps);
 
   StreamListenerImpl listener(this, video_, decoder_.get(), audioPlayer_);
 
@@ -161,7 +162,7 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
     }
     QMetaObject::invokeMethod(this, [this]{ statusLabel_->setText("Streaming"); },
                               Qt::QueuedConnection);
-    client_->runOverChannel(*channel, w, h, density, fps, audio, orient, listener,
+    client_->runOverChannel(*channel, w, h, density, fps, audio, orient, bitrate, listener,
                             [this]{ return running_.load(); }, name, id);
     channel->close();
     if (running_.load()) {

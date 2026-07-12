@@ -18,10 +18,13 @@ class ClientSettingsDialog : public QDialog {
   ClientSettings result() const;
 
  private:
+  ClientSettings cur_;  // settings passed into the ctor; result() seeds from this so any
+                        // field without a UI control (or not touched) survives round-trip.
   QComboBox* resolution_;
   QComboBox* fps_;
   QCheckBox* audio_;
   QComboBox* rotation_;
+  QComboBox* bitrate_;
 };
 
 }  // namespace droppix
