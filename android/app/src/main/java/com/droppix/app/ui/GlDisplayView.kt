@@ -179,6 +179,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     // ---- end ported members ----
 
     @Volatile var flipHorizontal: Boolean = false
+    @Volatile var brightness: Int = 0
+    @Volatile var contrast: Int = 100
 
     private val renderer = GlRenderer()
 
@@ -194,6 +196,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
         private var aTexCoord = 0
         private var uTexMatrix = 0
         private var uTex = 0
+        private var uBrightness = 0
+        private var uContrast = 0
         private var texId = 0
         private var surfaceTexture: SurfaceTexture? = null
         private val stMatrix = FloatArray(16)
@@ -214,6 +218,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             aTexCoord = GLES20.glGetAttribLocation(program, "aTexCoord")
             uTexMatrix = GLES20.glGetUniformLocation(program, "uTexMatrix")
             uTex = GLES20.glGetUniformLocation(program, "uTex")
+            uBrightness = GLES20.glGetUniformLocation(program, "uBrightness")
+            uContrast = GLES20.glGetUniformLocation(program, "uContrast")
 
             val ids = IntArray(1); GLES20.glGenTextures(1, ids, 0); texId = ids[0]
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texId)
@@ -254,6 +260,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texId)
             GLES20.glUniform1i(uTex, 0)
             GLES20.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
+            GLES20.glUniform1f(uBrightness, brightness / 200f)
+            GLES20.glUniform1f(uContrast, contrast / 100f)
             quad.position(0)
             GLES20.glVertexAttribPointer(aPosition, 2, GLES20.GL_FLOAT, false, 16, quad)
             GLES20.glEnableVertexAttribArray(aPosition)
@@ -280,11 +288,12 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             precision mediump float;
             varying vec2 vTexCoord;
             uniform samplerExternalOES uTex;
+            uniform float uBrightness;
+            uniform float uContrast;
             void main() {
                 vec4 c = texture2D(uTex, vTexCoord);
-                // T2 hook: brightness/contrast go here, e.g.
-                //   c.rgb = (c.rgb - 0.5) * uContrast + 0.5 + uBrightness;
-                gl_FragColor = c;
+                c.rgb = (c.rgb - 0.5) * uContrast + 0.5 + uBrightness;
+                gl_FragColor = vec4(clamp(c.rgb, 0.0, 1.0), c.a);
             }
         """
         private fun floatBuf(a: FloatArray): FloatBuffer =
