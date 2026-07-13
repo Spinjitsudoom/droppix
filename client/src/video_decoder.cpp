@@ -77,12 +77,20 @@ std::vector<QVideoFrame> VideoDecoder::submit(const std::vector<unsigned char>& 
         uchar* dst = vf.bits(plane);
         const uint8_t* src = frame_->data[plane];
         const int copyBytes = std::min(srcStride, dstStride);
-        if (plane == 0 && (brightness_ != 0 || contrast_ != 100)) {
+        const int b = brightness_.load(std::memory_order_relaxed);
+        const int c = contrast_.load(std::memory_order_relaxed);
+        if (plane == 0 && (b != 0 || c != 100)) {
+          if (!lut_valid_ || b != lut_brightness_ || c != lut_contrast_) {
+            for (int i = 0; i < 256; ++i) luma_lut_[i] = static_cast<uint8_t>(adjust_luma(i, b, c));
+            lut_brightness_ = b;
+            lut_contrast_ = c;
+            lut_valid_ = true;
+          }
           for (int row = 0; row < planeH; ++row) {
             const uint8_t* s = src + row * srcStride;
             uint8_t* d = dst + row * dstStride;
             for (int col = 0; col < copyBytes; ++col)
-              d[col] = static_cast<uint8_t>(adjust_luma(s[col], brightness_, contrast_));
+              d[col] = luma_lut_[s[col]];
           }
         } else {
           for (int row = 0; row < planeH; ++row) {

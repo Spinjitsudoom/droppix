@@ -1,6 +1,7 @@
 #pragma once
 #include <QVideoFrame>
 #include <QVideoFrameFormat>
+#include <atomic>
 #include <cstdint>
 #include <vector>
 
@@ -48,16 +49,28 @@ class VideoDecoder {
 
   // Adjusts luma (Y plane) brightness/contrast applied during the next submit() calls.
   // Neutral values (brightness 0, contrast 100) keep the plain memcpy fast path.
-  void setBrightness(int b) { brightness_ = b; }
-  void setContrast(int c) { contrast_ = c; }
+  void setBrightness(int b) { brightness_.store(b, std::memory_order_relaxed); }
+  void setContrast(int c) { contrast_.store(c, std::memory_order_relaxed); }
 
  private:
   AVCodecContext* ctx_ = nullptr;
   AVFrame* frame_ = nullptr;
   AVPacket* packet_ = nullptr;
   bool flip_ = false;
-  int brightness_ = 0;
-  int contrast_ = 100;
+  // std::atomic<int> (relaxed ordering): written from the GUI thread (setBrightness/
+  // setContrast), read on the decode thread inside submit(). Relaxed is sufficient — no
+  // other state is published alongside these values, so no ordering beyond atomicity is
+  // needed.
+  std::atomic<int> brightness_{0};
+  std::atomic<int> contrast_{100};
+  // Decode-thread-only LUT cache: touched exclusively inside submit(), never from the GUI
+  // thread, so plain (non-atomic) fields are correct here. luma_lut_[i] == adjust_luma(i,
+  // b, c) for the currently-cached (lut_brightness_, lut_contrast_); lut_valid_ forces a
+  // rebuild the first time a non-neutral frame is seen.
+  uint8_t luma_lut_[256];
+  int lut_brightness_ = 0;
+  int lut_contrast_ = 100;
+  bool lut_valid_ = false;
 };
 
 }  // namespace droppix
