@@ -42,7 +42,7 @@ class MainWindow : public QMainWindow {
   std::unique_ptr<TransportClient> client_;
   std::unique_ptr<VideoDecoder> decoder_;   // created once, never reset; deref'd on
                                              // netThread_ + live brightness/contrast writes
-                                             // from GUI thread (benign int race)
+                                             // from GUI thread (decoder's fields are atomic)
   AudioPlayer* audioPlayer_ = nullptr;      // QObject, GUI-thread owned (parented to this)
   VideoWidget* video_ = nullptr;
   QLabel* statusLabel_ = nullptr;

@@ -155,7 +155,7 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   const uint8_t orient = static_cast<uint8_t>(rotation_to_code(settings_.rotation));
   const uint32_t bitrate = static_cast<uint32_t>(settings_.bitrate_kbps);
   // Flip is applied here on netThread_; brightness/contrast are also applied live from
-  // onSettingsAction (GUI thread, benign int race). Applying flip here, once per
+  // onSettingsAction (GUI thread; the decoder's fields are atomic). Applying flip here, once per
   // netThreadMain invocation, means both the initial connect and any settings-triggered
   // reconnect (stopSession+startSession spawns a fresh netThreadMain) pick up the current
   // settings_.flip_horizontal before any frames are submitted.
