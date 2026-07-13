@@ -43,6 +43,20 @@ ClientSettingsDialog::ClientSettingsDialog(const ClientSettings& cur, const QStr
   flip_ = new QCheckBox("Flip horizontal");
   flip_->setChecked(cur.flip_horizontal);
 
+  brightness_ = new QSlider(Qt::Horizontal);
+  brightness_->setRange(-100, 100);
+  brightness_->setValue(cur.brightness);
+  auto* brightnessLabel = new QLabel(QString::number(cur.brightness));
+  connect(brightness_, &QSlider::valueChanged, brightnessLabel,
+          [brightnessLabel](int v) { brightnessLabel->setText(QString::number(v)); });
+
+  contrast_ = new QSlider(Qt::Horizontal);
+  contrast_->setRange(0, 200);
+  contrast_->setValue(cur.contrast);
+  auto* contrastLabel = new QLabel(QString::number(cur.contrast));
+  connect(contrast_, &QSlider::valueChanged, contrastLabel,
+          [contrastLabel](int v) { contrastLabel->setText(QString::number(v)); });
+
   auto* form = new QFormLayout;
   form->addRow("Resolution:", resolution_);
   form->addRow("FPS:", fps_);
@@ -50,6 +64,16 @@ ClientSettingsDialog::ClientSettingsDialog(const ClientSettings& cur, const QStr
   form->addRow("Rotation:", rotation_);
   form->addRow("Quality:", bitrate_);
   form->addRow("", flip_);
+
+  auto* brightnessRow = new QHBoxLayout;
+  brightnessRow->addWidget(brightness_);
+  brightnessRow->addWidget(brightnessLabel);
+  form->addRow("Brightness:", brightnessRow);
+
+  auto* contrastRow = new QHBoxLayout;
+  contrastRow->addWidget(contrast_);
+  contrastRow->addWidget(contrastLabel);
+  form->addRow("Contrast:", contrastRow);
 
   auto* bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
   connect(bb, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -71,6 +95,8 @@ ClientSettings ClientSettingsDialog::result() const {
   s.rotation = rotation_->currentData().toInt();
   s.bitrate_kbps = bitrate_->currentData().toInt();
   s.flip_horizontal = flip_->isChecked();
+  s.brightness = brightness_->value();
+  s.contrast = contrast_->value();
   return s;
 }
 

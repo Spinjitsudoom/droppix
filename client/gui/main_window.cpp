@@ -110,6 +110,10 @@ void MainWindow::onSettingsAction() {
                        next.flip_horizontal != settings_.flip_horizontal;
   settings_ = next;
   ClientSettingsStore::save(settings_);
+  if (decoder_) {  // brightness/contrast are pure display transforms: apply live, no reconnect
+    decoder_->setBrightness(settings_.brightness);
+    decoder_->setContrast(settings_.contrast);
+  }
   if (changed && running_.load()) {  // apply immediately: reconnect with the new HELLO
     const QString host = currentHost_;
     stopSession();
@@ -155,6 +159,8 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   // settings-triggered reconnect (stopSession+startSession spawns a fresh netThreadMain)
   // pick up the current settings_.flip_horizontal before any frames are submitted.
   decoder_->setFlipHorizontal(settings_.flip_horizontal);
+  decoder_->setBrightness(settings_.brightness);
+  decoder_->setContrast(settings_.contrast);
 
   StreamListenerImpl listener(this, video_, decoder_.get(), audioPlayer_);
 

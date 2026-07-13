@@ -4,6 +4,8 @@
 
 class QComboBox;
 class QCheckBox;
+class QSlider;
+class QLabel;
 
 namespace droppix {
 
@@ -26,6 +28,8 @@ class ClientSettingsDialog : public QDialog {
   QComboBox* rotation_;
   QComboBox* bitrate_;
   QCheckBox* flip_;
+  QSlider* brightness_;
+  QSlider* contrast_;
 };
 
 }  // namespace droppix

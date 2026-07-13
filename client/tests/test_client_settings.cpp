@@ -32,3 +32,12 @@ TEST(ClientSettings, FlipDefaultAndRoundTrip) {
   s.flip_horizontal = true; droppix::ClientSettingsStore::save(s);
   EXPECT_TRUE(droppix::ClientSettingsStore::load().flip_horizontal);
 }
+TEST(ClientSettings, BrightnessContrastDefaultAndRoundTrip) {
+  static int argc = 0; static QCoreApplication app(argc, nullptr);
+  QSettings::setDefaultFormat(QSettings::IniFormat);   // avoid touching the real config
+  droppix::ClientSettings s;
+  EXPECT_EQ(s.brightness, 0); EXPECT_EQ(s.contrast, 100);
+  s.brightness = -40; s.contrast = 150; droppix::ClientSettingsStore::save(s);
+  const droppix::ClientSettings r = droppix::ClientSettingsStore::load();
+  EXPECT_EQ(r.brightness, -40); EXPECT_EQ(r.contrast, 150);
+}
