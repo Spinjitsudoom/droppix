@@ -227,6 +227,15 @@ bool decode_mouse_button(const std::vector<unsigned char>& b, uint8_t& button,
   return true;
 }
 
+std::vector<unsigned char> encode_key(uint16_t keycode, uint8_t action) {
+  return { (unsigned char)(keycode >> 8), (unsigned char)(keycode & 0xFF), action };
+}
+bool decode_key(const std::vector<unsigned char>& b, uint16_t& keycode, uint8_t& action) {
+  if (b.size() < 3) return false;
+  keycode = (uint16_t)((b[0] << 8) | b[1]); action = b[2];
+  return true;
+}
+
 std::vector<unsigned char> encode_orientation(uint8_t code) {
   return {code};
 }

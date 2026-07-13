@@ -253,3 +253,19 @@ TEST(Protocol, MouseButtonRoundTrip) {
   ASSERT_TRUE(droppix::decode_mouse_button(b, btn, act, x, y));
   EXPECT_EQ(btn, 2); EXPECT_EQ(act, 1); EXPECT_EQ(x, 1234); EXPECT_EQ(y, 5678);
 }
+
+TEST(Protocol, KeyRoundTrip) {
+  auto b = droppix::encode_key(300, 1);          // 300 proves u16 (KEY_* can exceed 255)
+  ASSERT_EQ(b.size(), 3u);
+  uint16_t kc; uint8_t a;
+  ASSERT_TRUE(droppix::decode_key(b, kc, a));
+  EXPECT_EQ(kc, 300); EXPECT_EQ(a, 1);
+  auto b2 = droppix::encode_key(30, 2);           // KEY_A, repeat
+  ASSERT_TRUE(droppix::decode_key(b2, kc, a));
+  EXPECT_EQ(kc, 30); EXPECT_EQ(a, 2);
+}
+TEST(Protocol, KeyShortBodyRejected) {
+  std::vector<unsigned char> tooShort{0x01, 0x2C};   // 2 bytes, need 3
+  uint16_t kc; uint8_t a;
+  EXPECT_FALSE(droppix::decode_key(tooShort, kc, a));
+}
