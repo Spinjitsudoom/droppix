@@ -145,6 +145,41 @@ bool X11Backend::adopt_output(const std::string& output_name) {
   return true;
 }
 
+// Shared apply_layout body for KWin/X11: find the primary output (preferring the
+// compositor-reported primary, else the first other enabled output), build the
+// compositor command via layout_command, and run it the same way adopt_output does.
+static bool run_layout(BackendKind kind, const std::string& evdi, LayoutMode mode,
+                       const std::vector<OutputInfo>& outs) {
+  // find the primary output (skip the evdi output itself)
+  const OutputInfo* p = nullptr;
+  for (const auto& o : outs) {
+    if (o.name == evdi || !o.enabled) continue;
+    if (o.primary) { p = &o; break; }
+    if (!p) p = &o;                        // fallback: first other enabled output
+  }
+  if (!p) { std::fprintf(stderr, "[layout] no primary output found\n"); return false; }
+  std::string base = layout_command(kind, evdi, p->name, p->id, mode);
+  if (base.empty()) {
+    std::fprintf(stderr, "[layout] mirror/extend unsupported on this compositor\n");
+    return false;
+  }
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + base + "'";
+  std::system(cmd.c_str());
+  std::fprintf(stderr, "[layout] applied %s for %s\n",
+               mode == LayoutMode::Mirror ? "mirror" : "extend", evdi.c_str());
+  return true;
+}
+
+bool KWinBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  if (!safe_output_name(evdi)) return false;
+  return run_layout(BackendKind::KWin, evdi, mode, outputs());
+}
+
+bool X11Backend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  if (!safe_output_name(evdi)) return false;
+  return run_layout(BackendKind::X11, evdi, mode, outputs());
+}
+
 // Unsupported compositor: logs a warning and no-ops (display still works via evdi).
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;

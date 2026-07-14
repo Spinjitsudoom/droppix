@@ -17,6 +17,8 @@ std::string user_session_prefix();
 //  and StreamDaemon's output-identification gate.
 bool safe_output_name(const std::string& s);
 
+enum class LayoutMode { Extend, Mirror };
+
 // Per-desktop operations droppix needs beyond creating the evdi output. Compositing
 // the virtual display, encode, and stream are compositor-agnostic and not here.
 struct DesktopBackend {
@@ -30,6 +32,11 @@ struct DesktopBackend {
   // link + placement, or the desktop shows black). Returns true if the layout may have
   // changed so the caller re-queries geometry.
   virtual bool adopt_output(const std::string& output) { (void)output; return false; }
+  // Apply mirror/extend layout for the droppix output relative to the primary display.
+  // Default no-op (Generic); KWin/X11 override. Returns true if the command was issued.
+  virtual bool apply_layout(const std::string& evdi_output, LayoutMode mode) {
+    (void)evdi_output; (void)mode; return false;
+  }
 };
 
 // KDE Plasma: today's behavior, relocated (kscreen-doctor -o + KWin InputDevice DBus).
@@ -38,6 +45,7 @@ class KWinBackend : public DesktopBackend {
   const char* name() const override { return "kwin"; }
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
+  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
 };
 
 // Non-KDE X11 desktops (Cinnamon, XFCE, MATE, GNOME-on-Xorg, i3, ...): xrandr for
@@ -48,6 +56,7 @@ class X11Backend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool adopt_output(const std::string& output) override;
+  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
 };
 
 // Unknown/unsupported compositor: display still works (evdi is compositor-driven);
@@ -60,8 +69,6 @@ class GenericBackend : public DesktopBackend {
 };
 
 enum class BackendKind { KWin, X11, Generic };
-
-enum class LayoutMode { Extend, Mirror };
 
 // PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
 // (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
