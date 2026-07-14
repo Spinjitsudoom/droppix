@@ -163,6 +163,23 @@ BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has
   return BackendKind::Generic;
 }
 
+std::string layout_command(BackendKind kind, const std::string& evdi,
+                           const std::string& primary, int primary_id, LayoutMode mode) {
+  if (!safe_output_name(evdi) || !safe_output_name(primary)) return {};
+  switch (kind) {
+    case BackendKind::KWin:
+      return mode == LayoutMode::Mirror
+        ? "kscreen-doctor \"output." + evdi + ".replicationSource." + std::to_string(primary_id) + "\""
+        : "kscreen-doctor \"output." + evdi + ".replicationSource.0\"";
+    case BackendKind::X11:
+      return mode == LayoutMode::Mirror
+        ? "xrandr --output " + evdi + " --same-as " + primary
+        : "xrandr --output " + evdi + " --auto --right-of " + primary;
+    case BackendKind::Generic: default:
+      return {};
+  }
+}
+
 std::shared_ptr<DesktopBackend> make_desktop_backend() {
   // Detect once per process: the daemon is reconstructed every session (orientation
   // flips, reconnects), and the backends are stateless, so one shared instance is safe

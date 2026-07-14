@@ -61,11 +61,19 @@ class GenericBackend : public DesktopBackend {
 
 enum class BackendKind { KWin, X11, Generic };
 
+enum class LayoutMode { Extend, Mirror };
+
 // PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
 // (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
 // xrandr+xinput available -> X11; otherwise Generic.
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
                                 bool x11_session, bool has_x11_tools);
+
+// PURE (unit-tested). Returns the compositor command (no user_session_prefix/timeout wrapper;
+// the caller adds those). Empty string when unsupported (Generic) or when output names are
+// unsafe.
+std::string layout_command(BackendKind kind, const std::string& evdi_output,
+                          const std::string& primary_output, int primary_id, LayoutMode mode);
 
 // Detect the desktop (env + `command -v kscreen-doctor`), pick the backend, log it.
 std::shared_ptr<DesktopBackend> make_desktop_backend();
