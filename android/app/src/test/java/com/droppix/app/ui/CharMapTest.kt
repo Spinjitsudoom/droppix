@@ -31,4 +31,16 @@ class CharMapTest {
         assertNull(CharMap.toEvdev('£'))
         assertNull(CharMap.toEvdev('中'))
     }
+    @Test fun moreShiftedSymbols() {
+        assertEquals(3  to true,  CharMap.toEvdev('@'))   // shift+2
+        assertEquals(4  to true,  CharMap.toEvdev('#'))   // shift+3
+        assertEquals(26 to true,  CharMap.toEvdev('{'))
+        assertEquals(27 to true,  CharMap.toEvdev('}'))
+        assertEquals(43 to false, CharMap.toEvdev('\\'))
+        assertEquals(43 to true,  CharMap.toEvdev('|'))
+        assertEquals(41 to false, CharMap.toEvdev('`'))
+        assertEquals(41 to true,  CharMap.toEvdev('~'))
+        assertEquals(39 to true,  CharMap.toEvdev(':'))
+        assertEquals(40 to true,  CharMap.toEvdev('"'))
+    }
 }

@@ -227,6 +227,10 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             repeat(afterLength)  { tapKey(111) }  // KEY_DELETE
             return true
         }
+        override fun performEditorAction(actionCode: Int): Boolean {
+            tapKey(28)   // KEY_ENTER — some IMEs deliver the action key instead of a KEYCODE_ENTER
+            return true
+        }
     }
 
     private fun tapKey(evdev: Int) {
