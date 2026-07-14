@@ -73,6 +73,34 @@ bool InputInjector::open(const std::string& name) {
   } else {
     std::fprintf(stderr, "keyboard: uinput open failed; disabled\n");
   }
+
+  // Pen/stylus device (non-fatal): a graphics tablet (BTN_TOOL_PEN + pressure), DIRECT +
+  // ABS 0..65535, bound to the droppix output by stream_daemon so 0..65535 spans it.
+  pen_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+  if (pen_fd_ >= 0) {
+    ioctl(pen_fd_, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
+    ioctl(pen_fd_, UI_SET_EVBIT, EV_KEY);
+    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOOL_PEN);
+    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOOL_RUBBER);
+    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOUCH);
+    ioctl(pen_fd_, UI_SET_EVBIT, EV_ABS);
+    for (int code : {ABS_X, ABS_Y, ABS_PRESSURE}) ioctl(pen_fd_, UI_SET_ABSBIT, code);
+    auto pabs = [&](int code, int mn, int mx) {
+      uinput_abs_setup a{}; a.code = code; a.absinfo.minimum = mn; a.absinfo.maximum = mx;
+      ioctl(pen_fd_, UI_ABS_SETUP, &a);
+    };
+    pabs(ABS_X, 0, 65535); pabs(ABS_Y, 0, 65535); pabs(ABS_PRESSURE, 0, 1023);
+    uinput_setup pus{};
+    pus.id.bustype = BUS_USB; pus.id.vendor = 0x1209; pus.id.product = 0xd704;
+    std::string pname = name + "-pen";
+    std::strncpy(pus.name, pname.c_str(), sizeof(pus.name) - 1);
+    if (ioctl(pen_fd_, UI_DEV_SETUP, &pus) < 0 || ioctl(pen_fd_, UI_DEV_CREATE) < 0) {
+      std::fprintf(stderr, "pen: uinput device create failed; disabled\n");
+      ::close(pen_fd_); pen_fd_ = -1;
+    }
+  } else {
+    std::fprintf(stderr, "pen: uinput open failed; disabled\n");
+  }
   return true;
 }
 
@@ -188,6 +216,25 @@ void InputInjector::key(uint16_t keycode, uint8_t action) {
   emit(kb_fd_, EV_SYN, SYN_REPORT, 0);
 }
 
+void InputInjector::pen(uint16_t x, uint16_t y, uint16_t pressure, bool touching, bool eraser) {
+  if (pen_fd_ < 0) return;
+  if (touching && !pen_down_) {              // tool enters proximity on the down edge
+    pen_eraser_ = eraser;
+    emit(pen_fd_, EV_KEY, eraser ? BTN_TOOL_RUBBER : BTN_TOOL_PEN, 1);
+    pen_down_ = true;
+  }
+  emit(pen_fd_, EV_ABS, ABS_X, x);
+  emit(pen_fd_, EV_ABS, ABS_Y, y);
+  emit(pen_fd_, EV_ABS, ABS_PRESSURE, pressure);
+  emit(pen_fd_, EV_KEY, BTN_TOUCH, touching ? 1 : 0);
+  emit(pen_fd_, EV_SYN, SYN_REPORT, 0);
+  if (!touching && pen_down_) {               // tool leaves proximity on the up edge
+    emit(pen_fd_, EV_KEY, pen_eraser_ ? BTN_TOOL_RUBBER : BTN_TOOL_PEN, 0);
+    emit(pen_fd_, EV_SYN, SYN_REPORT, 0);
+    pen_down_ = false;
+  }
+}
+
 InputInjector::~InputInjector() {
   if (fd_ >= 0) {
     // Lift any fingers still down BEFORE destroying the device: Xorg segfaults if a
@@ -211,5 +258,6 @@ InputInjector::~InputInjector() {
   }
   if (rc_fd_ >= 0) { ioctl(rc_fd_, UI_DEV_DESTROY); ::close(rc_fd_); }
   if (kb_fd_ >= 0) { ioctl(kb_fd_, UI_DEV_DESTROY); ::close(kb_fd_); }
+  if (pen_fd_ >= 0) { ioctl(pen_fd_, UI_DEV_DESTROY); ::close(pen_fd_); }
 }
 }  // namespace droppix
