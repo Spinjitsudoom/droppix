@@ -50,10 +50,15 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     // action follows the wire protocol's KEY body (0=up, 1=down, 2=repeat).
     interface KeyListener { fun onKey(keycode: Int, action: Int) }
 
+    // Stylus/eraser tool events (pressure + eraser flag), routed to the host pen device instead
+    // of finger touch. x/y are normalized 0..65535 the same way as touch.
+    interface PenListener { fun onPen(x: Int, y: Int, pressure: Int, flags: Int) }
+
     private var surfaceListener: SurfaceListener? = null
     private var touchListener: TouchListener? = null
     @Volatile private var mouseListener: MouseListener? = null
     @Volatile private var keyListener: KeyListener? = null
+    @Volatile private var penListener: PenListener? = null
     private var lastMoveSentMs = 0L
     private val moveMinIntervalMs = 12L   // coalesce MOVEs to ~80 Hz max
 
@@ -88,6 +93,7 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     fun setTouchListener(l: TouchListener?) { touchListener = l }
     fun setMouseListener(l: MouseListener?) { mouseListener = l }
     fun setKeyListener(l: KeyListener?) { keyListener = l }
+    fun setPenListener(l: PenListener?) { penListener = l }
 
     // Same 0..65535 normalization the touch-contact loop below applies (view-local pixels ->
     // fraction of width/height, clamped, scaled). Reused by the mouse scroll/button branches so
@@ -131,6 +137,27 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
                 mouseListener?.onMouseButton(btn, if (down) 1 else 0, normX(event.x), normY(event.y))
                 return true
             }
+        }
+        // Stylus: a pen/eraser tool produces pen events (pressure + eraser) to the host pen
+        // device, not finger touch. Single pointer (index 0). Fingers fall through below.
+        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS ||
+            event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER) {
+            val pl = penListener
+            if (pl != null) {
+                val m = event.actionMasked
+                val touching = m == MotionEvent.ACTION_DOWN || m == MotionEvent.ACTION_MOVE
+                // (UP/CANCEL -> not touching)
+                if (m == MotionEvent.ACTION_MOVE) {   // coalesce high-rate moves like the touch path
+                    val now = System.currentTimeMillis()
+                    if (now - lastMoveSentMs >= moveMinIntervalMs) { lastMoveSentMs = now } else return true
+                }
+                val xn = normX(event.getX(0)); val yn = normY(event.getY(0))
+                val pn = (event.getPressure(0).coerceIn(0f, 1f) * 1023f).toInt()
+                val eraser = event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
+                val flags = (if (touching) 1 else 0) or (if (eraser) 2 else 0)
+                pl.onPen(xn, yn, pn, flags)
+            }
+            return true
         }
         val l = touchListener ?: return false
         val masked = event.actionMasked

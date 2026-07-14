@@ -151,6 +151,9 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         surfaceView.setKeyListener(object : GlDisplayView.KeyListener {
             override fun onKey(keycode: Int, action: Int) { client?.sendKey(keycode, action) }
         })
+        surfaceView.setPenListener(object : GlDisplayView.PenListener {
+            override fun onPen(x: Int, y: Int, pressure: Int, flags: Int) { client?.sendPen(x, y, pressure, flags) }
+        })
         surfaceView.requestFocus()
         // Live-apply: brightness/contrast are display-only shader params, so a settings change
         // that touches only these is pushed straight onto the surface here (every resume) rather
@@ -170,6 +173,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         surfaceView.setTouchListener(null)
         surfaceView.setMouseListener(null)
         surfaceView.setKeyListener(null)
+        surfaceView.setPenListener(null)
         surfaceView.setSurfaceListener(null)
         stopStreaming()
     }
