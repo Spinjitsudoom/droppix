@@ -140,20 +140,26 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
         }
         // Stylus: a pen/eraser tool produces pen events (pressure + eraser) to the host pen
         // device, not finger touch. Single pointer (index 0). Fingers fall through below.
-        if (event.getToolType(0) == MotionEvent.TOOL_TYPE_STYLUS ||
-            event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER) {
+        val toolType = event.getToolType(0)
+        if (toolType == MotionEvent.TOOL_TYPE_STYLUS || toolType == MotionEvent.TOOL_TYPE_ERASER) {
+            val m = event.actionMasked
+            // Barrel-button press/release aren't contact changes — consume without emitting a
+            // pen event (otherwise they'd inject a spurious up mid-stroke).
+            if (m == MotionEvent.ACTION_BUTTON_PRESS || m == MotionEvent.ACTION_BUTTON_RELEASE) return true
             val pl = penListener
             if (pl != null) {
-                val m = event.actionMasked
-                val touching = m == MotionEvent.ACTION_DOWN || m == MotionEvent.ACTION_MOVE
-                // (UP/CANCEL -> not touching)
+                // The stylus is pointer 0; it lifts only on UP/CANCEL or a POINTER_UP whose
+                // index is 0. A secondary finger/palm going down/up must NOT release the pen.
+                val lifting = m == MotionEvent.ACTION_UP || m == MotionEvent.ACTION_CANCEL ||
+                              (m == MotionEvent.ACTION_POINTER_UP && event.actionIndex == 0)
+                val touching = !lifting
                 if (m == MotionEvent.ACTION_MOVE) {   // coalesce high-rate moves like the touch path
                     val now = System.currentTimeMillis()
                     if (now - lastMoveSentMs >= moveMinIntervalMs) { lastMoveSentMs = now } else return true
                 }
                 val xn = normX(event.getX(0)); val yn = normY(event.getY(0))
                 val pn = (event.getPressure(0).coerceIn(0f, 1f) * 1023f).toInt()
-                val eraser = event.getToolType(0) == MotionEvent.TOOL_TYPE_ERASER
+                val eraser = toolType == MotionEvent.TOOL_TYPE_ERASER
                 val flags = (if (touching) 1 else 0) or (if (eraser) 2 else 0)
                 pl.onPen(xn, yn, pn, flags)
             }

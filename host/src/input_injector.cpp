@@ -258,6 +258,18 @@ InputInjector::~InputInjector() {
   }
   if (rc_fd_ >= 0) { ioctl(rc_fd_, UI_DEV_DESTROY); ::close(rc_fd_); }
   if (kb_fd_ >= 0) { ioctl(kb_fd_, UI_DEV_DESTROY); ::close(kb_fd_); }
-  if (pen_fd_ >= 0) { ioctl(pen_fd_, UI_DEV_DESTROY); ::close(pen_fd_); }
+  if (pen_fd_ >= 0) {
+    if (pen_down_) {   // release an in-progress stroke before the device vanishes: same
+                        // Xorg-segfault-on-mid-contact-teardown hazard the touch device
+                        // above guards against, and orientation restarts happen routinely
+                        // mid-stroke. Mirrors pen()'s up-edge release.
+      emit(pen_fd_, EV_KEY, BTN_TOUCH, 0);
+      emit(pen_fd_, EV_KEY, pen_eraser_ ? BTN_TOOL_RUBBER : BTN_TOOL_PEN, 0);
+      emit(pen_fd_, EV_SYN, SYN_REPORT, 0);
+      timespec ts{0, 50 * 1000 * 1000};   // same drain the touch teardown uses above
+      nanosleep(&ts, nullptr);
+    }
+    ioctl(pen_fd_, UI_DEV_DESTROY); ::close(pen_fd_);
+  }
 }
 }  // namespace droppix
