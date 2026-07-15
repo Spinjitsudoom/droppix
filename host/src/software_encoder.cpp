@@ -5,7 +5,6 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavutil/opt.h>
 #include <libavutil/imgutils.h>
-#include <libswscale/swscale.h>
 }
 
 namespace droppix {
@@ -49,20 +48,10 @@ bool SoftwareEncoder::open(int width, int height, int fps, int bitrate_kbps) {
     std::fprintf(stderr, "avcodec_open2 failed\n"); return false;
   }
 
-  nv12_ = av_frame_alloc();
-  if (!nv12_) return false;
-  nv12_->format = AV_PIX_FMT_NV12;
-  nv12_->width = width;
-  nv12_->height = height;
-  if (av_frame_get_buffer(nv12_, 32) < 0) return false;
-
   pkt_ = av_packet_alloc();
   if (!pkt_) return false;
 
-  sws_ = sws_getContext(width, height, AV_PIX_FMT_BGRA,
-                        width, height, AV_PIX_FMT_NV12,
-                        SWS_BILINEAR, nullptr, nullptr, nullptr);
-  return sws_ != nullptr;
+  return conv_.open(width, height);
 }
 
 std::vector<unsigned char> SoftwareEncoder::extradata() const {
@@ -91,14 +80,11 @@ std::vector<EncodedPacket> SoftwareEncoder::drain() {
 
 std::vector<EncodedPacket> SoftwareEncoder::encode(const Frame& frame, int64_t pts_us) {
   if (!ctx_ || !frame.valid) return {};
-  // BGRA -> NV12.
-  const uint8_t* src[1] = { frame.bgra.data() };
-  int src_stride[1] = { frame.stride };
-  sws_scale(sws_, src, src_stride, 0, height_, nv12_->data, nv12_->linesize);
+  AVFrame* nv12 = conv_.convert(frame);  // BGRA -> NV12
   int64_t idx = frame_index_++;
-  nv12_->pts = idx;            // codec time_base (1/fps) tick
-  pts_map_[idx] = pts_us;      // remember the caller's microsecond timestamp
-  if (avcodec_send_frame(ctx_, nv12_) < 0) return {};
+  nv12->pts = idx;              // codec time_base (1/fps) tick
+  pts_map_[idx] = pts_us;       // remember the caller's microsecond timestamp
+  if (avcodec_send_frame(ctx_, nv12) < 0) return {};
   return drain();
 }
 
@@ -111,9 +97,7 @@ std::vector<EncodedPacket> SoftwareEncoder::flush() {
 }
 
 SoftwareEncoder::~SoftwareEncoder() {
-  if (sws_) sws_freeContext(sws_);
   if (pkt_) av_packet_free(&pkt_);
-  if (nv12_) av_frame_free(&nv12_);
   if (ctx_) avcodec_free_context(&ctx_);
 }
 

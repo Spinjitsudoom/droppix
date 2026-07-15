@@ -2,11 +2,11 @@
 #include <cstdint>
 #include <map>
 #include "encoder.h"
+#include "nv12_converter.h"
 
 struct AVCodecContext;
 struct AVFrame;
 struct AVPacket;
-struct SwsContext;
 
 namespace droppix {
 class SoftwareEncoder : public Encoder {
@@ -21,9 +21,8 @@ class SoftwareEncoder : public Encoder {
   std::vector<EncodedPacket> drain();  // pull packets from the codec
 
   AVCodecContext* ctx_ = nullptr;
-  AVFrame* nv12_ = nullptr;
+  Nv12Converter conv_;
   AVPacket* pkt_ = nullptr;
-  SwsContext* sws_ = nullptr;
   int width_ = 0, height_ = 0, fps_ = 30;
   int64_t frame_index_ = 0;
   std::map<int64_t, int64_t> pts_map_;  // frame_index (codec pts tick) -> caller pts_us

@@ -24,6 +24,7 @@ add_library(droppix_core
   src/png_writer.cpp
   src/protocol.cpp
   src/software_encoder.cpp
+  src/nv12_converter.cpp
   src/test_pattern_source.cpp
   src/evdi_frame_source.cpp
   src/transport_server.cpp
@@ -115,6 +116,7 @@ add_executable(droppix_tests
   tests/test_png_writer.cpp
   tests/test_protocol.cpp
   tests/test_software_encoder.cpp
+  tests/test_nv12_converter.cpp
   tests/test_test_pattern_source.cpp
   tests/test_transport_server.cpp
   tests/test_socket_channel.cpp
