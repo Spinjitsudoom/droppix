@@ -11,7 +11,6 @@
 #include "stream_daemon.h"
 #include "test_pattern_source.h"
 #include "evdi_frame_source.h"
-#include "software_encoder.h"
 #include "approval.h"
 #include "aoa_connect.h"
 #include "encoder_factory.h"
@@ -157,8 +156,8 @@ int main(int argc, char** argv) {
       }
       tx.adopt_channel(std::move(ch));
     }
-    droppix::SoftwareEncoder enc;
-    droppix::StreamDaemon daemon(make_source, enc, tx,
+    auto enc = droppix::make_encoder(encoder_pref);
+    droppix::StreamDaemon daemon(make_source, *enc, tx,
         {fps, bitrate, stats_json, touch, mirror, touch_name, droppix::Rect{mx, my, mw, mh}, dtw, dth,
          orientation, &g_orientation, approve, &g_gate, audio, overlay, &g_overlay,
          /*preconnected=*/!usb_aoa.empty()});
