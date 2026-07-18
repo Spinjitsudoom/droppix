@@ -110,6 +110,11 @@ if(Qt6_FOUND)
     src/tether_discovery.cpp
     src/aoa_scan.cpp
     src/web_root.cpp
+    gui/log_classify.cpp
+    gui/log_buffer.cpp
+    gui/log_forwarder.cpp
+    gui/log_model.cpp
+    gui/log_panel.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -187,6 +192,14 @@ if(Qt6_FOUND)
     gui/auto_connect.cpp
     gui/tests/test_aoa_known_store.cpp
     gui/aoa_known_store.cpp
+    gui/tests/test_log_classify.cpp
+    gui/log_classify.cpp
+    gui/tests/test_log_buffer.cpp
+    gui/log_buffer.cpp
+    gui/tests/test_log_forwarder.cpp
+    gui/log_forwarder.cpp
+    gui/tests/test_log_filter.cpp
+    gui/log_model.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
