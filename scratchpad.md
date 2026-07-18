@@ -4,17 +4,28 @@
 
 Spacedesk-like system: turn an Android tablet (or Linux desktop client) into a **true extended monitor** for a Linux PC (KDE Plasma / KWin first; X11 backend also shipped), with touch, stylus, keyboard, orientation, mirror/extend, and audio out. Verified E2E on Nexus 10 (Android 5.1.1) + Plasma 6 over USB and WiFi.
 
-Remote: `git@github.com:Spinjitsudoom/droppix.git` · License: MIT
+License: MIT
+
+## Git / collaboration (local-first)
+
+| Remote | URL | Role |
+|---|---|---|
+| `origin` | `https://github.com/davidcarma/droppix.git` | **Our fork** - push here |
+| `upstream` | `git@github.com:Spinjitsudoom/droppix.git` | Friend's repo - fetch only (`push` disabled) |
+
+- Work locally; open PRs from `davidcarma` → `Spinjitsudoom`.
+- When he catches up: `git fetch upstream && git merge upstream/master` then `git push origin master`.
+- Open PR: https://github.com/Spinjitsudoom/droppix/pull/3
 
 ## Current state (as of 2026-07-18)
 
-- **Status:** early but working; ~391 commits on `master` (tip `c1ef3cc`, VAAPI/NVENC cascade).
+- **Status:** early but working; local `master` includes docs refresh + agent sync (pushed to fork).
 - **Host:** C++17 `droppix_stream` + Qt6 `droppix_gui`; evdi capture; AutoEncoder NVENC→VAAPI→x264; uinput input; PipeWire audio; DesktopBackend (KWin / X11 / Generic).
 - **Android client:** Kotlin, MediaCodec, touch/stylus/keys/orientation/audio; minSdk 21; HELLO v5 settings.
 - **Desktop client:** Qt6 Linux receive client in `client/` (decode-only).
 - **Packaging:** AppImage + Flatpak (host + client); Android APK script.
 - **macOS:** archived under `macos/` — not in build.
-- **Docs (refreshed 2026-07-18):** living status in [`docs/STATUS.md`](docs/STATUS.md); protocol in [`docs/WIRE.md`](docs/WIRE.md); hub [`docs/README.md`](docs/README.md); lessons scaffold [`docs/lessons/`](docs/lessons/). Spec Status lines updated to Shipped/Partial.
+- **Docs:** [`docs/STATUS.md`](docs/STATUS.md), [`docs/WIRE.md`](docs/WIRE.md), [`docs/README.md`](docs/README.md), [`docs/lessons/`](docs/lessons/).
 - **Open roadmap:** cross-desktop M2 Sway / M3 GNOME Wayland.
 
 ## Key decisions (do not re-debate)
@@ -48,9 +59,9 @@ evdi → Capturer → Encoder (NVENC|VAAPI|x264) → TransportServer
 | `client/` | Qt6 Linux receive client |
 | `packaging/` | AppImage, Flatpak, APK |
 | `CLAUDE.md` / `AGENTS.md` | Agent entrypoints |
-| `.claude/rules/` | Canonical project rules (docs-maintenance, agent-tooling-sync) |
+| `.claude/rules/` | Canonical project rules |
 | `.cursor/rules/*.mdc` | Symlinks → `.claude/rules/` |
-| `.claude/skills/` | Canonical project skills (Cursor mirrors under `.cursor/skills/`) |
+| `.claude/skills/` | Canonical project skills |
 | `scripts/check-agent-sync.sh` | Enforce Claude ↔ Cursor symlink sync |
 | `docs/STATUS.md` | Living feature status |
 | `docs/WIRE.md` | Current protocol summary |
@@ -62,9 +73,8 @@ evdi → Capturer → Encoder (NVENC|VAAPI|x264) → TransportServer
 
 ## Active / recent work
 
-- Docs brought current (2026-07-18): README, STATUS, WIRE, spec Status lines, lessons scaffold, client README.
-- HW encode shipped on master.
-- Feature branches on remote are stale vs master (PRs already merged/closed).
+- Local-first fork workflow documented; remotes rewired (`origin`=fork, `upstream`=friend).
+- Docs refresh on local/fork `master`; PR #3 awaiting friend.
 
 ## Hardcoded constraints
 
@@ -79,10 +89,10 @@ evdi → Capturer → Encoder (NVENC|VAAPI|x264) → TransportServer
 - [docs/STATUS.md](docs/STATUS.md)
 - [docs/WIRE.md](docs/WIRE.md)
 - [docs/README.md](docs/README.md)
-- [Cross-desktop roadmap](docs/superpowers/specs/2026-07-05-cross-desktop-portability-design.md)
+- [PR #3](https://github.com/Spinjitsudoom/droppix/pull/3)
 
 ## Recent session notes
 
-- **2026-07-18:** Docs branch merged into **local** `master` (ahead of `origin/master` by 3). Upstream PR still open: https://github.com/Spinjitsudoom/droppix/pull/3 - `davidcarma` cannot merge/push to `Spinjitsudoom/droppix` (READ only); owner must merge PR or grant Write.
-- **2026-07-18:** Claude ↔ Cursor tooling sync: canonical rules/skills under `.claude/`; `.cursor/rules/*.mdc` and `.cursor/skills/<name>` are symlinks. Always-on rules: `docs-maintenance`, `agent-tooling-sync`. Verify with `scripts/check-agent-sync.sh`.
-- **2026-07-18:** Full docs refresh. Added living STATUS/WIRE, updated README for HW encode + `client/` + transports, marked shipped specs, scaffolded `docs/lessons/`, added `client/README.md`. Only open roadmap called out: Sway/GNOME backends.
+- **2026-07-18:** Local-first workflow: `origin`=`davidcarma/droppix` (push), `upstream`=`Spinjitsudoom/droppix` (fetch only). PRs from fork; resync later with `git fetch upstream && git merge upstream/master`.
+- **2026-07-18:** Docs + agent sync on local `master`; open upstream PR #3.
+- **2026-07-18:** Claude ↔ Cursor tooling: canonical under `.claude/`; Cursor symlinks; `scripts/check-agent-sync.sh`.

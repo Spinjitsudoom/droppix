@@ -31,3 +31,17 @@ Always-on rules currently:
 ## Spec → plan → build
 
 New features: design under `docs/superpowers/specs/` → plan under `docs/superpowers/plans/` → implement → flip STATUS/spec Status to Shipped in the same change.
+
+## Git remotes / PR workflow (local-first)
+
+| Remote | Repo | Role |
+|---|---|---|
+| `origin` | `davidcarma/droppix` | **Our fork** - push branches here |
+| `upstream` | `Spinjitsudoom/droppix` | Friend's repo - **fetch only** (no push) |
+
+Workflow:
+
+1. Work on local branches (or `master`); commit freely.
+2. `git push -u origin HEAD` and open PRs **from the fork** → `upstream` (`gh pr create --repo Spinjitsudoom/droppix --head davidcarma:<branch>`).
+3. When he merges / catches up: `git fetch upstream && git merge upstream/master` (or rebase), then `git push origin master`.
+4. Never push to `upstream` until Write access exists.
