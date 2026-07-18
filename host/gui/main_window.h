@@ -16,6 +16,9 @@
 #include "approved_store.h"
 #include "cert_manager.h"
 #include "audio_sink.h"
+#include "log_buffer.h"
+#include "log_panel.h"
+#include "log_entry.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
@@ -66,6 +69,8 @@ class MainWindow : public QMainWindow {
   void setupTray();             // create the tray icon + Show/Quit menu (if a tray exists)
   void showPairingPopup(const QString& ip);   // pop the pairing code when a device connects
   void hidePairingPopup();
+  // Append a synthetic (non-streamer) event into the debug-log console.
+  void logEvent(const QString& key, const QString& source, LogLevel level, const QString& text);
   void manageDevices();         // dialog to view/forget remembered (approved) devices
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
@@ -95,6 +100,8 @@ class MainWindow : public QMainWindow {
   CertManager cert_;
   DroppixAudioSink audioSink_;
   SessionManager sessions_;     // one session (= streamer = monitor) per connected tablet
+  LogBuffer* logBuffer_ = nullptr;   // app-wide log sink (streamer + GUI messages)
+  LogPanel*  logPanel_ = nullptr;    // bottom "Debug log" dock
   MdnsAdvertiser advertiser_;
   quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;

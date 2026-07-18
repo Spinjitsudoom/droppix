@@ -2,6 +2,8 @@
 #include "args_builder.h"
 #include "settings_dialog.h"
 #include "web_url.h"
+#include "log_forwarder.h"
+#include "log_classify.h"
 #include "style.h"
 #include <QtWidgets>
 #include <QClipboard>
@@ -260,6 +262,18 @@ MainWindow::MainWindow(QWidget* parent)
   auto* central = new QWidget; central->setLayout(root);
   setCentralWidget(central);
   resize(600, 560);
+
+  // --- Debug log console ---
+  logBuffer_ = new LogBuffer(this);
+  installLogForwarder(logBuffer_);            // capture GUI qInfo/qWarning/qCritical too
+  logPanel_ = new LogPanel(logBuffer_, this);
+  addDockWidget(Qt::BottomDockWidgetArea, logPanel_);
+  logPanel_->hide();                          // start hidden; toggle with the action below
+  QAction* toggleLog = logPanel_->toggleViewAction();
+  toggleLog->setText(tr("&Debug log"));
+  toggleLog->setShortcut(QKeySequence(Qt::Key_F12));
+  addAction(toggleLog);                       // make F12 work window-wide
+  menuBar()->addMenu(tr("&View"))->addAction(toggleLog);
 
   // --- Wiring ---
   connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartStop);
@@ -745,8 +759,22 @@ void MainWindow::refreshWebClientUi() {
   }
 }
 
+void MainWindow::logEvent(const QString& key, const QString& source, LogLevel level, const QString& text) {
+  if (!logBuffer_) return;
+  LogEntry e;
+  e.epochMs = QDateTime::currentMSecsSinceEpoch();
+  e.session = key;
+  e.source = source;
+  e.level = level;
+  e.text = text;
+  logBuffer_->append(e);
+}
+
 void MainWindow::wireSession(StreamController* c, const QString& key) {
-  connect(c, &StreamController::logLine, this, [](const QString& l){ qInfo("%s", qUtf8Printable(l)); });
+  connect(c, &StreamController::logLine, this, [this, key](const QString& l){
+    const Classified cl = classifyStreamerLine(l);
+    logEvent(key, cl.source, cl.level, cl.text);
+  });
   connect(c, &StreamController::statsReceived, this, [this, key](const Stats& s){
     if (s.client_connected) {
       anyConnected_ = true;
@@ -765,9 +793,14 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
     refreshWebClientUi();
     updateStatus();
   });
-  connect(c, &StreamController::connecting, this, [this](const QString& ip){ showPairingPopup(ip); });
+  connect(c, &StreamController::connecting, this, [this, key](const QString& ip){
+    logEvent(key, QStringLiteral("conn"), LogLevel::Info, QStringLiteral("client connecting ip=%1").arg(ip));
+    showPairingPopup(ip);
+  });
   connect(c, &StreamController::approvalRequested, this,
-    [this, c](const QString& id, const QString& name, const QString& ip){
+    [this, c, key](const QString& id, const QString& name, const QString& ip){
+      logEvent(key, QStringLiteral("pair"), LogLevel::Info,
+               QStringLiteral("approval requested id=%1 name=%2 ip=%3").arg(id, name, ip));
       hidePairingPopup();
       const QString akey = id.isEmpty() ? ip : id;
       const qint64 woken = pendingWakes_.value(ip, 0);
