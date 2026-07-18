@@ -87,6 +87,10 @@ if(Qt6_FOUND)
     gui/args_builder.cpp
   )
   target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen)
+  # Dev/local builds: bake the source tree's web/dist so the GUI can locate + stage the
+  # PWA assets (packaged builds ship them under share/droppix/web and ignore this path).
+  target_compile_definitions(droppix_gui PRIVATE
+      DROPPIX_SOURCE_WEB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../web/dist")
   target_link_libraries(droppix_gui PRIVATE Qt6::Widgets Qt6::Network)
   target_sources(droppix_gui PRIVATE
     gui/profile_store.cpp

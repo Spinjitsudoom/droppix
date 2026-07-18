@@ -127,6 +127,26 @@ std::string MainWindow::resolveStreamBin() {
   return QFileInfo::exists(dstBin) ? dstBin.toStdString() : dev.toStdString();
 }
 
+// Dev/local builds: the AppImage/Flatpak paths stage web/ next to the relocated streamer,
+// but a plain build runs the sibling streamer with no staging — so the GUI can't hand it a
+// --web-root and silently omits --web. Copy the source-tree web/dist (baked at build time)
+// into the root-readable runtime dir so the pkexec streamer can serve it. No-op when the
+// source dir isn't present (packaged builds) or the staged copy is already current.
+void MainWindow::stageWebAssets() {
+#ifdef DROPPIX_SOURCE_WEB_DIR
+  const QString src = QDir(QString::fromUtf8(DROPPIX_SOURCE_WEB_DIR)).absolutePath();
+  if (!QFileInfo::exists(src + "/index.html")) return;
+  const QString dstWeb = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                         + "/droppix/runtime/web";
+  const QFileInfo dstIdx(dstWeb + "/index.html");
+  const QFileInfo srcIdx(src + "/index.html");
+  if (dstIdx.exists() && dstIdx.lastModified() >= srcIdx.lastModified()) return;   // already current
+  QDir().mkpath(dstWeb);
+  QProcess::execute("cp", {"-a", src + "/.", dstWeb + "/"});
+  qInfo("staged web client assets -> %s", qUtf8Printable(dstWeb));
+#endif
+}
+
 // Flatpak: mirror the freshly generated cert/key onto the host so the host-run streamer
 // (--cert/--key) can read them. No-op outside Flatpak (flatpakHostRuntime_ empty).
 void MainWindow::stageCertsToHost() {
@@ -274,6 +294,8 @@ MainWindow::MainWindow(QWidget* parent)
   toggleLog->setShortcut(QKeySequence(Qt::Key_F12));
   addAction(toggleLog);                       // make F12 work window-wide
   menuBar()->addMenu(tr("&View"))->addAction(toggleLog);
+
+  stageWebAssets();   // ensure the PWA assets are where the (root) streamer can read them
 
   // --- Wiring ---
   connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartStop);
@@ -709,6 +731,9 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   const std::string aoaSerial = (transport == "usb-aoa") ? id.toStdString() : std::string();
   Command cmd = build_command(s, streamBin_, port, tname, aoaSerial, mirror);
   qInfo("$ %s ... (:%d)", cmd.program.c_str(), port);
+  if (s.webClient && aoaSerial.empty() && s.tls && !s.certPath.empty() && s.webRoot.empty())
+    qWarning("web client is enabled but web/dist assets were not found — starting WITHOUT the web "
+             "UI. Build them (npm --prefix web run build) or set DROPPIX_WEB_ROOT.");
   c->start(cmd);
 
   Session sess;

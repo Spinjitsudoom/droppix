@@ -34,6 +34,7 @@ class MainWindow : public QMainWindow {
   void closeEvent(QCloseEvent* event) override;
  private:
   std::string resolveStreamBin();   // sibling binary, extracted AppImage copy, or host-staged (Flatpak)
+  void stageWebAssets();             // dev/local: copy source web/dist into the root-readable runtime dir
   void stageCertsToHost();           // Flatpak: mirror cert/key to the host for the streamer
   Settings collectSettings() const;
   void applySettings(const Settings& s);
