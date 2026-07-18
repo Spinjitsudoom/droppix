@@ -109,6 +109,7 @@ if(Qt6_FOUND)
     src/mdns_browse.cpp
     src/tether_discovery.cpp
     src/aoa_scan.cpp
+    src/web_root.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
