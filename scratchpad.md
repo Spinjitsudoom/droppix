@@ -56,6 +56,7 @@ evdi → Capturer → Encoder → TransportServer
 | `android/` | Kotlin tablet client |
 | `client/` | Qt6 Linux receive client |
 | `web/` | Host-served PWA shell + WSS client |
+| `tools/web-mock-host/` | Local HTTPS/WSS mock host for web PWA debug (no evdi) |
 | `macos/` | Archived Mac host spike; see CGVirtualDisplay research |
 | `packaging/` | AppImage, Flatpak, APK |
 | `docs/` | STATUS, WIRE, ARCHITECTURE, specs |
@@ -84,6 +85,16 @@ evdi → Capturer → Encoder → TransportServer
 
 ## Recent session notes
 
+- **2026-07-18:** Lipsync via media PTS (no delay queues): video stamped at RGB read (`frameIndex/fps`); audio held and released only up to `lastVideoPts+40ms` (PTS pacing). Client paints video against audio wire clock. GEEKS shows VPTS/APTS/SKEW/DROP. Steady skew ~40ms. Encoder: ultrafast + low_delay + keyint_min=1.
+- **2026-07-18:** Server-burned overlay: mock now decodes MP4 → composites click marks + event-log panel in Node (`mock-desktop.overlayFrame`, dimension-aware) → re-encodes to H.264 (`overlay-stream.mjs`, `createRgbEncoder`), so the overlay is IN the stream (true E2E), not client DOM. Client SRV-mark polling disabled via `burnIn` config; starts muted. Lipsync fixed: `-preset ultrafast` + drop-frame (not pause) backpressure + buffer pool hold source 24fps; client audio prebuffer 120→60ms. Lesson `mock-overlay-lipsync`. E2E green.
+- **2026-07-18:** Autoplay-policy fix: real Chrome kept AudioContext suspended after mock auto-connect (no gesture). `await ctx.resume()` hangs forever under autoplay, which froze `connect()` and stuck the `connecting` flag → dead Connect button + no video. Fix: never await resume() (fire-and-forget + gesture hook), `connect()` in try/finally. Also silent audio the E2E missed because Playwright Chromium never enforces the policy (gotcha `playwright-autoplay`). Client resumes on first pointer/key gesture + "tap for audio" status hint.
+- **2026-07-18:** Playback overhaul: sample is now a real movie w/ dialogue (Tears of Steel 110s segment, CC-BY; `fetch-sample.sh` downloads it). Fixed delta-frame drop corruption (drop-until-keyframe resync in `decoder.ts`), audio clicks (AudioWorklet-first w/ 120ms prebuffer; buffer fallback aggregates 200ms; chirp removed), and **ghost stream after disconnect** (stale-socket guards in `transport.ts`, single-flight connect in `main.ts`, single `activeSession` preemption in mock server + `/debug/session`). Lessons: `ghost-ws-stream`, `delta-drop-corruption`. E2E passes incl. stays-black-after-disconnect regression.
+- **2026-07-18:** Mock host streams a looped MP4 (`assets/sample.mp4` or `DROPPIX_MOCK_MP4`) with synced A/V via one ffmpeg + fifos for lipsync checks. Idle stage black (no local mock wallpaper); SRV marks only while connected.
+- **2026-07-18:** Blank-screen fixes: slices=1, SW network-first / unregister on :8443, auto-Connect on mock.
+- **2026-07-18:** Mock E2E desktop input + `/debug/server-marks`; AudioBuffer path for self-signed TLS.
+- **2026-07-18:** Mock UX: always-on 440 Hz PCM, AudioBuffer fallback (self-signed breaks AudioWorklet), mock waiting preview + log.
+- **2026-07-18:** Playwright E2E for web PWA vs mock host: `tools/web-mock-host` `npm run test:e2e` (1 passed: Connect → canvas pixels → Touch/MouseButton/Scroll/Key via `/debug/inputs` → fit/mute → Disconnect). Cursor Playwright MCP blocked by self-signed cert (use the npm script).
+- **2026-07-18:** Added `tools/web-mock-host` (HTTPS + WSS mock: testsrc H.264, PCM tone, input console logs) + skill `web-mock-host` for Mac-side web PWA debugging without Linux/evdi. PIN default `123456`, port `8443`.
 - **2026-07-18:** Parked CGVirtualDisplay OSS research: [`docs/superpowers/specs/2026-07-18-cgvirtualdisplay-oss-research.md`](docs/superpowers/specs/2026-07-18-cgvirtualdisplay-oss-research.md). Decision: own thin `macos/` wrapper; crib DeskPad/VDK/daylight-mirror; reject BetterDisplay/DisplayLink deps.
 - **2026-07-18:** Implemented host-served Web PWA end-to-end on `feat/web-pwa-client` (WSS bridge, GUI URL/QR, TS client with video/audio/input/fullscreen/PWA, packaging hooks, WIRE/STATUS/ARCHITECTURE updates). Web unit tests pass; host C++ not built on this macOS agent (needs Linux/evdi).
 - **2026-07-18:** Specced host-served Web PWA client design.

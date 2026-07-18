@@ -69,7 +69,8 @@ if [[ -d .claude/skills ]]; then
       bad "$mirror is not a symlink; must link to .claude/skills/${name}"
       continue
     fi
-    resolved="$(cd "$(dirname "$mirror")" && realpath "$(readlink "$mirror")" 2>/dev/null || true)"
+    target="$(readlink "$mirror")"
+    resolved="$(cd "$(dirname "$mirror")" && realpath "$target" 2>/dev/null || true)"
     expect="$(realpath "$skill_dir")"
     if [[ -z "$resolved" || "$resolved" != "$expect" ]]; then
       bad "$mirror does not resolve to $skill_dir"
@@ -91,7 +92,8 @@ if [[ -d .cursor/skills ]]; then
       bad "$mirror must be a symlink into .claude/skills/"
       continue
     fi
-    resolved="$(cd "$(dirname "$mirror")" && realpath "$(readlink "$mirror")" 2>/dev/null || true)"
+    target="$(readlink "$mirror")"
+    resolved="$(cd "$(dirname "$mirror")" && realpath "$target" 2>/dev/null || true)"
     if [[ -z "$resolved" || "$resolved" != "$ROOT/.claude/skills/"* ]]; then
       bad "$mirror must resolve under .claude/skills/ (got '$resolved')"
     fi

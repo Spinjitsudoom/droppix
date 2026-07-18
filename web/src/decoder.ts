@@ -1,18 +1,33 @@
 import { contentBox, type FitMode } from "./fit.ts";
 
+/**
+ * H.264 → canvas. Decoded frames are held and painted against a media clock
+ * (audio wire PTS) so lipsync follows stream timestamps; drops are skips in
+ * that timeline, not something we invent delays for.
+ */
 export class VideoPipeline {
   private decoder: VideoDecoder | null = null;
   private configured = false;
+  private closed = false;
+  private dropUntilKey = false;
   private vw = 0;
   private vh = 0;
   private frames = 0;
+  private painted = 0;
+  private received = 0;
   private lastFpsAt = performance.now();
   private fps = 0;
   private fit: FitMode = "contain";
+  private lastError = "";
+  private pending: VideoFrame[] = [];
+  private raf = 0;
+  /** Returns media PTS in microseconds, or null to paint ASAP. */
+  private getClock: (() => number | null) | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
     private opts: { flip: boolean; brightness: number; contrast: number },
+    private onInfo?: (msg: string) => void,
   ) {}
 
   get size() {
@@ -20,6 +35,12 @@ export class VideoPipeline {
   }
   get currentFps() {
     return this.fps;
+  }
+  get hasPainted() {
+    return this.painted > 0;
+  }
+  get stats() {
+    return { received: this.received, painted: this.painted, fps: this.fps, lastError: this.lastError };
   }
 
   setFit(mode: FitMode) {
@@ -30,39 +51,123 @@ export class VideoPipeline {
     this.opts = { flip, brightness, contrast };
   }
 
-  async submit(keyframe: boolean, nal: Uint8Array): Promise<void> {
+  /** Master clock for presentation (typically audio wire PTS). */
+  setClock(fn: (() => number | null) | null) {
+    this.getClock = fn;
+  }
+
+  submit(keyframe: boolean, nal: Uint8Array, ptsUs: bigint): void {
+    this.closed = false;
+    this.received++;
     if (typeof VideoDecoder === "undefined") {
-      throw new Error("WebCodecs VideoDecoder not available");
+      this.lastError = "WebCodecs VideoDecoder missing - use Chromium";
+      this.onInfo?.(this.lastError);
+      return;
     }
     if (!this.decoder || this.decoder.state === "closed") {
       this.decoder = new VideoDecoder({
-        output: (frame) => this.draw(frame),
-        error: (e) => console.error("VideoDecoder", e),
+        output: (frame) => this.onDecoded(frame),
+        error: (e) => {
+          this.lastError = String(e?.message || e);
+          this.onInfo?.(`VideoDecoder: ${this.lastError}`);
+          this.configured = false;
+          try {
+            this.decoder?.close();
+          } catch {
+            /* ignore */
+          }
+          this.decoder = null;
+        },
       });
       this.configured = false;
+      this.dropUntilKey = false;
     }
     if (!this.configured) {
       if (!keyframe) return;
       this.decoder.configure({
-        codec: "avc1.42E01E",
+        codec: "avc1.42E01F",
         optimizeForLatency: true,
       });
       this.configured = true;
     }
+
+    if (keyframe) {
+      this.dropUntilKey = false;
+    } else if (this.dropUntilKey) {
+      return;
+    }
+
+    if (this.decoder.decodeQueueSize > 20 && !keyframe) {
+      this.dropUntilKey = true;
+      return;
+    }
+
     const chunk = new EncodedVideoChunk({
       type: keyframe ? "key" : "delta",
-      timestamp: performance.now() * 1000,
+      timestamp: Number(ptsUs),
       data: nal,
     });
     try {
       this.decoder.decode(chunk);
     } catch (e) {
-      console.warn("decode", e);
-      if (keyframe) this.configured = false;
+      this.lastError = String((e as Error)?.message || e);
+      this.onInfo?.(`decode: ${this.lastError}`);
+      this.configured = false;
+      this.dropUntilKey = true;
     }
   }
 
+  private onDecoded(frame: VideoFrame) {
+    if (this.closed) {
+      frame.close();
+      return;
+    }
+    this.pending.push(frame);
+    while (this.pending.length > 12) {
+      this.pending.shift()!.close();
+    }
+    this.schedulePaint();
+  }
+
+  private schedulePaint() {
+    if (this.raf) return;
+    this.raf = requestAnimationFrame(() => {
+      this.raf = 0;
+      this.paintDue();
+    });
+  }
+
+  private paintDue() {
+    if (this.closed) return;
+    const clock = this.getClock?.() ?? null;
+    if (clock == null) {
+      // No audio clock: paint latest, drop the rest.
+      while (this.pending.length > 1) this.pending.shift()!.close();
+      const f = this.pending.shift();
+      if (f) this.draw(f);
+      return;
+    }
+    // Paint the newest frame whose PTS <= media clock; drop older ones.
+    let best = -1;
+    for (let i = 0; i < this.pending.length; i++) {
+      if (this.pending[i]!.timestamp <= clock) best = i;
+    }
+    if (best < 0) {
+      // Video ahead of audio — wait.
+      this.schedulePaint();
+      return;
+    }
+    for (let i = 0; i < best; i++) this.pending.shift()!.close();
+    const f = this.pending.shift();
+    if (f) this.draw(f);
+    if (this.pending.length) this.schedulePaint();
+  }
+
   private draw(frame: VideoFrame) {
+    if (this.closed) {
+      frame.close();
+      return;
+    }
     this.vw = frame.displayWidth;
     this.vh = frame.displayHeight;
     const ctx = this.canvas.getContext("2d");
@@ -97,6 +202,7 @@ export class VideoPipeline {
     ctx.restore();
     frame.close();
     this.frames++;
+    this.painted++;
     const now = performance.now();
     if (now - this.lastFpsAt >= 1000) {
       this.fps = this.frames;
@@ -106,6 +212,11 @@ export class VideoPipeline {
   }
 
   close() {
+    this.closed = true;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    for (const f of this.pending) f.close();
+    this.pending = [];
     try {
       this.decoder?.close();
     } catch {
@@ -113,5 +224,17 @@ export class VideoPipeline {
     }
     this.decoder = null;
     this.configured = false;
+    this.dropUntilKey = false;
+    this.painted = 0;
+    this.received = 0;
+    const ctx = this.canvas.getContext("2d");
+    if (ctx) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = "none";
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, this.canvas.width || 1, this.canvas.height || 1);
+      ctx.restore();
+    }
   }
 }

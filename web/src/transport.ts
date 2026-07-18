@@ -43,6 +43,7 @@ export class Transport {
     this.ws = ws;
 
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       const body = encodeHello(
         kProtocolVersion,
         hello.width,
@@ -56,13 +57,15 @@ export class Transport {
         hello.bitrateKbps,
       );
       ws.send(frameMessage(MsgType.Hello, body));
-      this.handlers.onStatus("Connected — waiting for CONFIG");
+      this.handlers.onStatus("Connected - waiting for CONFIG");
       this.pingTimer = window.setInterval(() => {
         this.send(MsgType.Ping, new Uint8Array());
       }, 2000);
     };
 
     ws.onmessage = (ev) => {
+      // Stale socket (replaced or closed): drop its frames on the floor.
+      if (this.ws !== ws) return;
       const parsed = parseFrame(ev.data as ArrayBuffer);
       if (!parsed) return;
       switch (parsed.type) {
@@ -96,8 +99,14 @@ export class Transport {
       }
     };
 
-    ws.onerror = () => this.handlers.onStatus("WebSocket error");
+    ws.onerror = () => {
+      if (this.ws === ws) this.handlers.onStatus("WebSocket error");
+    };
     ws.onclose = () => {
+      // Only report the close if this socket is still the active one;
+      // sockets discarded via close() were already handled by the caller.
+      if (this.ws !== ws) return;
+      this.ws = null;
       this.clearPing();
       this.handlers.onClose("socket closed");
     };
@@ -110,14 +119,21 @@ export class Transport {
 
   close(): void {
     this.clearPing();
-    if (this.ws) {
+    const ws = this.ws;
+    this.ws = null; // detach first so late events from this socket are ignored
+    if (ws) {
       try {
-        this.ws.send(frameMessage(MsgType.Bye, new Uint8Array()));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(frameMessage(MsgType.Bye, new Uint8Array()));
+        }
       } catch {
         /* ignore */
       }
-      this.ws.close();
-      this.ws = null;
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
     }
   }
 

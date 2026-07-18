@@ -16,7 +16,10 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
-| *(none yet)* | — | — | — | — | — |
+| L-2026-07-18-ghost-ws-stream | Video keeps playing after disconnect (orphaned WebSocket) | client, transport, silent-failure | high | 2026-07-18 | [ghost-ws-stream.md](ghost-ws-stream.md) |
+| L-2026-07-18-delta-drop-corruption | Shaky/corrupted video from dropping delta frames | client, encoder, wrong-answer, performance | high | 2026-07-18 | [delta-drop-corruption.md](delta-drop-corruption.md) |
+| G-2026-07-18-playwright-autoplay | Playwright Chromium never suspends AudioContext; `await resume()` hangs connect under real autoplay | client, audio, flake | high | 2026-07-18 | [playwright-autoplay.md](playwright-autoplay.md) |
+| L-2026-07-18-mock-overlay-lipsync | A/V drift when re-encoding movie with burned-in overlay (preset/backpressure) | encoder, audio, performance | medium | 2026-07-18 | [mock-overlay-lipsync.md](mock-overlay-lipsync.md) |
 
 ## Related external docs
 

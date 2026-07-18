@@ -126,6 +126,7 @@ var Transport = class {
     ws.binaryType = "arraybuffer";
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws) return;
       const body = encodeHello(
         kProtocolVersion,
         hello.width,
@@ -139,12 +140,13 @@ var Transport = class {
         hello.bitrateKbps
       );
       ws.send(frameMessage(MsgType.Hello, body));
-      this.handlers.onStatus("Connected \u2014 waiting for CONFIG");
+      this.handlers.onStatus("Connected - waiting for CONFIG");
       this.pingTimer = window.setInterval(() => {
         this.send(MsgType.Ping, new Uint8Array());
       }, 2e3);
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws) return;
       const parsed = parseFrame(ev.data);
       if (!parsed) return;
       switch (parsed.type) {
@@ -177,8 +179,12 @@ var Transport = class {
           break;
       }
     };
-    ws.onerror = () => this.handlers.onStatus("WebSocket error");
+    ws.onerror = () => {
+      if (this.ws === ws) this.handlers.onStatus("WebSocket error");
+    };
     ws.onclose = () => {
+      if (this.ws !== ws) return;
+      this.ws = null;
       this.clearPing();
       this.handlers.onClose("socket closed");
     };
@@ -189,13 +195,19 @@ var Transport = class {
   }
   close() {
     this.clearPing();
-    if (this.ws) {
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
       try {
-        this.ws.send(frameMessage(MsgType.Bye, new Uint8Array()));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(frameMessage(MsgType.Bye, new Uint8Array()));
+        }
       } catch {
       }
-      this.ws.close();
-      this.ws = null;
+      try {
+        ws.close();
+      } catch {
+      }
     }
   }
   clearPing() {
@@ -226,23 +238,39 @@ function normalizePointer(px, py, box, outsideOk) {
 
 // src/decoder.ts
 var VideoPipeline = class {
-  constructor(canvas2, opts) {
+  constructor(canvas2, opts, onInfo) {
     this.canvas = canvas2;
     this.opts = opts;
+    this.onInfo = onInfo;
   }
   decoder = null;
   configured = false;
+  closed = false;
+  dropUntilKey = false;
   vw = 0;
   vh = 0;
   frames = 0;
+  painted = 0;
+  received = 0;
   lastFpsAt = performance.now();
   fps = 0;
   fit = "contain";
+  lastError = "";
+  pending = [];
+  raf = 0;
+  /** Returns media PTS in microseconds, or null to paint ASAP. */
+  getClock = null;
   get size() {
     return { w: this.vw, h: this.vh };
   }
   get currentFps() {
     return this.fps;
+  }
+  get hasPainted() {
+    return this.painted > 0;
+  }
+  get stats() {
+    return { received: this.received, painted: this.painted, fps: this.fps, lastError: this.lastError };
   }
   setFit(mode) {
     this.fit = mode;
@@ -250,38 +278,111 @@ var VideoPipeline = class {
   setAdjust(flip, brightness, contrast) {
     this.opts = { flip, brightness, contrast };
   }
-  async submit(keyframe, nal) {
+  /** Master clock for presentation (typically audio wire PTS). */
+  setClock(fn) {
+    this.getClock = fn;
+  }
+  submit(keyframe, nal, ptsUs) {
+    this.closed = false;
+    this.received++;
     if (typeof VideoDecoder === "undefined") {
-      throw new Error("WebCodecs VideoDecoder not available");
+      this.lastError = "WebCodecs VideoDecoder missing - use Chromium";
+      this.onInfo?.(this.lastError);
+      return;
     }
     if (!this.decoder || this.decoder.state === "closed") {
       this.decoder = new VideoDecoder({
-        output: (frame) => this.draw(frame),
-        error: (e) => console.error("VideoDecoder", e)
+        output: (frame) => this.onDecoded(frame),
+        error: (e) => {
+          this.lastError = String(e?.message || e);
+          this.onInfo?.(`VideoDecoder: ${this.lastError}`);
+          this.configured = false;
+          try {
+            this.decoder?.close();
+          } catch {
+          }
+          this.decoder = null;
+        }
       });
       this.configured = false;
+      this.dropUntilKey = false;
     }
     if (!this.configured) {
       if (!keyframe) return;
       this.decoder.configure({
-        codec: "avc1.42E01E",
+        codec: "avc1.42E01F",
         optimizeForLatency: true
       });
       this.configured = true;
     }
+    if (keyframe) {
+      this.dropUntilKey = false;
+    } else if (this.dropUntilKey) {
+      return;
+    }
+    if (this.decoder.decodeQueueSize > 20 && !keyframe) {
+      this.dropUntilKey = true;
+      return;
+    }
     const chunk = new EncodedVideoChunk({
       type: keyframe ? "key" : "delta",
-      timestamp: performance.now() * 1e3,
+      timestamp: Number(ptsUs),
       data: nal
     });
     try {
       this.decoder.decode(chunk);
     } catch (e) {
-      console.warn("decode", e);
-      if (keyframe) this.configured = false;
+      this.lastError = String(e?.message || e);
+      this.onInfo?.(`decode: ${this.lastError}`);
+      this.configured = false;
+      this.dropUntilKey = true;
     }
   }
+  onDecoded(frame) {
+    if (this.closed) {
+      frame.close();
+      return;
+    }
+    this.pending.push(frame);
+    while (this.pending.length > 12) {
+      this.pending.shift().close();
+    }
+    this.schedulePaint();
+  }
+  schedulePaint() {
+    if (this.raf) return;
+    this.raf = requestAnimationFrame(() => {
+      this.raf = 0;
+      this.paintDue();
+    });
+  }
+  paintDue() {
+    if (this.closed) return;
+    const clock = this.getClock?.() ?? null;
+    if (clock == null) {
+      while (this.pending.length > 1) this.pending.shift().close();
+      const f2 = this.pending.shift();
+      if (f2) this.draw(f2);
+      return;
+    }
+    let best = -1;
+    for (let i = 0; i < this.pending.length; i++) {
+      if (this.pending[i].timestamp <= clock) best = i;
+    }
+    if (best < 0) {
+      this.schedulePaint();
+      return;
+    }
+    for (let i = 0; i < best; i++) this.pending.shift().close();
+    const f = this.pending.shift();
+    if (f) this.draw(f);
+    if (this.pending.length) this.schedulePaint();
+  }
   draw(frame) {
+    if (this.closed) {
+      frame.close();
+      return;
+    }
     this.vw = frame.displayWidth;
     this.vh = frame.displayHeight;
     const ctx = this.canvas.getContext("2d");
@@ -316,6 +417,7 @@ var VideoPipeline = class {
     ctx.restore();
     frame.close();
     this.frames++;
+    this.painted++;
     const now = performance.now();
     if (now - this.lastFpsAt >= 1e3) {
       this.fps = this.frames;
@@ -324,64 +426,208 @@ var VideoPipeline = class {
     }
   }
   close() {
+    this.closed = true;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.raf = 0;
+    for (const f of this.pending) f.close();
+    this.pending = [];
     try {
       this.decoder?.close();
     } catch {
     }
     this.decoder = null;
     this.configured = false;
+    this.dropUntilKey = false;
+    this.painted = 0;
+    this.received = 0;
+    const ctx = this.canvas.getContext("2d");
+    if (ctx) {
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.filter = "none";
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, this.canvas.width || 1, this.canvas.height || 1);
+      ctx.restore();
+    }
   }
 };
 
 // src/audio.ts
 var AUDIO_RATE = 48e3;
+var AUDIO_CHANNELS = 2;
 var AudioPlayer = class {
   ctx = null;
+  gain = null;
   node = null;
+  mode = "none";
   muted = false;
   ready = false;
+  packets = 0;
+  /** Wire media clock (µs), advanced for every PCM chunk regardless of mute. */
+  wirePtsUs = 0;
+  // buffer-mode state: aggregate small packets into larger scheduled buffers
+  pending = [];
+  pendingFrames = 0;
+  nextTime = 0;
+  /** Kept for compat with callers; both paths work everywhere. */
+  preferBuffer = false;
+  /** Fires when the AudioContext state changes (e.g. suspended → running). */
+  onStateChange = null;
+  gestureHooked = false;
+  get contextState() {
+    return this.ctx?.state ?? "none";
+  }
+  /** Test hook: force the suspended state the autoplay policy produces. */
+  suspendForTest() {
+    void this.ctx?.suspend();
+  }
   async unlock() {
     try {
       if (!this.ctx) {
         this.ctx = new AudioContext({ sampleRate: AUDIO_RATE });
-        await this.ctx.audioWorklet.addModule(new URL("./audio-worklet.js", import.meta.url));
-        this.node = new AudioWorkletNode(this.ctx, "pcm-player", {
-          numberOfInputs: 0,
-          numberOfOutputs: 1,
-          outputChannelCount: [2]
-        });
-        this.node.connect(this.ctx.destination);
+        this.gain = this.ctx.createGain();
+        this.gain.gain.value = 0.9;
+        this.gain.connect(this.ctx.destination);
+        this.ctx.onstatechange = () => {
+          if (!this.ctx) return;
+          if (this.ctx.state === "suspended") this.hookGestureResume();
+          this.onStateChange?.(this.ctx.state);
+        };
       }
-      if (this.ctx.state === "suspended") await this.ctx.resume();
+      if (this.ctx.state === "suspended") {
+        void this.ctx.resume().catch(() => {
+        });
+        this.hookGestureResume();
+      }
+      if (this.mode === "none") {
+        if (!this.preferBuffer) {
+          try {
+            await this.ctx.audioWorklet.addModule(new URL("./audio-worklet.js", import.meta.url));
+            this.node = new AudioWorkletNode(this.ctx, "pcm-player", {
+              numberOfInputs: 0,
+              numberOfOutputs: 1,
+              outputChannelCount: [2]
+            });
+            this.node.connect(this.gain);
+            this.mode = "worklet";
+          } catch (e) {
+            console.warn("AudioWorklet unavailable; using AudioBuffer fallback", e);
+            this.node = null;
+            this.mode = "buffer";
+          }
+        } else {
+          this.mode = "buffer";
+        }
+      }
+      this.nextTime = this.ctx.currentTime + 0.05;
       this.ready = true;
     } catch (e) {
       console.warn("audio init failed; video-only", e);
       this.ready = false;
+      this.mode = "none";
     }
+  }
+  hookGestureResume() {
+    if (this.gestureHooked) return;
+    this.gestureHooked = true;
+    const resume = () => {
+      void this.ctx?.resume().catch(() => {
+      });
+      if (this.ctx && this.ctx.state !== "suspended") {
+        document.removeEventListener("pointerdown", resume, true);
+        document.removeEventListener("keydown", resume, true);
+        this.gestureHooked = false;
+      }
+    };
+    document.addEventListener("pointerdown", resume, true);
+    document.addEventListener("keydown", resume, true);
   }
   setMuted(m) {
     this.muted = m;
-    if (m) this.node?.port.postMessage({ type: "clear" });
+    if (this.gain) this.gain.gain.value = m ? 0 : 0.9;
+  }
+  get packetCount() {
+    return this.packets;
+  }
+  /**
+   * Media presentation time (µs) for video sync. Based on wire audio chunks
+   * (20 ms each). Subtracts worklet prebuffer so paint matches what is heard.
+   */
+  get mediaPtsUs() {
+    if (!this.ready || this.wirePtsUs <= 0) return null;
+    const lead = this.mode === "worklet" ? 6e4 : 4e4;
+    return Math.max(0, this.wirePtsUs - lead);
   }
   submit(pcm) {
-    if (!this.ready || this.muted || !this.node) return;
+    if (!this.ready || !this.ctx) return;
     if (pcm.length < 4) return;
+    this.packets++;
+    this.wirePtsUs += 2e4;
     const samples = new Float32Array(pcm.length / 2);
     const view = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
     for (let i = 0; i < samples.length; i++) {
       samples[i] = view.getInt16(i * 2, true) / 32768;
     }
-    this.node.port.postMessage({ type: "pcm", samples }, [samples.buffer]);
+    if (this.mode === "worklet" && this.node) {
+      this.node.port.postMessage({ type: "pcm", samples }, [samples.buffer]);
+      return;
+    }
+    if (this.mode !== "buffer") return;
+    this.pending.push(samples);
+    this.pendingFrames += samples.length / AUDIO_CHANNELS;
+    const now = this.ctx.currentTime;
+    const queuedAhead = this.nextTime - now;
+    const pendingSec = this.pendingFrames / AUDIO_RATE;
+    if (pendingSec >= 0.2 || queuedAhead < 0.12 && pendingSec >= 0.04) {
+      this.flushPending();
+    }
+  }
+  flushPending() {
+    if (!this.ctx || !this.gain || this.pendingFrames < 1) return;
+    const frames = this.pendingFrames;
+    const buf = this.ctx.createBuffer(2, frames, AUDIO_RATE);
+    const L = buf.getChannelData(0);
+    const R = buf.getChannelData(1);
+    let o = 0;
+    for (const s of this.pending) {
+      for (let i = 0; i + 1 < s.length; i += 2) {
+        L[o] = s[i];
+        R[o] = s[i + 1];
+        o++;
+      }
+    }
+    this.pending = [];
+    this.pendingFrames = 0;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    src.connect(this.gain);
+    const now = this.ctx.currentTime;
+    if (this.nextTime < now + 0.03) this.nextTime = now + 0.03;
+    try {
+      src.start(this.nextTime);
+      this.nextTime += frames / AUDIO_RATE;
+    } catch (e) {
+      console.warn("audio schedule", e);
+      this.nextTime = now + 0.05;
+    }
   }
   close() {
     try {
       this.node?.disconnect();
+      this.gain?.disconnect();
       void this.ctx?.close();
     } catch {
     }
     this.node = null;
+    this.gain = null;
     this.ctx = null;
+    this.mode = "none";
     this.ready = false;
+    this.pending = [];
+    this.pendingFrames = 0;
+    this.nextTime = 0;
+    this.packets = 0;
+    this.wirePtsUs = 0;
   }
 };
 
@@ -617,6 +863,124 @@ function toggleFullscreen(el) {
   else void enterFullscreen(el);
 }
 
+// src/mock-overlay.ts
+var MockOverlay = class {
+  constructor(_stage, layer, logEl, backdrop, canvas2) {
+    this.canvas = canvas2;
+    this.layer = layer;
+    this.logEl = logEl;
+    this.backdrop = backdrop;
+    this.showIdle();
+  }
+  layer;
+  logEl;
+  backdrop;
+  pollTimer = 0;
+  seenMarks = /* @__PURE__ */ new Set();
+  videoW = 1280;
+  videoH = 720;
+  fit = "contain";
+  connected = false;
+  /** Idle / disconnected: black stage, no mock chrome. */
+  showIdle() {
+    this.connected = false;
+    this.stopServerMarkPoll();
+    this.backdrop.hidden = true;
+    this.backdrop.classList.add("is-hidden");
+    this.logEl.hidden = true;
+    this.logEl.textContent = "";
+    this.layer.hidden = true;
+    this.layer.replaceChildren();
+    this.seenMarks.clear();
+    this.clearCanvas();
+  }
+  /** Connected: only server mark layer (no local preview). */
+  showConnected() {
+    this.connected = true;
+    this.backdrop.hidden = true;
+    this.backdrop.classList.add("is-hidden");
+    this.logEl.hidden = true;
+    this.layer.hidden = false;
+  }
+  setVideoSize(w, h) {
+    this.videoW = w;
+    this.videoH = h;
+  }
+  setFit(mode) {
+    this.fit = mode;
+  }
+  markVideoAlive() {
+  }
+  startServerMarkPoll() {
+    this.stopServerMarkPoll();
+    this.showConnected();
+    void fetch("./debug/server-marks?clear=1").catch(() => {
+    });
+    this.pollTimer = window.setInterval(() => void this.pullMarks(), 150);
+  }
+  stopServerMarkPoll() {
+    if (this.pollTimer) clearInterval(this.pollTimer);
+    this.pollTimer = 0;
+  }
+  /** Kept for API compat; unused in idle-clean mode. */
+  note(_msg) {
+  }
+  showClick(_x, _y, _label) {
+  }
+  clearCanvas() {
+    const c = this.canvas;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, c.width || 1, c.height || 1);
+    ctx.restore();
+  }
+  async pullMarks() {
+    if (!this.connected) return;
+    try {
+      const r = await fetch("./debug/server-marks", { cache: "no-store" });
+      if (!r.ok) return;
+      const j = await r.json();
+      for (const m of j.marks || []) {
+        if (m.x == null || m.y == null) continue;
+        if (m.kind === "touch-up" || m.kind === "mouse-up" || m.kind === "scroll" || m.kind === "key") {
+          continue;
+        }
+        const id = `${m.t}-${m.kind}-${m.x}-${m.y}`;
+        if (this.seenMarks.has(id)) continue;
+        this.seenMarks.add(id);
+        const css = this.videoToCss(m.x, m.y);
+        if (!css) continue;
+        this.spawnMark(css.x, css.y, `SRV ${m.kind} ${m.x},${m.y}`);
+      }
+    } catch {
+    }
+  }
+  videoToCss(vx, vy) {
+    const r = this.canvas.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) return null;
+    const box = contentBox(r.width, r.height, this.videoW, this.videoH, this.fit);
+    return {
+      x: box.x + vx / Math.max(1, this.videoW - 1) * box.w,
+      y: box.y + vy / Math.max(1, this.videoH - 1) * box.h
+    };
+  }
+  spawnMark(x, y, label) {
+    const mark = document.createElement("div");
+    mark.className = "click-mark click-mark-srv";
+    mark.style.left = `${x}px`;
+    mark.style.top = `${y}px`;
+    mark.innerHTML = `<span class="click-ring"></span><span class="click-label">${label}</span>`;
+    this.layer.appendChild(mark);
+    window.setTimeout(() => mark.remove(), 1600);
+  }
+  dispose() {
+    this.showIdle();
+  }
+};
+
 // src/main.ts
 var canvas = document.getElementById("video");
 var stage = document.getElementById("stage");
@@ -630,15 +994,21 @@ var btnInstall = document.getElementById("btn-install");
 var fitSel = document.getElementById("fit-mode");
 var muteEl = document.getElementById("mute");
 var hud = document.getElementById("hud");
+var clickLayer = document.getElementById("click-layer");
+var mockLog = document.getElementById("mock-log");
+var mockBackdrop = document.getElementById("mock-backdrop");
+var mockBadge = document.getElementById("mock-badge");
 var settings = loadSettings();
 fitSel.value = settings.fit;
 muteEl.checked = !settings.audio;
+var mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
 var video = new VideoPipeline(canvas, {
   flip: settings.flip,
   brightness: settings.brightness,
   contrast: settings.contrast
 });
 var audio = new AudioPlayer();
+video.setClock(() => audio.mediaPtsUs);
 var transport = null;
 var input = null;
 var deferredPrompt = null;
@@ -646,6 +1016,8 @@ var showHud = false;
 var bytesIn = 0;
 var lastBytesAt = performance.now();
 var kbps = 0;
+var isMock = false;
+var burnIn = false;
 function setStatus(s) {
   statusEl.textContent = s;
 }
@@ -658,28 +1030,59 @@ async function loadConfig() {
     if (!r.ok) throw new Error(String(r.status));
     const j = await r.json();
     pinCodeEl.textContent = j.pairingCode ?? "------";
-    setStatus("Confirm PIN matches the PC, then Connect");
+    isMock = !!j.mock;
+    burnIn = !!j.burnIn;
+    mock.showIdle();
+    if (isMock) {
+      mockBadge.hidden = false;
+      muteEl.checked = true;
+      settings.audio = false;
+      saveSettings(settings);
+      pinOk.checked = true;
+      syncConnectEnabled();
+      setStatus("Ready - Connect for server video + audio");
+      if (typeof VideoDecoder === "undefined") {
+        setStatus("WebCodecs VideoDecoder missing - use Chromium");
+      } else {
+        window.setTimeout(() => {
+          if (!btnDisconnect.hidden) return;
+          void connect();
+        }, 300);
+      }
+    } else {
+      mockBadge.hidden = true;
+      setStatus("Confirm PIN matches the PC, then Connect");
+    }
   } catch (e) {
     pinCodeEl.textContent = "------";
-    setStatus(`config.json unavailable (${e}) \u2014 is the host serving with --web?`);
+    setStatus(`config.json unavailable (${e}) - is the host serving with --web?`);
   }
 }
 function wireTransport() {
+  transport?.close();
   transport = new Transport({
     onStatus: setStatus,
     onClose: (r) => {
       setStatus(`Disconnected: ${r}`);
+      transport = null;
+      connecting = false;
       btnConnect.hidden = false;
       btnDisconnect.hidden = true;
+      hud.hidden = true;
+      video.close();
+      audio.close();
+      mock.showIdle();
     },
     onConfig: (w, h) => {
-      setStatus(`Streaming ${w}x${h}`);
+      const audioHint = audio.contextState === "suspended" ? " - tap for audio" : "";
+      setStatus(`Streaming ${w}x${h}${audioHint}`);
       input?.setVideoSize(w, h);
+      mock.setVideoSize(w, h);
       video.setAdjust(settings.flip, settings.brightness, settings.contrast);
     },
     onVideo: (pts, key, nal) => {
       bytesIn += nal.length;
-      void video.submit(key, nal);
+      video.submit(key, nal, pts);
       const now = performance.now();
       if (now - lastBytesAt >= 1e3) {
         kbps = Math.round(bytesIn * 8 / 1e3);
@@ -697,40 +1100,59 @@ function wireTransport() {
       hud.hidden = !show;
     }
   });
-  input = new InputBinder(canvas, (type, body) => transport.send(type, body));
+  input ??= new InputBinder(canvas, (type, body) => transport?.send(type, body));
   input.setFit(settings.fit);
 }
+var connecting = false;
 async function connect() {
-  settings = loadSettings();
-  settings.audio = !muteEl.checked;
-  saveSettings(settings);
-  await audio.unlock();
-  audio.setMuted(muteEl.checked);
-  wireTransport();
-  const w = Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1)));
-  const h = Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)));
-  transport.connect({
-    width: w,
-    height: h,
-    density: 160,
-    name: settings.name,
-    id: settings.id,
-    fps: settings.fps,
-    audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
-    bitrateKbps: settings.bitrateKbps
-  });
-  btnConnect.hidden = true;
-  btnDisconnect.hidden = false;
-  canvas.focus();
+  if (connecting || transport) return;
+  connecting = true;
+  try {
+    settings = loadSettings();
+    settings.audio = !muteEl.checked;
+    saveSettings(settings);
+    await audio.unlock();
+    audio.setMuted(muteEl.checked);
+    audio.onStateChange = (s) => {
+      if (s === "running" && statusEl.textContent?.includes("tap for audio")) {
+        setStatus(statusEl.textContent.replace(" - tap for audio", ""));
+      }
+    };
+    wireTransport();
+    const w = isMock ? 1280 : Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1)));
+    const h = isMock ? 720 : Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)));
+    transport.connect({
+      width: w,
+      height: h,
+      density: 160,
+      name: settings.name,
+      id: settings.id,
+      fps: settings.fps,
+      audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
+      bitrateKbps: settings.bitrateKbps
+    });
+    btnConnect.hidden = true;
+    btnDisconnect.hidden = false;
+    canvas.focus();
+    if (isMock && !burnIn) mock.startServerMarkPoll();
+  } catch (e) {
+    setStatus(`Connect failed: ${e instanceof Error ? e.message : String(e)}`);
+    transport?.close();
+    transport = null;
+  } finally {
+    connecting = false;
+  }
 }
 function disconnect() {
   transport?.close();
   transport = null;
   video.close();
   audio.close();
+  mock.showIdle();
+  hud.hidden = true;
   btnConnect.hidden = false;
   btnDisconnect.hidden = true;
-  setStatus("Disconnected");
+  setStatus(isMock ? "Disconnected" : "Disconnected");
 }
 pinOk.addEventListener("change", syncConnectEnabled);
 btnConnect.addEventListener("click", () => void connect());
@@ -741,8 +1163,10 @@ fitSel.addEventListener("change", () => {
   saveSettings(settings);
   input?.setFit(settings.fit);
   video.setFit(settings.fit);
+  mock.setFit(settings.fit);
 });
 video.setFit(settings.fit);
+mock.setFit(settings.fit);
 muteEl.addEventListener("change", () => {
   audio.setMuted(muteEl.checked);
   settings.audio = !muteEl.checked;
@@ -767,8 +1191,22 @@ btnInstall.addEventListener("click", async () => {
   btnInstall.hidden = true;
 });
 if ("serviceWorker" in navigator) {
-  void navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("sw", e));
+  if (location.port === "8443") {
+    void navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (const r of regs) void r.unregister();
+    });
+    void caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))));
+  } else {
+    void navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("sw", e));
+  }
 }
+var dbg = window;
+dbg.__droppixDebug = () => ({
+  audio: { state: audio.contextState, packets: audio.packetCount },
+  video: video.stats,
+  connected: transport !== null
+});
+dbg.__droppixSuspendAudio = () => audio.suspendForTest();
 syncConnectEnabled();
 void loadConfig();
 //# sourceMappingURL=main.js.map

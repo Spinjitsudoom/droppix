@@ -29,6 +29,20 @@ Set `DROPPIX_WEB_ROOT` to the absolute path of `web/dist` if the GUI cannot find
 - Fullscreen API + `display: fullscreen` manifest
 - Service worker caches the shell only (never `/ws`)
 
+## Local mock (no Linux host)
+
+On macOS (or without `droppix_stream`), use the mock host - it loops a real MP4 (synced A/V) over WSS:
+
+```bash
+cd tools/web-mock-host
+npm install
+npm start
+# → https://localhost:8443/  PIN 123456
+# optional: DROPPIX_MOCK_MP4=/path/to/clip.mp4 npm start
+```
+
+See [`tools/web-mock-host/README.md`](../tools/web-mock-host/README.md). Automated: `cd tools/web-mock-host && npm run test:e2e`.
+
 ## Limits
 
 - Chromium-stable is the primary target; Firefox H.264 WebCodecs is best-effort.

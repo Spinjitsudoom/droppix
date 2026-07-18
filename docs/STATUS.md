@@ -15,7 +15,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open |
-| Web PWA client (host-served) | **Partial** — implemented on `feat/web-pwa-client`; needs Chromium LAN E2E before Shipped |
+| Web PWA client (host-served) | **Partial** — implemented on `feat/web-pwa-client`; local mock host in `tools/web-mock-host`; needs Chromium LAN E2E before Shipped |
 
 ## Feature matrix (code on master)
 
