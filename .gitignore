@@ -2,6 +2,9 @@ build/
 host/build/
 compile_commands.json
 complete builds/
+web/node_modules/
+# web/dist is committed so Flatpak/AppImage packaging can consume it without Node on the builder
+# (rebuild with `cd web && npm ci && npm run build` when sources change)
 
 # compiled spike binaries (only the sources are tracked)
 spike/**/aoa_spike

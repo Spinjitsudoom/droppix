@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-07-18 against `master` (`c1ef3cc`).
+**Last verified:** 2026-07-18 on branch `feat/web-pwa-client` (web unit tests; host C++ needs Linux build).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -15,6 +15,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build) |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open |
+| Web PWA client (host-served) | **Partial** — implemented on `feat/web-pwa-client`; needs Chromium LAN E2E before Shipped |
 
 ## Feature matrix (code on master)
 
@@ -42,6 +43,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Render-stage horizontal flip | Shipped | Android + desktop client flip |
 | DesktopBackend (KWin / X11 / Generic) | Shipped (M1+) | `desktop_backend.*` |
 | Sway / GNOME Wayland backends | Roadmap | see cross-desktop spec |
+| Web PWA client (host-served HTTPS + WSS) | Partial | `web/`, `host/src/web_frontend.*`, `host/src/ws_channel.*` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)
@@ -84,6 +86,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | `2026-07-13-onscreen-keyboard-design.md` | Shipped |
 | `2026-07-13-stylus-design.md` | Shipped |
 | `2026-07-16-hw-encode-design.md` | Shipped |
+| `2026-07-18-web-pwa-client-design.md` | Partial — code on `feat/web-pwa-client`; E2E verify pending |
 
 ## How to keep this current
 

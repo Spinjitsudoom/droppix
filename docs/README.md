@@ -30,4 +30,5 @@ Do not treat a spec header that still says "implementation plan pending" as auth
 ## Open roadmap (high level)
 
 1. **Cross-desktop M2/M3** — Sway/wlroots and GNOME/Mutter backends (`2026-07-05-cross-desktop-portability-design.md`). M1 seam + X11 backend already shipped.
-2. **Optional polish** — expose `--encoder` in the host GUI; further latency work (zero-copy capture remains out of scope for now).
+2. **Web PWA client** — host-served HTTPS shell + WSS; video/audio/input/fullscreen (`2026-07-18-web-pwa-client-design.md`). Partial on `feat/web-pwa-client`.
+3. **Optional polish** — expose `--encoder` in the host GUI; further latency work (zero-copy capture remains out of scope for now).

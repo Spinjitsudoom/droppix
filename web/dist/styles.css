@@ -1,0 +1,53 @@
+:root {
+  --bg: #12121a;
+  --panel: #1c1c28;
+  --text: #e8e8ef;
+  --muted: #9a9ab0;
+  --accent: #5b8def;
+  --danger: #c45c5c;
+  --border: #2e2e40;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
+
+#app { display: flex; flex-direction: column; height: 100%; }
+
+#toolbar {
+  display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; align-items: center;
+  padding: 0.65rem 0.9rem; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+
+.brand { font-weight: 700; letter-spacing: 0.04em; margin-right: 0.5rem; }
+.row { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; }
+.check { font-size: 0.9rem; color: var(--muted); display: flex; gap: 0.35rem; align-items: center; }
+.status { margin-left: auto; font-size: 0.85rem; color: var(--muted); }
+
+button, select {
+  background: #2a2a3c; color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.35rem 0.7rem; cursor: pointer;
+}
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+button:not(:disabled):hover { border-color: var(--accent); }
+#btn-connect { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+#stage {
+  flex: 1; position: relative; min-height: 0; background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+
+#video {
+  display: block; width: 100%; height: 100%; outline: none;
+  touch-action: none; background: #000;
+}
+
+#hud {
+  position: absolute; left: 0.75rem; top: 0.75rem; padding: 0.35rem 0.55rem;
+  background: rgba(0,0,0,0.55); color: #cfe0ff; font: 12px/1.35 ui-monospace, monospace;
+  border-radius: 4px; pointer-events: none;
+}
+
+@media (display-mode: fullscreen), (display-mode: standalone) {
+  #toolbar .brand { display: none; }
+}

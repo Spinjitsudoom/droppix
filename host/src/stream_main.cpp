@@ -14,6 +14,8 @@
 #include "approval.h"
 #include "aoa_connect.h"
 #include "encoder_factory.h"
+#include "web_frontend.h"
+#include "pairing_code.h"
 
 static volatile std::sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
@@ -45,6 +47,8 @@ int main(int argc, char** argv) {
   bool overlay = false;
   bool tls = false;
   std::string cert, key;
+  bool web = false;
+  std::string web_root;
   std::string usb_aoa;   // --usb-aoa <serial>: serve one tablet over USB (AOA), not TCP
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
   int orientation = 0;                                   // --orientation 0/90/180/270
@@ -73,6 +77,8 @@ int main(int argc, char** argv) {
     else if (a == "--tls") tls = true;
     else if (a == "--cert") cert = sval();
     else if (a == "--key") key = sval();
+    else if (a == "--web") web = true;
+    else if (a == "--web-root") web_root = sval();
     else if (a == "--audio") audio = true;
     else if (a == "--overlay") overlay = true;
     else if (a == "--usb-aoa") usb_aoa = sval();
@@ -89,17 +95,40 @@ int main(int argc, char** argv) {
   g_orientation = orientation / 90;   // initial code: 0/90/180/270 -> 0/1/2/3
   g_overlay.store(overlay ? 1 : 0);   // seed the live toggle from the start-up flag
 
+  if (web) {
+    if (!tls || cert.empty() || key.empty()) {
+      std::fprintf(stderr, "--web requires --tls --cert --key\n");
+      return 2;
+    }
+    if (web_root.empty()) {
+      std::fprintf(stderr, "--web requires --web-root <dir>\n");
+      return 2;
+    }
+    if (!usb_aoa.empty()) {
+      std::fprintf(stderr, "--web is incompatible with --usb-aoa\n");
+      return 2;
+    }
+  }
+
   droppix::TransportServer tx;
   // AOA (--usb-aoa) serves one tablet over the USB cable, not TCP: no listen, no TLS (the
   // physical cable is the trust boundary). Otherwise, listen on the TCP port as usual.
   if (usb_aoa.empty()) {
-    if (!tx.listen(static_cast<uint16_t>(port))) {
+    const int backlog = web ? 32 : 1;
+    if (!tx.listen(static_cast<uint16_t>(port), backlog)) {
       std::fprintf(stderr, "listen on %d failed\n", port); return 1;
     }
-    std::fprintf(stderr, "listening on port %d\n", tx.port());
+    std::fprintf(stderr, "listening on port %d%s\n", tx.port(), web ? " (web)" : "");
     if (tls) tx.enable_tls(cert, key);
   } else {
     std::fprintf(stderr, "usb-aoa mode: serial=%s\n", usb_aoa.c_str());
+  }
+
+  std::string pairing_code;
+  if (web) {
+    auto der = droppix::load_cert_der_pem(cert);
+    pairing_code = der.empty() ? std::string("000000") : droppix::derive_pairing_code(der);
+    std::fprintf(stderr, "web root=%s pairing=%s\n", web_root.c_str(), pairing_code.c_str());
   }
 
   // Stop channel for the GUI: it launches us via pkexec as ROOT, so it cannot signal
@@ -146,6 +175,7 @@ int main(int argc, char** argv) {
 
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
   while (!g_stop) {
+    bool preconnected = !usb_aoa.empty();
     // AOA: run the accessory handshake and adopt the USB channel before streaming; retry
     // until the tablet is plugged in + the app opens the accessory.
     if (!usb_aoa.empty()) {
@@ -155,12 +185,20 @@ int main(int argc, char** argv) {
         continue;
       }
       tx.adopt_channel(std::move(ch));
+    } else if (web) {
+      std::unique_ptr<droppix::ByteChannel> ch;
+      std::string peer;
+      if (!droppix::WebFrontend::serve_until_stream(tx, web_root, pairing_code, ch, peer, g_stop)) {
+        break;
+      }
+      tx.adopt_channel(std::move(ch), std::move(peer));
+      preconnected = true;
     }
     auto enc = droppix::make_encoder(encoder_pref);
     droppix::StreamDaemon daemon(make_source, *enc, tx,
         {fps, bitrate, stats_json, touch, mirror, touch_name, droppix::Rect{mx, my, mw, mh}, dtw, dth,
          orientation, &g_orientation, approve, &g_gate, audio, overlay, &g_overlay,
-         /*preconnected=*/!usb_aoa.empty()});
+         preconnected});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
   }

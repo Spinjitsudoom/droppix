@@ -11,7 +11,7 @@
 
 namespace droppix {
 
-bool TransportServer::listen(uint16_t port) {
+bool TransportServer::listen(uint16_t port, int backlog) {
   if (listen_fd_ >= 0) { ::close(listen_fd_); listen_fd_ = -1; }  // re-listen safe
   listen_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
   if (listen_fd_ < 0) return false;
@@ -24,7 +24,8 @@ bool TransportServer::listen(uint16_t port) {
   if (::bind(listen_fd_, (sockaddr*)&addr, sizeof(addr)) != 0) {
     ::close(listen_fd_); listen_fd_ = -1; return false;
   }
-  if (::listen(listen_fd_, 1) != 0) {
+  if (backlog < 1) backlog = 1;
+  if (::listen(listen_fd_, backlog) != 0) {
     ::close(listen_fd_); listen_fd_ = -1; return false;
   }
   socklen_t len = sizeof(addr);

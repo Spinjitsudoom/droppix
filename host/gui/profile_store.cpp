@@ -36,6 +36,7 @@ static QJsonObject toJson(const Settings& s) {
   o["overlay"] = s.overlay;
   o["auto_connect"] = s.autoConnect;
   o["orientation"] = s.orientation;
+  o["web_client"] = s.webClient;
   return o;
 }
 static Settings fromJson(const QJsonObject& o) {
@@ -54,6 +55,7 @@ static Settings fromJson(const QJsonObject& o) {
   s.overlay = o["overlay"].toBool(s.overlay);
   s.autoConnect = o["auto_connect"].toBool(s.autoConnect);
   s.orientation = o["orientation"].toInt(s.orientation);
+  s.webClient = o["web_client"].toBool(s.webClient);
   return s;
 }
 

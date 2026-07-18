@@ -39,12 +39,15 @@ graph TB
     subgraph Clients["Clients"]
         AND["Android app<br/>MediaCodec + GlDisplayView"]
         LNX["Linux client<br/>FFmpeg decode + Qt"]
+        WEB["Web PWA<br/>WebCodecs + WSS"]
     end
 
     TX -->|"wire protocol v5"| AND
     AND -->|"input / HELLO"| TX
     TX -->|"wire protocol v5"| LNX
     LNX -->|"input / HELLO"| TX
+    TX -->|"WSS binding"| WEB
+    WEB -->|"input / HELLO"| TX
 ```
 
 ## Process topology
@@ -66,7 +69,7 @@ graph LR
 |---|---|---|
 | `droppix_gui` | user | Discovery, pairing UI, session manager, audio sink create, spawn streamers |
 | `droppix_stream` | often root via `pkexec` | Accept client, create evdi, encode, inject input, stream audio |
-| Android / `droppix_client` | device / user | Decode, display, capture input, send HELLO settings |
+| Android / `droppix_client` / web PWA | device / user / browser | Decode, display, capture input, send HELLO settings |
 
 ## Video path
 
@@ -251,6 +254,7 @@ sequenceDiagram
 | `host/gui/` | Qt6 GUI: sessions, mDNS, TLS/PIN, auto-connect, settings, AOA/tether scanners |
 | `android/` | Kotlin tablet client |
 | `client/` | Qt6 Linux receive client (shares `host/src/protocol.cpp`) |
+| `web/` | Host-served PWA (TypeScript → `web/dist`; served by `--web`) |
 | `packaging/` | AppImage / Flatpak / APK |
 | `macos/` | Archived host backend (not in build) |
 | `docs/` | STATUS, WIRE, this file, specs/plans, lessons |

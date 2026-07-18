@@ -60,3 +60,14 @@ Encoders (NVENC, VAAPI, software x264) emit **in-band SPS/PPS ahead of every IDR
 ## Security / pairing
 
 WiFi (and other non-cable paths) wrap the stream in TLS with certificate pinning + a 6-digit pairing code. USB cable / AOA trust models differ; see the TLS PIN and AOA design specs.
+
+## WebSocket binding (web PWA)
+
+When `droppix_stream` is started with `--web --web-root <dir>` (TLS required), the same session port serves HTTPS static assets and accepts WebSocket upgrades at `/ws`. Message **bodies and MsgType IDs are unchanged**. Framing differs:
+
+| Transport | Frame |
+|---|---|
+| TCP / AOA | `[ u32 be length ][ type u8 ][ body… ]` |
+| WSS | one binary WebSocket frame = `[ type u8 ][ body… ]` (length = WS payload length) |
+
+After TLS, the streamer sniffs the first bytes: HTTP → static / WSS path; otherwise → native Android/Qt length-prefixed client. `/config.json` returns `{ "pairingCode": "NNNNNN" }` for the in-page PIN confirm UI.

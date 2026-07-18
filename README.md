@@ -14,6 +14,7 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 - **Transports** — USB (`adb reverse`), USB tethering, AOA accessory mode, or WiFi (mDNS discovery + 6-digit PIN over TLS).
 - **Multi-monitor** — several tablets at once, each a native-resolution session managed by the host GUI.
 - **Client-owned settings** — resolution / FPS / quality / audio / overlay / brightness / flip live in the client (HELLO v5).
+- **Web PWA client** (optional) — host serves an HTTPS page + WSS on the session port; Chromium can install it as a PWA. See [`web/README.md`](web/README.md).
 
 ## Requirements (host)
 
@@ -34,6 +35,7 @@ droppix is deeply integrated with the host, so some things can't ship inside the
 | `host/` | C++ streaming engine (`droppix_stream`) + Qt6 control-panel GUI (`droppix_gui`) |
 | `android/` | Native Kotlin tablet client (MediaCodec decode, touch / stylus / keys / orientation / audio) |
 | `client/` | Qt6 Linux **receive** client (same wire protocol; decode-only — no evdi) |
+| `web/` | Host-served browser / PWA client (TypeScript; build to `web/dist`) |
 | `packaging/` | AppImage, Flatpak, and Android APK build scripts |
 | `docs/` | [STATUS](docs/STATUS.md), [WIRE](docs/WIRE.md), design specs + plans |
 | `macos/` | Archived experimental macOS backend (not wired into the build) |
@@ -55,6 +57,13 @@ ctest --test-dir build --output-on-failure
 ```bash
 cmake -S client -B build-client && cmake --build build-client -j
 ctest --test-dir build-client --output-on-failure
+```
+
+**Web PWA** (served by the host when Settings → “Offer web / PWA client” is on):
+
+```bash
+cd web && npm ci && npm run build && npm test
+# then start a TLS session; open https://<lan-ip>:<port>/
 ```
 
 **AppImage** — host bundles `droppix_gui` + `droppix_stream` and codec/streaming libs (ffmpeg, x264, OpenSSL, libevdi), using the host's Qt6. On launch the streamer is relocated to `~/.local/share/droppix/runtime/` so the root (evdi) path works despite the AppImage's read-only mount. A separate client AppImage script is also available.

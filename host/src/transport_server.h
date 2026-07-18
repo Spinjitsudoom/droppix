@@ -12,8 +12,11 @@ namespace droppix {
 class TransportServer {
  public:
   ~TransportServer();
-  bool listen(uint16_t port);          // 0 = ephemeral
+  bool listen(uint16_t port, int backlog = 1);  // 0 = ephemeral
   uint16_t port() const { return port_; }
+  int listen_fd() const { return listen_fd_; }
+  SSL_CTX* ssl_ctx() const { return ctx_; }
+  const std::string& cert_path() const { return cert_; }
   bool accept_client(int timeout_ms);
   // Adopt an already-connected byte stream (e.g. an AOA USB channel) instead of accepting
   // a TCP client. accept_client() uses this internally with a SocketChannel.

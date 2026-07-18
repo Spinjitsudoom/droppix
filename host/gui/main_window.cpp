@@ -1,8 +1,10 @@
 #include "main_window.h"
 #include "args_builder.h"
 #include "settings_dialog.h"
+#include "web_url.h"
 #include "style.h"
 #include <QtWidgets>
+#include <QClipboard>
 #include <QCloseEvent>
 #include <QCoreApplication>
 #include <QProcess>
@@ -15,6 +17,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QStandardPaths>
+#include <QProcess>
 #include <algorithm>
 #include "wake.h"
 #include "auto_connect.h"
@@ -81,6 +84,7 @@ std::string MainWindow::resolveStreamBin() {
       p.waitForFinished(30000);
     }
     flatpakHostRuntime_ = rt;
+    flatpakHostWeb_ = rt + "/web";
     return (rt + "/bin/droppix_stream_host").toStdString();
   }
 
@@ -95,6 +99,8 @@ std::string MainWindow::resolveStreamBin() {
                           + "/droppix/runtime";
   const QString dstBin = runtime + "/bin/droppix_stream";
   const QString dstLib = runtime + "/lib";
+  const QString srcWeb = appdir + "/usr/share/droppix/web";
+  const QString dstWeb = runtime + "/web";
 
   // (Re)extract only when the destination is missing or older than the bundled copy.
   if (!QFileInfo::exists(dstBin) ||
@@ -107,6 +113,14 @@ std::string MainWindow::resolveStreamBin() {
                                    QFileDevice::ReadOther  | QFileDevice::ExeOther);
     const auto libs = QDir(srcLib).entryInfoList({"*.so*"}, QDir::Files);
     for (const auto& fi : libs) copyOver(fi.absoluteFilePath(), dstLib + "/" + fi.fileName());
+  }
+  // Stage web PWA next to the relocated streamer so pkexec/root can read --web-root.
+  if (QFileInfo::exists(srcWeb + "/index.html")) {
+    QDir(dstWeb).removeRecursively();
+    QDir().mkpath(dstWeb);
+    const auto files = QDir(srcWeb).entryInfoList(QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot);
+    // QDir::mkpath + recursive copy via process (portable enough for AppImage staging)
+    QProcess::execute("cp", {"-a", srcWeb + "/.", dstWeb + "/"});
   }
   return QFileInfo::exists(dstBin) ? dstBin.toStdString() : dev.toStdString();
 }
@@ -202,8 +216,20 @@ MainWindow::MainWindow(QWidget* parent)
   monitorsList_->setMaximumHeight(96);
   auto* stopMonBtn = new QPushButton("Stop selected");
   auto* toggleMirrorBtn = new QPushButton("Toggle mirror");
+  webUrlLabel_ = new QLabel; webUrlLabel_->setObjectName("caption");
+  webUrlLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+  webUrlLabel_->hide();
+  webQrLabel_ = new QLabel; webQrLabel_->setAlignment(Qt::AlignCenter); webQrLabel_->hide();
+  webCopyBtn_ = new QPushButton("Copy web URL"); webCopyBtn_->hide();
+  connect(webCopyBtn_, &QPushButton::clicked, this, [this]{
+    if (!webUrlLabel_->text().isEmpty())
+      QGuiApplication::clipboard()->setText(webUrlLabel_->text());
+  });
   auto* monLayout = new QVBoxLayout;
   monLayout->addWidget(monitorsList_);
+  monLayout->addWidget(webUrlLabel_);
+  monLayout->addWidget(webQrLabel_);
+  monLayout->addWidget(webCopyBtn_);
   monLayout->addWidget(stopMonBtn);
   monLayout->addWidget(toggleMirrorBtn);
   monitorsBox_ = new QGroupBox("Active monitors");
@@ -535,6 +561,8 @@ Settings MainWindow::collectSettings() const {
     s.certPath = cert_.certPath().toStdString();
     s.keyPath  = cert_.keyPath().toStdString();
   }
+  if (!flatpakHostWeb_.isEmpty()) s.webRoot = flatpakHostWeb_.toStdString();
+  else s.webRoot = resolve_web_root_for_gui();
   return s;
 }
 
@@ -681,9 +709,40 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   row->setData(Qt::UserRole, key);
   monitorsList_->addItem(row);
   monitorsBox_->show();
+  refreshWebClientUi();
   refreshAdvertising();
   updateStatus();
   if (directTablet) directTablet();
+}
+
+void MainWindow::refreshWebClientUi() {
+  Settings s = collectSettings();
+  if (!s.webClient || sessions_.count() == 0) {
+    webUrlLabel_->hide();
+    webQrLabel_->hide();
+    webCopyBtn_->hide();
+    return;
+  }
+  // Newest session is last in the list.
+  const Session& sess = sessions_.list().last();
+  if (sess.transport == "usb-aoa") {
+    webUrlLabel_->setText("Web client unavailable for USB/AOA sessions");
+    webUrlLabel_->show();
+    webQrLabel_->hide();
+    webCopyBtn_->hide();
+    return;
+  }
+  const QString url = session_web_url(sess.port);
+  webUrlLabel_->setText(url);
+  webUrlLabel_->show();
+  webCopyBtn_->show();
+  const QImage qr = make_qr_image(url, 4);
+  if (!qr.isNull()) {
+    webQrLabel_->setPixmap(QPixmap::fromImage(qr));
+    webQrLabel_->show();
+  } else {
+    webQrLabel_->hide();
+  }
 }
 
 void MainWindow::wireSession(StreamController* c, const QString& key) {
@@ -703,6 +762,7 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
       if (monitorsList_->item(i)->data(Qt::UserRole).toString() == key)
         delete monitorsList_->takeItem(i);
     if (sessions_.count() == 0) { monitorsBox_->hide(); anyConnected_ = false; hidePairingPopup(); }
+    refreshWebClientUi();
     updateStatus();
   });
   connect(c, &StreamController::connecting, this, [this](const QString& ip){ showPairingPopup(ip); });

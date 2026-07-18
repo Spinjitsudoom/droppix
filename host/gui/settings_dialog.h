@@ -34,6 +34,7 @@ class SettingsDialog : public QDialog {
   QCheckBox* touch_;
   QCheckBox* overlay_;
   QCheckBox* autoConnect_;
+  QCheckBox* webClient_;
   // App-level prefs (global, NOT per-profile): persisted as files, not via load/store.
   QCheckBox* launchAtLogin_;    // ~/.config/autostart/droppix.desktop present?
   QCheckBox* minimizeOnClose_;  // <config>/minimize_on_close marker present?

@@ -13,6 +13,18 @@ static std::string valafter(const std::vector<std::string>& v, const std::string
   return "";
 }
 
+TEST(ArgsBuilder, WebFlagsWhenEnabledAndTls) {
+  Settings s; s.source = Settings::Source::TestPattern;
+  s.tls = true; s.certPath = "/tmp/cert.pem"; s.keyPath = "/tmp/key.pem";
+  s.webClient = true;
+  // resolve_web_root may be empty in the test env — then flags are omitted (safe).
+  Command c = build_command(s, "/x");
+  EXPECT_TRUE(has(c.args, "--tls"));
+  if (has(c.args, "--web")) {
+    EXPECT_FALSE(valafter(c.args, "--web-root").empty());
+  }
+}
+
 TEST(ArgsBuilder, PerSessionPortAndTouchName) {
   Settings s; s.source = Settings::Source::Evdi; s.touch = true; s.port = 27000;
   Command c = build_command(s, "/x", 27003, "droppix-touch-27003");

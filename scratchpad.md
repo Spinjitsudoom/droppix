@@ -2,7 +2,7 @@
 
 ## Project identity
 
-Spacedesk-like system: turn an Android tablet (or Linux desktop client) into a **true extended monitor** for a Linux PC (KDE Plasma / KWin first; X11 backend also shipped), with touch, stylus, keyboard, orientation, mirror/extend, and audio out. Verified E2E on Nexus 10 (Android 5.1.1) + Plasma 6 over USB and WiFi.
+Spacedesk-like system: turn an Android tablet (or Linux desktop client) into a **true extended monitor** for a Linux PC (KDE Plasma / KWin first; X11 backend also shipped), with touch, stylus, keyboard, orientation, mirror/extend, and audio out. Verified E2E on Nexus 10 (Android 5.1.1) + Plasma 6 over USB and WiFi. Optional **host-served web PWA** client on branch `feat/web-pwa-client`.
 
 License: MIT
 
@@ -15,74 +15,61 @@ License: MIT
 
 - Work locally; open PRs from `davidcarma` → `Spinjitsudoom`.
 - When he catches up: `git fetch upstream && git merge upstream/master` then `git push origin master`.
-- Open PR: https://github.com/Spinjitsudoom/droppix/pull/4 (`davidcarma:master` → `Spinjitsudoom:master`; #3 closed)
 
 ## Current state (as of 2026-07-18)
 
-- **Status:** early but working; local `master` includes docs refresh + agent sync (pushed to fork).
-- **Host:** C++17 `droppix_stream` + Qt6 `droppix_gui`; evdi capture; AutoEncoder NVENC→VAAPI→x264; uinput input; PipeWire audio; DesktopBackend (KWin / X11 / Generic).
-- **Android client:** Kotlin, MediaCodec, touch/stylus/keys/orientation/audio; minSdk 21; HELLO v5 settings.
-- **Desktop client:** Qt6 Linux receive client in `client/` (decode-only).
-- **Packaging:** AppImage + Flatpak (host + client); Android APK script.
-- **macOS:** archived under `macos/` — not in build.
-- **Docs:** [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/STATUS.md`](docs/STATUS.md), [`docs/WIRE.md`](docs/WIRE.md), [`docs/README.md`](docs/README.md), [`docs/lessons/`](docs/lessons/).
-- **Open roadmap:** cross-desktop M2 Sway / M3 GNOME Wayland.
+- **Branch:** `feat/web-pwa-client` implements host-served HTTPS/WSS PWA (Partial; LAN E2E pending).
+- **Host:** C++17 `droppix_stream` + Qt6 `droppix_gui`; evdi; AutoEncoder; uinput; PipeWire; DesktopBackend; `--web` / `--web-root` + `WebFrontend` / `WsChannel`.
+- **Android client:** Kotlin, MediaCodec; HELLO v5.
+- **Desktop client:** Qt6 Linux receive client in `client/`.
+- **Web client:** `web/` TypeScript → `web/dist` (WebCodecs, AudioWorklet, input, fullscreen, PWA).
+- **Packaging:** AppImage + Flatpak stage `web/dist` into `share/droppix/web` / runtime tarball.
+- **Docs:** ARCHITECTURE, STATUS, WIRE (incl. WSS binding), lessons/.
 
 ## Key decisions (do not re-debate)
 
 | Decision | Choice | Why |
 |---|---|---|
-| Display mode | Extend (evdi virtual monitor); mirror optional | Headline use case; KWin/X11 treat it as real output |
-| Capture | libevdi direct (not PipeWire portal) | No portal popup; dirty rects; lower latency |
+| Display mode | Extend (evdi virtual monitor); mirror optional | Headline use case |
+| Capture | libevdi direct | No portal popup; dirty rects |
 | Host language | C++ | Direct libevdi / VAAPI / uinput |
-| Codec | H.264, in-band SPS/PPS on every IDR; AutoEncoder | Universal MediaCodec decode; GPU when available |
-| Android | Native Kotlin + MediaCodec | Latency + stylus pressure access |
-| Transport | Same TCP framing over adb reverse, WiFi (mDNS+TLS PIN), USB tether, AOA | One protocol, many carriers |
-| Desktop coupling | `DesktopBackend` seam; KWin + X11 shipped | Narrow compositor surface; Sway/GNOME still open |
-| Packaging reality | Needs host `evdi`, polkit/pkexec, PipeWire, avahi, adb | Kernel module + root uinput cannot live fully sandboxed |
+| Codec | H.264, in-band SPS/PPS on every IDR | Universal decode |
+| Transport | Same TCP framing; WSS binding for web | One protocol, many carriers |
+| Web hosting | Host-served HTTPS on session port | Same-origin WSS; no CDN |
+| Web port | Same session port; HTTP sniff vs native | Avoid port allocator clash |
+| Packaging reality | Needs host `evdi`, polkit, PipeWire, avahi, adb | Kernel + root uinput |
 
 ## Architecture (at a glance)
 
 ```
-evdi → Capturer → Encoder (NVENC|VAAPI|x264) → TransportServer
-                      ↑                              ↕ wire protocol v5
-              InputInjector (uinput)          Android / desktop client
+evdi → Capturer → Encoder → TransportServer
+                      ↑              ↕ wire v5 (TCP or WSS)
+              InputInjector     Android / desktop / web PWA
 ```
 
 ## File map
 
 | Path | Role |
 |---|---|
-| `host/src/` | Core: protocol, evdi, encoders, transport, AOA, tether, input, audio, desktop_backend |
-| `host/gui/` | Qt6 control panel |
+| `host/src/` | Core + `web_frontend`, `ws_channel`, `web_root` |
+| `host/gui/` | Qt6 GUI + URL/QR (`web_url`) |
 | `android/` | Kotlin tablet client |
 | `client/` | Qt6 Linux receive client |
+| `web/` | Host-served PWA shell + WSS client |
 | `packaging/` | AppImage, Flatpak, APK |
-| `CLAUDE.md` / `AGENTS.md` | Agent entrypoints |
-| `.claude/rules/` | Canonical project rules |
-| `.cursor/rules/*.mdc` | Symlinks → `.claude/rules/` |
-| `.claude/skills/` | Canonical project skills |
-| `scripts/check-agent-sync.sh` | Enforce Claude ↔ Cursor symlink sync |
-| `docs/ARCHITECTURE.md` | System architecture + Mermaid |
-| `docs/STATUS.md` | Living feature status |
-| `docs/WIRE.md` | Current protocol summary |
-| `docs/superpowers/specs/` | Design specs |
-| `docs/superpowers/plans/` | Implementation plans |
-| `docs/lessons/` | Indexed lessons |
-| `macos/` | Archived experimental backend |
-| `spike/aoa/` | AOA USB spike |
+| `docs/` | STATUS, WIRE, ARCHITECTURE, specs |
 
 ## Active / recent work
 
-- Local-first fork workflow documented; remotes rewired (`origin`=fork, `upstream`=friend).
-- Docs refresh on local/fork `master`; PR #3 awaiting friend.
+- **Web PWA client:** implemented on `feat/web-pwa-client`. Remaining: Chromium LAN E2E, then STATUS → Shipped.
+- Cross-desktop M2/M3 still open.
 
 ## Hardcoded constraints
 
 - Streamer often needs root (`pkexec`) for uinput + evdi.
+- `--web` requires `--tls` and a readable `--web-root` (staged under `~/.local/share/droppix/runtime/web` for AppImage/Flatpak).
 - AppImage relocates streamer to `~/.local/share/droppix/runtime/`.
 - Flatpak uses `flatpak-spawn --host`.
-- Primary path: Plasma 6 / KWin / Wayland + evdi; X11 backend available.
 
 ## Links
 
@@ -90,12 +77,11 @@ evdi → Capturer → Encoder (NVENC|VAAPI|x264) → TransportServer
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - [docs/STATUS.md](docs/STATUS.md)
 - [docs/WIRE.md](docs/WIRE.md)
-- [docs/README.md](docs/README.md)
-- [PR #4](https://github.com/Spinjitsudoom/droppix/pull/4)
+- [web/README.md](web/README.md)
+- [spec](docs/superpowers/specs/2026-07-18-web-pwa-client-design.md)
 
 ## Recent session notes
 
-- **2026-07-18:** Added [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) with Mermaid (system, processes, video/input, multi-monitor, transports, DesktopBackend, clients, handshake).
-- **2026-07-18:** Closed PR #3; opened [PR #4](https://github.com/Spinjitsudoom/droppix/pull/4) from `davidcarma:master` so the PR head matches fork master.
-- **2026-07-18:** Local-first workflow: `origin`=`davidcarma/droppix` (push), `upstream`=`Spinjitsudoom/droppix` (fetch only). PRs from fork; resync later with `git fetch upstream && git merge upstream/master`.
-- **2026-07-18:** Claude ↔ Cursor tooling: canonical under `.claude/`; Cursor symlinks; `scripts/check-agent-sync.sh`.
+- **2026-07-18:** Implemented host-served Web PWA end-to-end on `feat/web-pwa-client` (WSS bridge, GUI URL/QR, TS client with video/audio/input/fullscreen/PWA, packaging hooks, WIRE/STATUS/ARCHITECTURE updates). Web unit tests pass; host C++ not built on this macOS agent (needs Linux/evdi).
+- **2026-07-18:** Specced host-served Web PWA client design.
+- **2026-07-18:** Added ARCHITECTURE.md; local-first remotes; Claude↔Cursor tooling sync.
