@@ -1,4 +1,5 @@
 #include "args_builder.h"
+#include "web_root.h"
 
 namespace droppix {
 
@@ -41,6 +42,15 @@ Command build_command(const Settings& s, const std::string& stream_bin,
     a.push_back("--tls");
     a.push_back("--cert"); a.push_back(s.certPath);
     a.push_back("--key");  a.push_back(s.keyPath);
+  }
+  // Web PWA: same session port, HTTPS static + WSS. Requires TLS (skipped for AOA).
+  if (s.webClient && usb_aoa_serial.empty() && s.tls && !s.certPath.empty()) {
+    const std::string root = !s.webRoot.empty() ? s.webRoot : resolve_web_root();
+    if (!root.empty()) {
+      a.push_back("--web");
+      a.push_back("--web-root");
+      a.push_back(root);
+    }
   }
 
   Command c;

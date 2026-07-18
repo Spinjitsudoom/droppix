@@ -48,12 +48,26 @@ add_library(droppix_core
   src/desktop_backend.cpp
   src/session_params.cpp
   src/encoder_factory.cpp
+  src/ws_channel.cpp
+  src/web_frontend.cpp
+  src/web_root.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
   third_party/evdi
   third_party/stb
 )
+
+# Optional: build web/dist via npm when Node is available (packaging / local).
+find_program(DROPPIX_NPM npm)
+if(DROPPIX_NPM)
+  add_custom_target(web_client
+    COMMAND ${DROPPIX_NPM} ci
+    COMMAND ${DROPPIX_NPM} run build
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/../web
+    COMMENT "Building host-served web PWA into web/dist"
+  )
+endif()
 target_link_libraries(droppix_core PUBLIC ${EVDI_LIB} PkgConfig::FFMPEG PkgConfig::LIBUSB OpenSSL::SSL OpenSSL::Crypto)
 
 add_executable(droppix_spike src/spike_main.cpp)
@@ -72,7 +86,7 @@ if(Qt6_FOUND)
     gui/stats_parser.cpp
     gui/args_builder.cpp
   )
-  target_include_directories(droppix_gui PRIVATE gui src)
+  target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen)
   target_link_libraries(droppix_gui PRIVATE Qt6::Widgets Qt6::Network)
   target_sources(droppix_gui PRIVATE
     gui/profile_store.cpp
@@ -89,6 +103,8 @@ if(Qt6_FOUND)
     gui/auto_connect.cpp
     gui/aoa_known_store.cpp
     gui/aoa_scanner.cpp
+    gui/web_url.cpp
+    third_party/qrcodegen/qrcodegen.cpp
     gui/resources.qrc
     src/mdns_browse.cpp
     src/tether_discovery.cpp
@@ -144,6 +160,7 @@ add_executable(droppix_tests
   tests/test_aoa_scan.cpp
   tests/test_desktop_backend.cpp
   tests/test_encoder_factory.cpp
+  tests/test_web_frontend.cpp
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp

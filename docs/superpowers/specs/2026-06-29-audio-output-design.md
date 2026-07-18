@@ -1,5 +1,7 @@
 # Audio Output to the Tablet — Design
 
+**Status:** Shipped on master.
+
 **Goal:** Stream a dedicated audio channel from the PC to the droppix tablet, so an app's audio (e.g. a Wii U emulator's *gamepad* audio in Cemu) can play on the tablet while the PC speakers/TV keep their own audio.
 
 **Architecture:** The host exposes a virtual PipeWire sink (`droppix-audio`); the user routes an app's output to it. The streamer captures that sink's monitor as raw PCM (via `pw-record` run in the user session), frames it as a new `AUDIO` wire message on the **existing** TLS connection, and the tablet plays it through `AudioTrack`. Audio is strictly best-effort and never blocks the display path.

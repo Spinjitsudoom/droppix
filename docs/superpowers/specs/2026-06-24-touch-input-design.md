@@ -1,7 +1,7 @@
 # Touch Input (finger → cursor) — Design
 
 **Date:** 2026-06-24
-**Status:** Approved design, pending implementation plan
+**Status:** Shipped on master.
 **Scope:** Phase 2 of the original plan — a touch input back-channel so finger
 touches on the Android tablet drive the cursor/clicks on the virtual monitor.
 Finger touch only; stylus pressure is a later phase.

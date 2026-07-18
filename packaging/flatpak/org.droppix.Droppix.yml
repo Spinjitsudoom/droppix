@@ -67,9 +67,11 @@ modules:
       # + a wrapper that sets LD_LIBRARY_PATH. The GUI stages this onto the HOST filesystem
       # (via flatpak-spawn) so the root evdi streamer can run there — flatpak-spawn --host
       # can't see /app, and pkexec strips LD_LIBRARY_PATH, so the wrapper sets it itself.
-      - mkdir -p _stage/bin _stage/lib
+      - mkdir -p _stage/bin _stage/lib _stage/web
       - cp _build/droppix_stream _stage/bin/droppix_stream
       - ldd _build/droppix_stream | awk '/=> \/app\/lib/ {print $3}' | xargs -r -I@ cp -L @ _stage/lib/
+      - mkdir -p /app/share/droppix/web
+      - if [ -f web-dist/index.html ]; then cp -a web-dist/. _stage/web/; cp -a web-dist/. /app/share/droppix/web/; fi
       - printf '#!/bin/sh\nd=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexport LD_LIBRARY_PATH="$d/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec "$d/bin/droppix_stream" "$@"\n' > _stage/bin/droppix_stream_host
       - chmod +x _stage/bin/droppix_stream_host
       - tar czf droppix-runtime.tar.gz -C _stage .
@@ -89,6 +91,9 @@ modules:
     sources:
       - type: dir
         path: ../../host
+      - type: dir
+        path: ../../web/dist
+        dest: web-dist
       - type: file
         path: host-shim
       - type: file

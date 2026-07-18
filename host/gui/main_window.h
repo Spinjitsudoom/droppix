@@ -83,7 +83,11 @@ class MainWindow : public QMainWindow {
   QPushButton* connectBtn_;
   QGroupBox* monitorsBox_;      // "Active monitors" panel
   QListWidget* monitorsList_;   // one row per live session
+  QLabel* webUrlLabel_ = nullptr;
+  QLabel* webQrLabel_ = nullptr;
+  QPushButton* webCopyBtn_ = nullptr;
   bool anyConnected_ = false;   // any session has a client connected (drives the status dot)
+  void refreshWebClientUi();    // URL + QR for the newest session when webClient enabled
 
   ProfileStore store_;
   ApprovedStore approved_;
@@ -103,6 +107,7 @@ class MainWindow : public QMainWindow {
   QHash<QString, qint64> pendingWakes_;
   QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to
   QString flatpakHostCert_, flatpakHostKey_;   // Flatpak: host cert/key paths for the streamer
+  QString flatpakHostWeb_;             // Flatpak: host path to staged web/ PWA assets
   QSystemTrayIcon* tray_ = nullptr;   // present only if a system tray is available
   bool quitting_ = false;             // true => closeEvent really quits (from tray Quit)
   bool trayHintShown_ = false;        // show the "still running" balloon only once

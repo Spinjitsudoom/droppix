@@ -74,6 +74,18 @@ distrobox enter "$DISTROBOX" -- bash -lc "
     -e droppix_gui -e droppix_stream -i droppix.png -d droppix.desktop
 "
 
+# --- host-served web PWA (static assets for --web-root) ---
+if command -v npm >/dev/null 2>&1; then
+  (cd "$REPO/web" && npm ci && npm run build)
+fi
+if [ -f "$REPO/web/dist/index.html" ]; then
+  mkdir -p "$APPDIR/usr/share/droppix/web"
+  cp -a "$REPO/web/dist/." "$APPDIR/usr/share/droppix/web/"
+  echo "bundled web PWA into usr/share/droppix/web"
+else
+  echo "warning: web/dist missing — AppImage will not serve the PWA until built" >&2
+fi
+
 # --- prune the host-provided stack (keep ffmpeg/x264/openssl/evdi + their codec deps) ---
 LIBDIR="$APPDIR/usr/lib"
 rm -f  "$APPDIR/usr/bin/qt.conf"

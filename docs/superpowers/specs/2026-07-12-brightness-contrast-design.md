@@ -1,7 +1,7 @@
 # Brightness / Contrast (client-side image adjustment)
 
 **Date:** 2026-07-12
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T2 — the first T2 feature, reusing the Android GL render stage built for flip.
 
 ## Summary

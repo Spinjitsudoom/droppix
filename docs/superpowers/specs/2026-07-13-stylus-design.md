@@ -1,7 +1,7 @@
 # Stylus support (Android pen → host pen device)
 
 **Date:** 2026-07-13
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T2 "Stylus support" (CLIENT). Reuses the input model (client normalizes, host replays).
 
 ## Summary

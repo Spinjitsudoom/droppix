@@ -1,7 +1,7 @@
 # On-screen keyboard (Android soft keyboard → host)
 
 **Date:** 2026-07-13
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T2 "On-screen keyboard" (CLIENT). Depends on "Keyboard input" (shipped) — reuses its `Key`/`sendKey` path.
 
 ## Summary

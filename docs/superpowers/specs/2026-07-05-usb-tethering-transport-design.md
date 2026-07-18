@@ -1,7 +1,7 @@
 # USB Tethering Transport (no USB debugging) — Design
 
 **Date:** 2026-07-05
-**Status:** Approved (pending implementation plan)
+**Status:** Shipped on master.
 
 ## Goal
 

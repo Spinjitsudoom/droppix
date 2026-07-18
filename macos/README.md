@@ -6,6 +6,12 @@ under [`../host`](../host), which is Linux-only by design. These files live here
 so the macOS work isn't lost and can be picked up later, without dragging
 platform conditionals back into the Linux build.
 
+## Related research
+
+Open-source `CGVirtualDisplay` ecosystem survey and recommended ownership model (own thin wrapper; DeskPad / VirtualDisplayKit / daylight-mirror as cribs; no BetterDisplay / DisplayLink dependency):
+
+[`docs/superpowers/specs/2026-07-18-cgvirtualdisplay-oss-research.md`](../docs/superpowers/specs/2026-07-18-cgvirtualdisplay-oss-research.md)
+
 ## Status
 
 Incomplete work-in-progress.

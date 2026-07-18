@@ -1,7 +1,7 @@
 # Android GL render stage + horizontal flip
 
 **Date:** 2026-07-12
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T1 "Flipped display" — sub-project A of the T1 remainder (sub-project B = Mouse input, separate).
 
 ## Summary

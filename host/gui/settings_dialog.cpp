@@ -58,6 +58,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   overlay_ = new QCheckBox("Performance Overlay");
   connect(overlay_, &QCheckBox::toggled, this, &SettingsDialog::overlayToggled);  // live toggle
   autoConnect_ = new QCheckBox("Auto-connect known monitors");
+  webClient_ = new QCheckBox("Offer web / PWA client (HTTPS on session port)");
 
   auto* form = new QFormLayout;
   form->setVerticalSpacing(10);
@@ -75,6 +76,7 @@ SettingsDialog::SettingsDialog(QWidget* parent) : QDialog(parent) {
   form->addRow("", touch_);
   form->addRow("", overlay_);
   form->addRow("", autoConnect_);
+  form->addRow("", webClient_);
 
   // --- App-level section (global prefs, file-backed; independent of profiles) ---
   auto* appLabel = new QLabel("Application"); appLabel->setObjectName("caption");
@@ -116,6 +118,7 @@ void SettingsDialog::load(const Settings& s) {
   refresh_->setCurrentText(QString::number(s.refresh_hz));
   overlay_->setChecked(s.overlay);
   autoConnect_->setChecked(s.autoConnect);
+  webClient_->setChecked(s.webClient);
 }
 
 void SettingsDialog::store(Settings& s) const {
@@ -130,6 +133,7 @@ void SettingsDialog::store(Settings& s) const {
   s.auto_adb_reverse = true;   // always on now (option removed from the GUI); USB just works
   s.overlay = overlay_->isChecked();
   s.autoConnect = autoConnect_->isChecked();
+  s.webClient = webClient_->isChecked();
 }
 
 }  // namespace droppix

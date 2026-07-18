@@ -1,0 +1,19 @@
+{
+  "name": "droppix-web-mock-host",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local HTTPS/WSS mock droppix host for debugging the web PWA client",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "cert": "bash scripts/gen-cert.sh",
+    "test:e2e": "DROPPIX_MOCK_START=1 playwright test",
+    "test:e2e:headed": "DROPPIX_MOCK_START=1 playwright test --headed"
+  },
+  "dependencies": {
+    "ws": "^8.18.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1"
+  }
+}

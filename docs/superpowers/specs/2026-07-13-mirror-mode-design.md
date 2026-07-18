@@ -1,7 +1,7 @@
 # Mirror mode (host-side screen duplication)
 
 **Date:** 2026-07-13
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T2 "Mirror mode (duplication)" (HOST).
 
 ## Summary

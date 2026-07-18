@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-23
 **Working name:** droppix
-**Status:** Approved design, pending implementation plan
+**Status:** Shipped on master (core product path).
 
 ## Goal
 

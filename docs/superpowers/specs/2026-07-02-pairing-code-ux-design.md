@@ -1,7 +1,7 @@
 # Pairing-code UX: connect-time popup, forget devices, per-restart code — design
 
 **Date:** 2026-07-02
-**Status:** approved
+**Status:** Shipped on master.
 
 ## Goal
 

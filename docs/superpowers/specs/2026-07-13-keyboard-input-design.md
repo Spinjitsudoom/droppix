@@ -1,7 +1,7 @@
 # Keyboard input — physical keyboard client → host
 
 **Date:** 2026-07-13
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T2 "Keyboard input" (BOTH). Unblocks the later T2 "On-screen keyboard" item.
 
 ## Summary

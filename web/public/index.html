@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#12121a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
+  <title>droppix</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header id="toolbar">
+      <div class="brand">droppix</div>
+      <div id="pin-row" class="row">
+        <span>PIN <strong id="pin-code">------</strong></span>
+        <label class="check"><input type="checkbox" id="pin-ok" /> PIN matches PC</label>
+      </div>
+      <div class="row actions">
+        <button id="btn-connect" type="button" disabled>Connect</button>
+        <button id="btn-disconnect" type="button" hidden>Disconnect</button>
+        <button id="btn-fullscreen" type="button">Fullscreen</button>
+        <select id="fit-mode" aria-label="Fit mode">
+          <option value="contain">Contain</option>
+          <option value="cover">Cover</option>
+          <option value="stretch">Stretch</option>
+        </select>
+        <label class="check"><input type="checkbox" id="mute" /> Mute</label>
+        <button id="btn-install" type="button" hidden>Install</button>
+      </div>
+      <div id="mock-badge" class="mock-badge" hidden>MOCK</div>
+      <div id="status" class="status">Idle</div>
+    </header>
+    <main id="stage">
+      <canvas id="mock-backdrop" hidden aria-hidden="true"></canvas>
+      <canvas id="video" tabindex="0"></canvas>
+      <div id="click-layer" hidden aria-hidden="true"></div>
+      <pre id="mock-log" hidden></pre>
+      <div id="hud" hidden></div>
+    </main>
+  </div>
+  <script type="module" src="./main.js"></script>
+</body>
+</html>

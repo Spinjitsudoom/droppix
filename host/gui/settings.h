@@ -16,5 +16,7 @@ struct Settings {
   bool tls = true;          // pass --tls/--cert/--key to the streamer
   std::string certPath;     // PC's TLS cert (PEM)
   std::string keyPath;      // PC's TLS key (PEM)
+  bool webClient = false;   // serve host PWA + WSS on the session port (--web)
+  std::string webRoot;      // resolved at collect-time; not persisted
 };
 }  // namespace droppix

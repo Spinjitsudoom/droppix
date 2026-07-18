@@ -1,6 +1,6 @@
 # AOA M3: GUI USB Detection + Auto-Spawn `--usb-aoa` — Design
 
-**Status:** Approved (2026-07-06)
+**Status:** Shipped on master.
 **Branch:** `feat/aoa-m3-gui-usb` (off `master`)
 **Depends on:** AOA transport (M1/M2/M4), merged to `master` (commit `5e71291`).
 

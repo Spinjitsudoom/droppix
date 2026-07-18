@@ -1,7 +1,7 @@
 # Auto-Connect Known Monitors — Design
 
 **Date:** 2026-07-04
-**Status:** Approved (pending implementation plan)
+**Status:** Shipped on master.
 
 ## Goal
 
