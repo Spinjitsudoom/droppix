@@ -2,17 +2,19 @@
 
 **Date:** 2026-07-05
 **Type:** Multi-milestone roadmap (decomposition), not a single-feature spec.
-**Status:** Approved scope. Each milestone gets its own spec → plan → build cycle.
+**Status:** Partial on master (2026-07-18): M1 DesktopBackend + KWin + X11 backends shipped; M2 Sway / M3 GNOME Wayland still open. (Note: original text deferred X11; an X11Backend was added later.)
 
 ## Goal
 
 Make droppix's extended-monitor path work on Wayland desktops beyond KDE Plasma —
 specifically **Sway/wlroots** and **GNOME/Mutter** — by decoupling the streamer
-from KWin-specific tooling. **X11 is explicitly deferred/out of scope** (its
-display-adoption problem is a separate, much larger effort).
+from KWin-specific tooling.
 
-Chosen strategy (from scoping discussion): **widest reach, least effort** —
-Wayland-first, validation-gated, X11 parked.
+**Update (2026-07-18):** M1 (`DesktopBackend` + `KWinBackend` + `GenericBackend`)
+and an **`X11Backend`** (originally deferred in this roadmap) are on `master`.
+Remaining open work is **M2 Sway** and **M3 GNOME Wayland**. The historical
+sections below still describe the original Wayland-first plan; trust the Status
+line and [`docs/STATUS.md`](../../STATUS.md) for what has shipped.
 
 ## Key finding: the KWin coupling is narrow
 

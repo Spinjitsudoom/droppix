@@ -1,6 +1,6 @@
 # Cross-Desktop M1: `DesktopBackend` Abstraction — Design
 
-**Status:** Approved (2026-07-06). Sequencing approved by the user ("build").
+**Status:** Shipped on master (plus X11 backend beyond original M1).
 **Branch:** `feat/desktop-backend-m1` (off `master`)
 **Parent roadmap:** `docs/superpowers/specs/2026-07-05-cross-desktop-portability-design.md` (approved).
 

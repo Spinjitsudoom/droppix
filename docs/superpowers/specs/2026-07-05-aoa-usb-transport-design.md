@@ -1,7 +1,7 @@
 # AOA (Android Open Accessory) USB Transport — Design
 
 **Date:** 2026-07-05
-**Status:** Approved (pending implementation plan). M0 is a go/no-go validation gate.
+**Status:** Shipped on master (M0–M3).
 
 ## Goal
 

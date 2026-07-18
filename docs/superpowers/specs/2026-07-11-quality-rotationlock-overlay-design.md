@@ -1,7 +1,7 @@
 # Client settings, round 2: Quality, Rotation lock, Performance overlay
 
 **Date:** 2026-07-11
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Builds on:** the client-owned display settings feature (resolution/FPS/audio) — Linux Phase 1 on `master`, Android Phase 2 in PR #1.
 
 ## Summary

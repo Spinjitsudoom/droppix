@@ -1,7 +1,7 @@
 # Multi-touch — design
 
 **Date:** 2026-07-02
-**Status:** approved
+**Status:** Shipped on master.
 
 ## Goal
 

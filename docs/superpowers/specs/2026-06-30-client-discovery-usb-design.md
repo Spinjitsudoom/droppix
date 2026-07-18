@@ -1,7 +1,7 @@
 # Unified client discovery (network + USB) — design
 
 **Date:** 2026-06-30
-**Status:** approved
+**Status:** Shipped on master.
 
 ## Goal
 

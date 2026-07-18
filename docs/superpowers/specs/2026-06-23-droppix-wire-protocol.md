@@ -1,3 +1,6 @@
+> **Superseded for day-to-day use:** current protocol is HELLO v5 with types 1–15.
+> See [`docs/WIRE.md`](../../WIRE.md) and `host/src/protocol.h`. This file remains the Phase-1a historical note.
+
 # droppix Wire Protocol (Phase 1a)
 
 Single TCP connection. Every message: `[u32 big-endian length][payload]`, where

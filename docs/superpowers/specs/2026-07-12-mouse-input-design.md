@@ -1,7 +1,7 @@
 # Mouse input — scroll wheel + right/middle buttons
 
 **Date:** 2026-07-12
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master.
 **Roadmap:** tier T1 "Mouse input" (sub-project B of the T1 remainder).
 
 ## Summary

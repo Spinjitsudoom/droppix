@@ -1,7 +1,7 @@
 # Two-finger tap → right-click — design
 
 **Date:** 2026-07-03
-**Status:** approved
+**Status:** Shipped on master.
 
 ## Goal
 

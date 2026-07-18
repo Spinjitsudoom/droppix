@@ -1,7 +1,7 @@
 # Multi-monitor (multiple tablets, each a native-resolution extended monitor) — design
 
 **Date:** 2026-07-03
-**Status:** approved
+**Status:** Shipped on master.
 
 ## Goal
 

@@ -1,7 +1,7 @@
 # droppix Host GUI — Design
 
 **Date:** 2026-06-24
-**Status:** Approved design, pending implementation plan
+**Status:** Shipped on master.
 **Scope:** The Linux host control GUI only. The Android client GUI is a separate
 spec/plan to follow.
 

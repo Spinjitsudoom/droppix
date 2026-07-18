@@ -1,6 +1,6 @@
 # WiFi transport + device discovery + Android client GUI
 
-**Status:** Designed + approved (2026-06-27). One spec covering both discovery
+**Status:** Shipped on master.
 directions; implemented in two parts (Part 1 then Part 2).
 
 ## Goal

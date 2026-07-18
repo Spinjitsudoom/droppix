@@ -1,7 +1,7 @@
 # Client-owned display settings
 
 **Date:** 2026-07-10
-**Status:** Design approved; implementation plan pending
+**Status:** Shipped on master (HELLO v4/v5).
 
 ## Summary
 

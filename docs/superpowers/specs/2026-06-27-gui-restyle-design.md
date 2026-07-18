@@ -1,6 +1,6 @@
 # droppix_gui restyle: dark, modern accent
 
-**Status:** Designed + approved 2026-06-27. Pure visual polish of the Qt6 control
+**Status:** Shipped on master.
 panel — no behavior changes, so existing GUI logic/tests are untouched.
 
 ## Goal

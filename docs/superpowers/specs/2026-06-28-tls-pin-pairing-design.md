@@ -1,6 +1,6 @@
 # TLS encryption + PIN pairing
 
-**Status:** Designed + approved 2026-06-28. Encrypts the droppix stream and authenticates
+**Status:** Shipped on master.
 the PC to the tablet via a 6-digit pairing code derived from the PC's self-signed
 certificate (cert pinning). Keeps Part-1 approve-on-host for the PC→tablet direction.
 

@@ -1,7 +1,7 @@
 # Configurable Virtual-Monitor Resolution + Refresh (evdi) — Design
 
 **Date:** 2026-06-24
-**Status:** Approved design, pending implementation plan
+**Status:** Shipped on master.
 **Scope:** Make the evdi virtual monitor's resolution and refresh rate
 configurable (today hard-wired to 1920×1080@60). Engine + streamer flags + host
 GUI. No Android-app or wire-protocol change.

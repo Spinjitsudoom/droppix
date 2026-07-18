@@ -1,12 +1,12 @@
 # Hardware video encoding (VAAPI / NVENC + software fallback)
 
 **Date:** 2026-07-16
-**Status:** Design approved; implementation plan pending
-**Roadmap:** tier T3 "Hardware video encoding" (HOST). The host currently encodes with software x264 only.
+**Status:** Shipped on master (NVENC → VAAPI → software AutoEncoder).
+**Roadmap:** tier T3 "Hardware video encoding" (HOST) — implemented. Remaining optional polish: expose `--encoder` in the host GUI.
 
 ## Summary
 
-Add GPU H.264 encoders (NVENC + VAAPI) behind the existing `Encoder` interface, chosen at runtime with a clean fallback to software x264. A factory tries **NVENC → VAAPI → software** (overridable with `--encoder`), keeping the first that initializes. This offloads encoding from the CPU (big latency/CPU win) with no change to the client — the stream stays plain H.264 with in-band SPS/PPS, exactly as today. **Host-only. No protocol/client/Android change.**
+GPU H.264 encoders (NVENC + VAAPI) sit behind the existing `Encoder` interface, chosen at runtime with a clean fallback to software x264. A factory tries **NVENC → VAAPI → software** (overridable with `--encoder`), keeping the first that initializes. This offloads encoding from the CPU with no change to the client — the stream stays plain H.264 with in-band SPS/PPS. **Host-only. No protocol/client/Android change.**
 
 ## Decisions
 
