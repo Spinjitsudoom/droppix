@@ -38,7 +38,10 @@ class MainWindow : public QMainWindow {
   void stageCertsToHost();           // Flatpak: mirror cert/key to the host for the streamer
   Settings collectSettings() const;
   void applySettings(const Settings& s);
-  void onStartStop();           // Start button -> spawn a session on the next free port
+  void onServerToggled(bool on);   // Server toggle -> start/stop the primary listener + persist
+  void startServerSession();       // spawn the primary "server:<port>" listener on a free port
+  void stopServerSession();        // stop the primary listener (no re-arm)
+  void updateServerButton();       // reflect serverEnabled_ in the toggle's text/checked state
   // Spawn a streaming session: a new StreamController on `port`, wired, started, added to
   // the Active-monitors panel; `directTablet` (may be empty) WAKEs the tablet to dial in.
   // `mirror` selects Mirror mode (evdi mirrors an existing display) vs. the default Extend.
@@ -103,6 +106,10 @@ class MainWindow : public QMainWindow {
   SessionManager sessions_;     // one session (= streamer = monitor) per connected tablet
   LogBuffer* logBuffer_ = nullptr;   // app-wide log sink (streamer + GUI messages)
   LogPanel*  logPanel_ = nullptr;    // bottom "Debug log" dock
+  bool serverEnabled_ = false;       // Server toggle logical state
+  QString serverKey_;                // key of the live "server:<port>" session (empty = none)
+  qint64 serverStartMs_ = 0;         // start time of the current server session
+  bool serverEverConnected_ = false; // did the current server session ever have a client
   MdnsAdvertiser advertiser_;
   quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;
