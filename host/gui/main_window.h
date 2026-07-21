@@ -16,6 +16,9 @@
 #include "approved_store.h"
 #include "cert_manager.h"
 #include "audio_sink.h"
+#include "log_buffer.h"
+#include "log_panel.h"
+#include "log_entry.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
@@ -31,10 +34,14 @@ class MainWindow : public QMainWindow {
   void closeEvent(QCloseEvent* event) override;
  private:
   std::string resolveStreamBin();   // sibling binary, extracted AppImage copy, or host-staged (Flatpak)
+  void stageWebAssets();             // dev/local: copy source web/dist into the root-readable runtime dir
   void stageCertsToHost();           // Flatpak: mirror cert/key to the host for the streamer
   Settings collectSettings() const;
   void applySettings(const Settings& s);
-  void onStartStop();           // Start button -> spawn a session on the next free port
+  void onServerToggled(bool on);   // Server toggle -> start/stop the primary listener + persist
+  void startServerSession();       // spawn the primary "server:<port>" listener on a free port
+  void stopServerSession();        // stop the primary listener (no re-arm)
+  void updateServerButton();       // reflect serverEnabled_ in the toggle's text/checked state
   // Spawn a streaming session: a new StreamController on `port`, wired, started, added to
   // the Active-monitors panel; `directTablet` (may be empty) WAKEs the tablet to dial in.
   // `mirror` selects Mirror mode (evdi mirrors an existing display) vs. the default Extend.
@@ -66,6 +73,8 @@ class MainWindow : public QMainWindow {
   void setupTray();             // create the tray icon + Show/Quit menu (if a tray exists)
   void showPairingPopup(const QString& ip);   // pop the pairing code when a device connects
   void hidePairingPopup();
+  // Append a synthetic (non-streamer) event into the debug-log console.
+  void logEvent(const QString& key, const QString& source, LogLevel level, const QString& text);
   void manageDevices();         // dialog to view/forget remembered (approved) devices
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
@@ -95,6 +104,12 @@ class MainWindow : public QMainWindow {
   CertManager cert_;
   DroppixAudioSink audioSink_;
   SessionManager sessions_;     // one session (= streamer = monitor) per connected tablet
+  LogBuffer* logBuffer_ = nullptr;   // app-wide log sink (streamer + GUI messages)
+  LogPanel*  logPanel_ = nullptr;    // bottom "Debug log" dock
+  bool serverEnabled_ = false;       // Server toggle logical state
+  QString serverKey_;                // key of the live "server:<port>" session (empty = none)
+  qint64 serverStartMs_ = 0;         // start time of the current server session
+  bool serverEverConnected_ = false; // did the current server session ever have a client
   MdnsAdvertiser advertiser_;
   quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;

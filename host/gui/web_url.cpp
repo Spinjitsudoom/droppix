@@ -18,12 +18,15 @@ std::string resolve_web_root_for_gui() {
 
   // Flatpak host-staged runtime (same path shape after staging).
   const QString appDir = QCoreApplication::applicationDirPath();
-  const QStringList candidates = {
+  QStringList candidates = {
       appDir + "/../share/droppix/web",
       appDir + "/web",
       appDir + "/../../web/dist",
       appDir + "/../../../web/dist",
   };
+#ifdef DROPPIX_SOURCE_WEB_DIR
+  candidates << QString::fromUtf8(DROPPIX_SOURCE_WEB_DIR);   // dev build: source-tree web/dist
+#endif
   for (const QString& c : candidates) {
     const QString abs = QDir(c).absolutePath();
     if (QFileInfo(abs + "/index.html").exists()) return abs.toStdString();

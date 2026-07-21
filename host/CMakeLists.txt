@@ -87,6 +87,10 @@ if(Qt6_FOUND)
     gui/args_builder.cpp
   )
   target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen)
+  # Dev/local builds: bake the source tree's web/dist so the GUI can locate + stage the
+  # PWA assets (packaged builds ship them under share/droppix/web and ignore this path).
+  target_compile_definitions(droppix_gui PRIVATE
+      DROPPIX_SOURCE_WEB_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../web/dist")
   target_link_libraries(droppix_gui PRIVATE Qt6::Widgets Qt6::Network)
   target_sources(droppix_gui PRIVATE
     gui/profile_store.cpp
@@ -110,6 +114,12 @@ if(Qt6_FOUND)
     src/tether_discovery.cpp
     src/aoa_scan.cpp
     src/web_root.cpp
+    gui/log_classify.cpp
+    gui/log_buffer.cpp
+    gui/log_forwarder.cpp
+    gui/log_model.cpp
+    gui/log_panel.cpp
+    gui/server_control.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -187,6 +197,16 @@ if(Qt6_FOUND)
     gui/auto_connect.cpp
     gui/tests/test_aoa_known_store.cpp
     gui/aoa_known_store.cpp
+    gui/tests/test_log_classify.cpp
+    gui/log_classify.cpp
+    gui/tests/test_log_buffer.cpp
+    gui/log_buffer.cpp
+    gui/tests/test_log_forwarder.cpp
+    gui/log_forwarder.cpp
+    gui/tests/test_log_filter.cpp
+    gui/log_model.cpp
+    gui/tests/test_server_control.cpp
+    gui/server_control.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)

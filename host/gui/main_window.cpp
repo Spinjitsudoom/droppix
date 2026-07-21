@@ -2,6 +2,9 @@
 #include "args_builder.h"
 #include "settings_dialog.h"
 #include "web_url.h"
+#include "log_forwarder.h"
+#include "log_classify.h"
+#include "server_control.h"
 #include "style.h"
 #include <QtWidgets>
 #include <QClipboard>
@@ -125,6 +128,26 @@ std::string MainWindow::resolveStreamBin() {
   return QFileInfo::exists(dstBin) ? dstBin.toStdString() : dev.toStdString();
 }
 
+// Dev/local builds: the AppImage/Flatpak paths stage web/ next to the relocated streamer,
+// but a plain build runs the sibling streamer with no staging — so the GUI can't hand it a
+// --web-root and silently omits --web. Copy the source-tree web/dist (baked at build time)
+// into the root-readable runtime dir so the pkexec streamer can serve it. No-op when the
+// source dir isn't present (packaged builds) or the staged copy is already current.
+void MainWindow::stageWebAssets() {
+#ifdef DROPPIX_SOURCE_WEB_DIR
+  const QString src = QDir(QString::fromUtf8(DROPPIX_SOURCE_WEB_DIR)).absolutePath();
+  if (!QFileInfo::exists(src + "/index.html")) return;
+  const QString dstWeb = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+                         + "/droppix/runtime/web";
+  const QFileInfo dstIdx(dstWeb + "/index.html");
+  const QFileInfo srcIdx(src + "/index.html");
+  if (dstIdx.exists() && dstIdx.lastModified() >= srcIdx.lastModified()) return;   // already current
+  QDir().mkpath(dstWeb);
+  QProcess::execute("cp", {"-a", src + "/.", dstWeb + "/"});
+  qInfo("staged web client assets -> %s", qUtf8Printable(dstWeb));
+#endif
+}
+
 // Flatpak: mirror the freshly generated cert/key onto the host so the host-run streamer
 // (--cert/--key) can read them. No-op outside Flatpak (flatpakHostRuntime_ empty).
 void MainWindow::stageCertsToHost() {
@@ -206,8 +229,9 @@ MainWindow::MainWindow(QWidget* parent)
   deviceLabel_->hide();   // reserved for a future discovery-status hint; unused for now
 
   // --- Start/Stop + log ---
-  startBtn_ = new QPushButton("▶  Start streaming");
+  startBtn_ = new QPushButton("▶  Server: Off");
   startBtn_->setObjectName("startButton");
+  startBtn_->setCheckable(true);   // persistent on/off Server toggle (start/stop the listener)
 
   // (auth setup moved to the Settings menu → "Remember authentication")
 
@@ -261,8 +285,22 @@ MainWindow::MainWindow(QWidget* parent)
   setCentralWidget(central);
   resize(600, 560);
 
+  // --- Debug log console ---
+  logBuffer_ = new LogBuffer(this);
+  installLogForwarder(logBuffer_);            // capture GUI qInfo/qWarning/qCritical too
+  logPanel_ = new LogPanel(logBuffer_, this);
+  addDockWidget(Qt::BottomDockWidgetArea, logPanel_);
+  logPanel_->hide();                          // start hidden; toggle with the action below
+  QAction* toggleLog = logPanel_->toggleViewAction();
+  toggleLog->setText(tr("&Debug log"));
+  toggleLog->setShortcut(QKeySequence(Qt::Key_F12));
+  addAction(toggleLog);                       // make F12 work window-wide
+  menuBar()->addMenu(tr("&View"))->addAction(toggleLog);
+
+  stageWebAssets();   // ensure the PWA assets are where the (root) streamer can read them
+
   // --- Wiring ---
-  connect(startBtn_, &QPushButton::clicked, this, &MainWindow::onStartStop);
+  connect(startBtn_, &QPushButton::toggled, this, &MainWindow::onServerToggled);
   connect(saveBtn, &QPushButton::clicked, this, [this]{
     const QString n = profileBox_->currentText();
     if (!n.isEmpty()) { store_.save(n, collectSettings()); store_.setLastUsed(n); refreshProfiles(); }
@@ -300,6 +338,11 @@ MainWindow::MainWindow(QWidget* parent)
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
   refreshAdvertising();   // publish this PC on the network from launch (idle-discoverable)
+
+  // Restore the Server toggle: if it was on last launch, auto-start after the window paints
+  // (deferred so the pkexec prompt, if any, doesn't block the first frame).
+  if (QFile::exists(configDir() + "/server_enabled"))
+    QTimer::singleShot(0, this, [this]{ startBtn_->setChecked(true); });
 
   audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
   setupTray();           // tray icon for "minimize to tray on close" (if a tray exists)
@@ -677,12 +720,45 @@ void MainWindow::showAbout() {
   dlg.exec();
 }
 
-void MainWindow::onStartStop() {
-  // Start a session on the next free port for a tablet that will connect on its own
-  // (over USB-tether or Wi-Fi, both via WAKE). Additional monitors come via Connect.
+void MainWindow::updateServerButton() {
+  const QSignalBlocker block(startBtn_);   // reflect state without re-entering onServerToggled
+  startBtn_->setChecked(serverEnabled_);
+  startBtn_->setText(serverEnabled_ ? "■  Server: On" : "▶  Server: Off");
+}
+
+// The Server toggle: on -> start a primary listener that waits for a device (and re-arms
+// after each session); off -> stop it. The state is persisted so it restores on launch.
+void MainWindow::onServerToggled(bool on) {
+  serverEnabled_ = on;
+  const QString marker = configDir() + "/server_enabled";
+  if (on) {
+    QFile(marker).open(QIODevice::WriteOnly);   // touch: remember "server was on"
+    startServerSession();
+  } else {
+    QFile::remove(marker);
+    stopServerSession();
+  }
+  updateServerButton();
+}
+
+void MainWindow::startServerSession() {
   const int port = sessions_.allocatePort(collectSettings().port);
-  if (port < 0) { QMessageBox::information(this, "Droppix", "Monitor limit reached (4)."); return; }
-  startSession(QString("waiting:%1").arg(port), "Waiting for a tablet…", QString(), port, QString(), {});
+  if (port < 0) {
+    qWarning("server: monitor limit reached (4) — cannot start another listener");
+    serverEnabled_ = false;
+    updateServerButton();
+    return;
+  }
+  serverKey_ = QString("server:%1").arg(port);
+  serverStartMs_ = QDateTime::currentMSecsSinceEpoch();
+  serverEverConnected_ = false;
+  startSession(serverKey_, "Server — waiting for a device…", QString(), port, QString(), {});
+}
+
+void MainWindow::stopServerSession() {
+  if (serverKey_.isEmpty()) return;
+  if (Session* s = sessions_.find(serverKey_))
+    if (s->controller) s->controller->stop();   // runningChanged(false) tears the session down
 }
 
 void MainWindow::startSession(const QString& key, const QString& label, const QString& transport,
@@ -695,6 +771,9 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   const std::string aoaSerial = (transport == "usb-aoa") ? id.toStdString() : std::string();
   Command cmd = build_command(s, streamBin_, port, tname, aoaSerial, mirror);
   qInfo("$ %s ... (:%d)", cmd.program.c_str(), port);
+  if (s.webClient && aoaSerial.empty() && s.tls && !s.certPath.empty() && s.webRoot.empty())
+    qWarning("web client is enabled but web/dist assets were not found — starting WITHOUT the web "
+             "UI. Build them (npm --prefix web run build) or set DROPPIX_WEB_ROOT.");
   c->start(cmd);
 
   Session sess;
@@ -745,11 +824,26 @@ void MainWindow::refreshWebClientUi() {
   }
 }
 
+void MainWindow::logEvent(const QString& key, const QString& source, LogLevel level, const QString& text) {
+  if (!logBuffer_) return;
+  LogEntry e;
+  e.epochMs = QDateTime::currentMSecsSinceEpoch();
+  e.session = key;
+  e.source = source;
+  e.level = level;
+  e.text = text;
+  logBuffer_->append(e);
+}
+
 void MainWindow::wireSession(StreamController* c, const QString& key) {
-  connect(c, &StreamController::logLine, this, [](const QString& l){ qInfo("%s", qUtf8Printable(l)); });
+  connect(c, &StreamController::logLine, this, [this, key](const QString& l){
+    const Classified cl = classifyStreamerLine(l);
+    logEvent(key, cl.source, cl.level, cl.text);
+  });
   connect(c, &StreamController::statsReceived, this, [this, key](const Stats& s){
     if (s.client_connected) {
       anyConnected_ = true;
+      if (key == serverKey_) serverEverConnected_ = true;   // for the re-arm/failed-start guard
       if (key.startsWith("usb-aoa:")) knownAoa_.add(key.mid(8));   // enable future auto-start
     }
     updateStatus();
@@ -764,10 +858,27 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
     if (sessions_.count() == 0) { monitorsBox_->hide(); anyConnected_ = false; hidePairingPopup(); }
     refreshWebClientUi();
     updateStatus();
+    if (key == serverKey_) {   // the primary Server-toggle listener ended
+      serverKey_.clear();
+      const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - serverStartMs_;
+      if (shouldRearm(serverEnabled_, elapsed, serverEverConnected_)) {
+        QTimer::singleShot(0, this, [this]{ if (serverEnabled_) startServerSession(); });  // keep listening
+      } else if (serverEnabled_) {   // enabled but a fast failure (pkexec denied, port clash…)
+        serverEnabled_ = false;
+        QFile::remove(configDir() + "/server_enabled");
+        updateServerButton();
+        qWarning("server failed to start (exited immediately) — turned off. See the log above.");
+      }
+    }
   });
-  connect(c, &StreamController::connecting, this, [this](const QString& ip){ showPairingPopup(ip); });
+  connect(c, &StreamController::connecting, this, [this, key](const QString& ip){
+    logEvent(key, QStringLiteral("conn"), LogLevel::Info, QStringLiteral("client connecting ip=%1").arg(ip));
+    showPairingPopup(ip);
+  });
   connect(c, &StreamController::approvalRequested, this,
-    [this, c](const QString& id, const QString& name, const QString& ip){
+    [this, c, key](const QString& id, const QString& name, const QString& ip){
+      logEvent(key, QStringLiteral("pair"), LogLevel::Info,
+               QStringLiteral("approval requested id=%1 name=%2 ip=%3").arg(id, name, ip));
       hidePairingPopup();
       const QString akey = id.isEmpty() ? ip : id;
       const qint64 woken = pendingWakes_.value(ip, 0);
