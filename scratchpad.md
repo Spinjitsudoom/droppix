@@ -6,6 +6,16 @@ Spacedesk-like system: turn an Android tablet (or Linux desktop client) into a *
 
 License: MIT
 
+## Session note — 2026-07-21 (shipped to master)
+
+Merged `feat/gui-log-console` → `master` (`646efa0`). Three things landed, 236/236 host tests:
+
+- **In-GUI Debug log console (F12 dock)** — `host/gui/log_{entry,classify,buffer,forwarder,model,panel}.*`. Captures streamer stdout/stderr + GUI `qWarning`/`qCritical` (message-handler chained so terminal/journald still print), tagged by session+source, with search / level / source filters, autoscroll, copy, save.
+- **Web PWA now actually serves in local builds** — root cause was `build_command` silently dropping `--web` because `web/dist` wasn't resolvable. Fix bakes `DROPPIX_SOURCE_WEB_DIR`, `stageWebAssets()` copies it to `~/.local/share/droppix/runtime/web` (root-readable for pkexec), and a loud warning fires (in the F12 console) when assets are missing.
+- **Persistent Server toggle** — the old "Start streaming" button is now an on/off toggle: starts a `server:<port>` listener, re-arms after a device disconnects, guards fast-failed-starts (`shouldRearm`), and saves/restores state via a `configDir()/server_enabled` marker.
+
+Gotcha: `droppix_gui` regenerates its cert every launch (`cert_.regenerate()`), so isolate `XDG_CONFIG_HOME` when smoke-testing to avoid clobbering the real config.
+
 ## Git / collaboration (local-first)
 
 | Remote | URL | Role |
