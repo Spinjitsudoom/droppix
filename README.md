@@ -2,7 +2,7 @@
 
 Use an Android tablet (or a second Linux machine) as a **true extended monitor** for a Linux PC — with touch, stylus pressure, keyboard, auto-rotation, mirror/extend, and audio out. A Spacedesk-like setup, built first for KDE Plasma / KWin, with an X11 backend and a desktop-agnostic seam for further ports.
 
-> **Status (2026-07-18):** early but working end-to-end. Verified on a Nexus 10 (Android 5.1.1 / API 22) driving Plasma 6 / KWin over USB and WiFi. Hardware H.264 encode (NVENC → VAAPI → software x264), multi-monitor sessions, TLS PIN pairing, USB tether, AOA, stylus, and keyboard are on `master`. Living feature list: [`docs/STATUS.md`](docs/STATUS.md).
+> **Status (2026-07-21):** early but working end-to-end. Verified on a Nexus 10 (Android 5.1.1 / API 22) driving Plasma 6 / KWin over USB and WiFi. Hardware H.264 encode (NVENC → VAAPI → software x264), multi-monitor sessions, TLS PIN pairing, USB tether, AOA, stylus, keyboard, a host-served web PWA client, and an in-GUI F12 debug console are on `master`. Living feature list: [`docs/STATUS.md`](docs/STATUS.md).
 
 ## What it does
 
@@ -15,6 +15,8 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 - **Multi-monitor** — several tablets at once, each a native-resolution session managed by the host GUI.
 - **Client-owned settings** — resolution / FPS / quality / audio / overlay / brightness / flip live in the client (HELLO v5).
 - **Web PWA client** (optional) — host serves an HTTPS page + WSS on the session port; Chromium can install it as a PWA. See [`web/README.md`](web/README.md).
+- **Persistent Server toggle** — the host GUI's start control is an on/off toggle that keeps listening across reconnects and restores its state on the next launch.
+- **In-GUI debug console** — press **F12** in the host GUI for a dockable panel of streamer + GUI logs (search / level / source filters, save-to-file), instead of tailing a terminal.
 
 ## Requirements (host)
 

@@ -1,7 +1,7 @@
 # In-GUI Log Console (host debug panel) — Design
 
 **Date:** 2026-07-18
-**Status:** Approved (design). Not yet implemented.
+**Status:** Shipped on master (2026-07-21). Implemented as `host/gui/log_{entry,classify,buffer,forwarder,model,panel}.*` with 11 unit tests; F12 dock in MainWindow.
 **Goal:** Surface everything droppix currently prints to the terminal — the streamer subprocess output **and** the GUI's own Qt log messages — inside a searchable, filterable dock panel in `droppix_gui`, so debugging no longer requires reading the terminal/journald.
 
 ## Summary

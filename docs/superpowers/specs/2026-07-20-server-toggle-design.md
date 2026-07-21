@@ -1,7 +1,7 @@
 # Persistent Server toggle — Design
 
 **Date:** 2026-07-20
-**Status:** Approved (design). Not yet implemented.
+**Status:** Shipped on master (2026-07-21). Implemented as `host/gui/server_control.*` (`shouldRearm`, 3 tests) + MainWindow toggle/persist/restore wiring.
 **Goal:** Replace the GUI's "▶ Start streaming" button with a **persistent on/off Server toggle**: turning it on starts a primary listener session, it **re-arms** after a device disconnects, its state is **saved**, and on the next launch it **restores** (auto-starting the server if it was on).
 
 ## Summary

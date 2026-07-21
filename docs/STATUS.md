@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-07-18 on branch `feat/web-pwa-client` (web unit tests; host C++ needs Linux build).
+**Last verified:** 2026-07-21 on `master` (host build in droppix-dev distrobox: 236/236 tests; web PWA served + browser-verified).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -15,7 +15,8 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open |
-| Web PWA client (host-served) | **Partial** — implemented on `feat/web-pwa-client`; local mock host in `tools/web-mock-host`; needs Chromium LAN E2E before Shipped |
+| Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir |
+| In-GUI Debug log console (F12) | **Shipped** — dockable panel capturing streamer + GUI logs |
 
 ## Feature matrix (code on master)
 
@@ -43,7 +44,9 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Render-stage horizontal flip | Shipped | Android + desktop client flip |
 | DesktopBackend (KWin / X11 / Generic) | Shipped (M1+) | `desktop_backend.*` |
 | Sway / GNOME Wayland backends | Roadmap | see cross-desktop spec |
-| Web PWA client (host-served HTTPS + WSS) | Partial | `web/`, `host/src/web_frontend.*`, `host/src/ws_channel.*` |
+| Web PWA client (host-served HTTPS + WSS) | Shipped | `web/`, `host/src/web_frontend.*`, `host/src/ws_channel.*`, GUI web-root staging |
+| In-GUI Debug log console (F12 dock) | Shipped | `host/gui/log_{buffer,classify,forwarder,model,panel}.*` |
+| Persistent Server toggle (re-arm + restore) | Shipped | `host/gui/server_control.*`, `host/gui/main_window.*` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)
@@ -86,8 +89,10 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | `2026-07-13-onscreen-keyboard-design.md` | Shipped |
 | `2026-07-13-stylus-design.md` | Shipped |
 | `2026-07-16-hw-encode-design.md` | Shipped |
-| `2026-07-18-web-pwa-client-design.md` | Partial — code on `feat/web-pwa-client`; E2E verify pending |
+| `2026-07-18-web-pwa-client-design.md` | Shipped — host-served, browser-verified |
+| `2026-07-18-gui-log-console-design.md` | Shipped |
 | `2026-07-18-cgvirtualdisplay-oss-research.md` | Findings — own thin `macos/` wrapper; DeskPad/VDK/daylight-mirror as cribs; no BetterDisplay/DisplayLink dep |
+| `2026-07-20-server-toggle-design.md` | Shipped |
 
 ## How to keep this current
 
