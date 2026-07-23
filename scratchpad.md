@@ -16,6 +16,15 @@ Merged `feat/gui-log-console` → `master` (`646efa0`). Three things landed, 236
 
 Gotcha: `droppix_gui` regenerates its cert every launch (`cert_.regenerate()`), so isolate `XDG_CONFIG_HOME` when smoke-testing to avoid clobbering the real config.
 
+## Session note — 2026-07-24 (Communication Interfaces panel)
+
+Shipped `feat/comm-interfaces` → `master`. spacedesk-inspired panel (from a spacedesk Driver Console screenshot):
+
+- **Adapter list** — `host/gui/lan_ifaces.*` enumerates all up IPv4 adapters; per-adapter include checkboxes; the web URL/QR follows the first *included* adapter, so unchecking VMware/VPN adapters fixes the wrong-IP footgun. `included_ifaces()` is a pure, unit-tested filter (4 tests).
+- **LAN / USB toggles** — LAN off stops mDNS browse + advertise; USB off stops the tether + AOA scanners (kills the 2s USB poll). OFF gates discovery + new auto-connects but keeps live sessions. Persisted via `configDir()` markers (`lan_disabled` / `usb_disabled` / `advertise_excluded_adapters`), restored on launch.
+
+Honest scope: fixes the address droppix *shows* + stops scanners; does NOT change what avahi advertises (host A-records / client-side resolution) and sockets stay `INADDR_ANY`. 240/240 host tests.
+
 ## Git / collaboration (local-first)
 
 | Remote | URL | Role |

@@ -17,6 +17,7 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 - **Web PWA client** (optional) — host serves an HTTPS page + WSS on the session port; Chromium can install it as a PWA. See [`web/README.md`](web/README.md).
 - **Persistent Server toggle** — the host GUI's start control is an on/off toggle that keeps listening across reconnects and restores its state on the next launch.
 - **In-GUI debug console** — press **F12** in the host GUI for a dockable panel of streamer + GUI logs (search / level / source filters, save-to-file), instead of tailing a terminal.
+- **Communication interfaces panel** — lists every LAN adapter (so the URL/QR points at the *right* IP on multi-NIC / VM / VPN hosts) with per-adapter checkboxes, plus **Network** and **USB** on/off toggles that stop the matching discovery scanners.
 
 ## Requirements (host)
 

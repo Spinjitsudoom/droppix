@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-07-21 on `master` (host build in droppix-dev distrobox: 236/236 tests; web PWA served + browser-verified).
+**Last verified:** 2026-07-24 on `master` (host build in droppix-dev distrobox: 240/240 tests; web PWA served + browser-verified).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -47,6 +47,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Web PWA client (host-served HTTPS + WSS) | Shipped | `web/`, `host/src/web_frontend.*`, `host/src/ws_channel.*`, GUI web-root staging |
 | In-GUI Debug log console (F12 dock) | Shipped | `host/gui/log_{buffer,classify,forwarder,model,panel}.*` |
 | Persistent Server toggle (re-arm + restore) | Shipped | `host/gui/server_control.*`, `host/gui/main_window.*` |
+| Communication Interfaces panel (adapter list + LAN/USB toggles) | Shipped | `host/gui/lan_ifaces.*`, `host/gui/main_window.*` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)
@@ -93,6 +94,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | `2026-07-18-gui-log-console-design.md` | Shipped |
 | `2026-07-18-cgvirtualdisplay-oss-research.md` | Findings — own thin `macos/` wrapper; DeskPad/VDK/daylight-mirror as cribs; no BetterDisplay/DisplayLink dep |
 | `2026-07-20-server-toggle-design.md` | Shipped |
+| `2026-07-21-comm-interfaces-design.md` | Shipped |
 
 ## How to keep this current
 

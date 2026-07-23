@@ -1,7 +1,7 @@
 # Communication Interfaces panel — Design
 
 **Date:** 2026-07-21
-**Status:** Approved (design). Not yet implemented.
+**Status:** Shipped on master (2026-07-24). Implemented as `host/gui/lan_ifaces.*` (`included_ifaces`, 4 tests) + MainWindow "Communication interfaces" panel (adapter checkboxes, LAN/USB toggles, persistence).
 **Goal:** Add a spacedesk-style "Communication interfaces" panel to `droppix_gui`: list **all** reachable LAN adapters (IP + name) with per-adapter include checkboxes so the shown URL/QR points at the *right* IP, plus **LAN** and **USB** on/off toggles that stop the relevant discovery scanners/advertising (modest resource + surface reduction). State is persisted and restored on launch.
 
 ## Summary
