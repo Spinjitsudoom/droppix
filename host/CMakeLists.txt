@@ -120,6 +120,7 @@ if(Qt6_FOUND)
     gui/log_model.cpp
     gui/log_panel.cpp
     gui/server_control.cpp
+    gui/lan_ifaces.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -207,9 +208,11 @@ if(Qt6_FOUND)
     gui/log_model.cpp
     gui/tests/test_server_control.cpp
     gui/server_control.cpp
+    gui/tests/test_interface_filter.cpp
+    gui/lan_ifaces.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
-  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets GTest::gtest_main)
+  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network GTest::gtest_main)
   gtest_discover_tests(droppix_gui_tests)
 endif()
 endif()  # DROPPIX_BUILD_TESTS

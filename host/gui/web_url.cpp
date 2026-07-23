@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 #include "qrcodegen.hpp"
 #include "web_root.h"
+#include "lan_ifaces.h"
 
 namespace droppix {
 
@@ -42,22 +43,16 @@ std::string resolve_web_root_for_gui() {
 }
 
 QString primary_lan_ipv4() {
-  for (const QNetworkInterface& iface : QNetworkInterface::allInterfaces()) {
-    if (!(iface.flags() & QNetworkInterface::IsUp) ||
-        !(iface.flags() & QNetworkInterface::IsRunning) ||
-        (iface.flags() & QNetworkInterface::IsLoopBack))
-      continue;
-    for (const QNetworkAddressEntry& e : iface.addressEntries()) {
-      const QHostAddress a = e.ip();
-      if (a.protocol() == QAbstractSocket::IPv4Protocol && !a.isLoopback())
-        return a.toString();
-    }
-  }
-  return QStringLiteral("127.0.0.1");
+  const QList<LanIface> ifaces = lan_ipv4_ifaces();
+  return ifaces.isEmpty() ? QStringLiteral("127.0.0.1") : ifaces.first().ip;
+}
+
+QString session_web_url(const QString& ip, int port) {
+  return QStringLiteral("https://%1:%2/").arg(ip).arg(port);
 }
 
 QString session_web_url(int port) {
-  return QStringLiteral("https://%1:%2/").arg(primary_lan_ipv4()).arg(port);
+  return session_web_url(primary_lan_ipv4(), port);
 }
 
 QImage make_qr_image(const QString& text, int scale) {

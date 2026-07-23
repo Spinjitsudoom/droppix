@@ -5,7 +5,9 @@
 #include "log_forwarder.h"
 #include "log_classify.h"
 #include "server_control.h"
+#include "lan_ifaces.h"
 #include "style.h"
+#include <QTextStream>
 #include <QtWidgets>
 #include <QClipboard>
 #include <QCloseEvent>
@@ -279,6 +281,26 @@ MainWindow::MainWindow(QWidget* parent)
   root->addLayout(statusRow);
   root->addWidget(deviceLabel_);
   root->addWidget(startBtn_);
+
+  // --- Communication interfaces (adapters + LAN/USB toggles) ---
+  loadInterfacePrefs();
+  commBox_ = new QGroupBox("Communication interfaces");
+  auto* commLayout = new QVBoxLayout;
+  lanToggle_ = new QCheckBox("Network (Wi-Fi / Ethernet)");
+  lanToggle_->setChecked(lanEnabled_);
+  commLayout->addWidget(lanToggle_);
+  adapterRows_ = new QVBoxLayout;
+  adapterRows_->setContentsMargins(18, 0, 0, 0);   // indent adapters under the LAN toggle
+  commLayout->addLayout(adapterRows_);
+  usbToggle_ = new QCheckBox("USB (adb + tether + AOA)");
+  usbToggle_->setChecked(usbEnabled_);
+  commLayout->addWidget(usbToggle_);
+  commBox_->setLayout(commLayout);
+  connect(lanToggle_, &QCheckBox::toggled, this, &MainWindow::onLanToggled);
+  connect(usbToggle_, &QCheckBox::toggled, this, &MainWindow::onUsbToggled);
+  refreshInterfaces();   // populate the per-adapter checkbox rows
+  root->addWidget(commBox_);
+
   root->addWidget(monitorsBox_);
   root->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
   auto* central = new QWidget; central->setLayout(root);
@@ -331,9 +353,11 @@ MainWindow::MainWindow(QWidget* parent)
   autoConnectTimer_.setInterval(750);   // let a just-appeared tablet settle before WAKE
   connect(&autoConnectTimer_, &QTimer::timeout, this, &MainWindow::evaluateAutoConnect);
 
-  if (browser_.available()) browser_.start();
-  tetherScanner_.start();   // always available (no external tool); keeps the devices list live
-  aoaScanner_.start();   // poll USB for AOA-capable tablets while idle
+  if (lanEnabled_ && browser_.available()) browser_.start();
+  if (usbEnabled_) {
+    tetherScanner_.start();   // always available (no external tool); keeps the devices list live
+    aoaScanner_.start();      // poll USB for AOA-capable tablets while idle
+  }
 
   refreshProfiles();
   restoreLastProfile();   // re-apply the profile that was in use last launch
@@ -437,18 +461,21 @@ bool MainWindow::minimizeToTrayRequested() const {
 }
 
 void MainWindow::onDevicesChanged(const QList<MdnsDevice>& devices) {
+  if (!lanEnabled_) return;   // Network transport off — ignore discovery
   netDevices_ = devices;
   rebuildClientList();
   autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
 }
 
 void MainWindow::onTetherClientsChanged(const QList<TetherClient>& clients) {
+  if (!usbEnabled_) return;   // USB transport off — ignore discovery
   tetherClients_ = clients;
   rebuildClientList();
   autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
 }
 
 void MainWindow::onAoaClientsChanged(const QList<AoaClient>& clients) {
+  if (!usbEnabled_) return;   // USB transport off — ignore discovery
   aoaClients_ = clients;
   rebuildClientList();
   autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
@@ -585,6 +612,7 @@ void MainWindow::evaluateAutoConnect() {
 
 void MainWindow::refreshAdvertising() {
   if (!advertiser_.available()) return;
+  if (!lanEnabled_) { advertiser_.stop(); advertisedPort_ = 0; return; }   // Network off
   const quint16 p = (quint16)collectSettings().port;
   if (p == advertisedPort_) return;   // already publishing this port — no churn
   advertiser_.stop();
@@ -796,7 +824,7 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
 
 void MainWindow::refreshWebClientUi() {
   Settings s = collectSettings();
-  if (!s.webClient || sessions_.count() == 0) {
+  if (!s.webClient || !lanEnabled_ || sessions_.count() == 0) {
     webUrlLabel_->hide();
     webQrLabel_->hide();
     webCopyBtn_->hide();
@@ -811,7 +839,9 @@ void MainWindow::refreshWebClientUi() {
     webCopyBtn_->hide();
     return;
   }
-  const QString url = session_web_url(sess.port);
+  const auto inc = included_ifaces(lan_ipv4_ifaces(), excludedAdapters_);
+  const QString ip = inc.isEmpty() ? QStringLiteral("127.0.0.1") : inc.first().ip;
+  const QString url = session_web_url(ip, sess.port);
   webUrlLabel_->setText(url);
   webUrlLabel_->show();
   webCopyBtn_->show();
@@ -821,6 +851,85 @@ void MainWindow::refreshWebClientUi() {
     webQrLabel_->show();
   } else {
     webQrLabel_->hide();
+  }
+}
+
+void MainWindow::loadInterfacePrefs() {
+  lanEnabled_ = !QFile::exists(configDir() + "/lan_disabled");
+  usbEnabled_ = !QFile::exists(configDir() + "/usb_disabled");
+  excludedAdapters_.clear();
+  QFile f(configDir() + "/advertise_excluded_adapters");
+  if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+    for (const QString& l : QString::fromUtf8(f.readAll()).split('\n', Qt::SkipEmptyParts))
+      excludedAdapters_.insert(l.trimmed());
+}
+
+void MainWindow::saveInterfacePrefs() {
+  const QString cfg = configDir();
+  auto marker = [&](const char* name, bool present) {
+    if (present) QFile(cfg + "/" + name).open(QIODevice::WriteOnly);
+    else QFile::remove(cfg + "/" + name);
+  };
+  marker("lan_disabled", !lanEnabled_);
+  marker("usb_disabled", !usbEnabled_);
+  QFile f(cfg + "/advertise_excluded_adapters");
+  if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    QTextStream out(&f);
+    for (const QString& n : excludedAdapters_) out << n << '\n';
+  }
+}
+
+void MainWindow::onLanToggled(bool on) {
+  lanEnabled_ = on;
+  saveInterfacePrefs();
+  if (on) {
+    if (browser_.available()) browser_.start();
+    refreshAdvertising();
+  } else {
+    browser_.stop();
+    advertiser_.stop();
+    advertisedPort_ = 0;
+    netDevices_.clear();
+    rebuildClientList();
+  }
+  refreshInterfaces();     // enable/disable the adapter checkboxes
+  refreshWebClientUi();
+}
+
+void MainWindow::onUsbToggled(bool on) {
+  usbEnabled_ = on;
+  saveInterfacePrefs();
+  if (on) {
+    tetherScanner_.start();
+    aoaScanner_.start();
+  } else {
+    tetherScanner_.stop();   // stops the 2s USB poll — the idle-resource win
+    aoaScanner_.stop();
+    tetherClients_.clear();
+    aoaClients_.clear();
+    rebuildClientList();
+  }
+}
+
+void MainWindow::refreshInterfaces() {
+  if (!adapterRows_) return;
+  QLayoutItem* item;
+  while ((item = adapterRows_->takeAt(0))) {   // clear previous rows
+    if (QWidget* w = item->widget()) w->deleteLater();
+    delete item;
+  }
+  for (const LanIface& i : lan_ipv4_ifaces()) {
+    auto* cb = new QCheckBox(QStringLiteral("%1 · %2").arg(i.ip, i.name));
+    cb->setChecked(!excludedAdapters_.contains(i.name));
+    cb->setEnabled(lanEnabled_);
+    const QString name = i.name;
+    connect(cb, &QCheckBox::toggled, this, [this, name](bool included) {
+      if (included) excludedAdapters_.remove(name);
+      else excludedAdapters_.insert(name);
+      saveInterfacePrefs();
+      refreshWebClientUi();   // primary URL/QR follows the first included adapter
+    });
+    adapterRows_->addWidget(cb);
   }
 }
 

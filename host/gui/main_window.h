@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 #include <functional>
@@ -23,6 +24,7 @@
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
 class QListWidget; class QGroupBox; class QSystemTrayIcon; class QDialog;
+class QVBoxLayout;
 
 namespace droppix {
 class SettingsDialog;
@@ -42,6 +44,11 @@ class MainWindow : public QMainWindow {
   void startServerSession();       // spawn the primary "server:<port>" listener on a free port
   void stopServerSession();        // stop the primary listener (no re-arm)
   void updateServerButton();       // reflect serverEnabled_ in the toggle's text/checked state
+  void onLanToggled(bool on);      // Network transport on/off (advertise + browse)
+  void onUsbToggled(bool on);      // USB transport on/off (tether + AOA scanners)
+  void refreshInterfaces();        // rebuild the per-adapter checkbox rows
+  void loadInterfacePrefs();
+  void saveInterfacePrefs();
   // Spawn a streaming session: a new StreamController on `port`, wired, started, added to
   // the Active-monitors panel; `directTablet` (may be empty) WAKEs the tablet to dial in.
   // `mirror` selects Mirror mode (evdi mirrors an existing display) vs. the default Extend.
@@ -110,6 +117,13 @@ class MainWindow : public QMainWindow {
   QString serverKey_;                // key of the live "server:<port>" session (empty = none)
   qint64 serverStartMs_ = 0;         // start time of the current server session
   bool serverEverConnected_ = false; // did the current server session ever have a client
+  bool lanEnabled_ = true;           // Network (Wi-Fi/Ethernet) transport toggle
+  bool usbEnabled_ = true;           // USB (adb/tether/AOA) transport toggle
+  QSet<QString> excludedAdapters_;   // adapter names unchecked (hidden from URL/QR)
+  QGroupBox* commBox_ = nullptr;
+  QCheckBox* lanToggle_ = nullptr;
+  QCheckBox* usbToggle_ = nullptr;
+  QVBoxLayout* adapterRows_ = nullptr;
   MdnsAdvertiser advertiser_;
   quint16 advertisedPort_ = 0;     // port currently published via _droppix._tcp (0 = none)
   MdnsBrowser browser_;
