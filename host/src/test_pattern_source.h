@@ -5,7 +5,8 @@ namespace droppix {
 class TestPatternSource : public FrameSource {
  public:
   TestPatternSource(int width, int height, int fps);
-  bool start(int& width, int& height) override;
+  bool start(int& width, int& height,
+             const std::function<void()>& on_connected = {}) override;
   Frame next(int timeout_ms) override;
  private:
   int width_, height_, fps_;

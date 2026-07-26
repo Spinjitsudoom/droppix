@@ -12,7 +12,8 @@ class EvdiFrameSource : public FrameSource {
   // treats concurrent droppix monitors as distinct displays instead of deduplicating them.
   EvdiFrameSource(int width, int height, int refresh_hz, uint32_t serial = 0)
       : width_(width), height_(height), refresh_hz_(refresh_hz), serial_(serial) {}
-  bool start(int& width, int& height) override;
+  bool start(int& width, int& height,
+             const std::function<void()>& on_connected = {}) override;
   Frame next(int timeout_ms) override;
  private:
   int width_, height_, refresh_hz_;

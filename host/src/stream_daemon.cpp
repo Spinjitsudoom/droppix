@@ -92,7 +92,16 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     }
   }
   src_ = make_source_(w, h);
-  if (!src_ || !src_->start(w, h)) { std::fprintf(stderr, "source start failed\n"); return false; }
+  // X11 (reverse-PRIME evdi) must link + bare-enable the new output before the compositor
+  // will ever assign it a mode; Wayland backends' link_providers() is a no-op. Passed as a
+  // callback so the evdi source can run it concurrently with its mode-wait (see
+  // EvdiFrameSource::start / frame_source.h) — running it only after start() returns would
+  // deadlock, since the wait needs the mode this callback produces.
+  auto on_connected = [this]{ desktop_->link_providers(); };
+  if (!src_ || !src_->start(w, h, on_connected)) {
+    std::fprintf(stderr, "source start failed\n");
+    return false;
+  }
   std::fprintf(stderr, "source %dx%d\n", w, h);
 
   if (!enc_.open(w, h, sp.fps, sp.bitrate)) { std::fprintf(stderr, "encoder open failed\n"); return false; }

@@ -35,6 +35,11 @@ struct DesktopBackend {
   virtual bool map_pen(const std::string& output, const std::string& pen_dev) {
     (void)output; (void)pen_dev; return false;
   }
+  // Link any reverse-PRIME provider (evdi as a separate GPU) as a sink of provider 0 so
+  // its output becomes visible/enable-able. Must run BEFORE the output can be identified
+  // and moded. Default no-op (Wayland compositors handle this themselves); X11 overrides.
+  // Returns true if a link command was issued.
+  virtual bool link_providers() { return false; }
   // Called once the droppix output is identified. Wayland compositors adopt/place evdi
   // outputs themselves (default no-op); X11 must do it explicitly (reverse-PRIME provider
   // link + placement, or the desktop shows black). Returns true if the layout may have
@@ -65,6 +70,7 @@ class X11Backend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
+  bool link_providers() override;
   bool adopt_output(const std::string& output) override;
   bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
 

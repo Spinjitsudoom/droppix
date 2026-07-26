@@ -177,6 +177,34 @@ bool X11Backend::map_pen(const std::string& output_name, const std::string& pen_
 // reverse-PRIME sink; and the desktop's auto-reconfigure can scramble the layout
 // (black screens). So: link the providers, place the droppix output right of the
 // primary, and re-assert the primary — an explicit, sane layout.
+// Reverse-PRIME link + bare mode-enable, run BEFORE the droppix output is identifiable
+// (no output name needed). Two things a separate-GPU evdi provider needs before X will
+// ever assign it a mode — and evdi's wait_for_mode blocks until a mode lands:
+//   1) attach every provider beyond 0 as a sink of provider 0, so its outputs appear in
+//      `xrandr --query` at all;
+//   2) `--auto` any output that is now "connected" but has no mode yet (X links a new
+//      provider's output as disabled — it does not auto-enable it the way KWin does).
+// Placement (--right-of the primary) is deliberately left to the existing adopt_output,
+// called later once the daemon has identified the output by its before/after diff;
+// this only needs to produce *a* mode so the evdi mode-wait can return. Idempotent.
+// Safe to call while the mode-wait pumps events on another thread — it only runs xrandr
+// subprocesses, never touching the evdi handle.
+bool X11Backend::link_providers() {
+  const std::string inner =
+      "np=$(xrandr --listproviders 2>/dev/null | grep -c \"^Provider\"); "
+      "i=1; while [ \"$i\" -lt \"${np:-1}\" ]; do "
+      "xrandr --setprovideroutputsource \"$i\" 0 2>&1 | sed \"s/^/[provider-link] provider $i: /\" >&2; "
+      "i=$((i+1)); done; "
+      // $2=="connected" && $3 starts with "(" => connected but no current mode/geometry
+      // (an enabled output's 3rd field is its WxH+X+Y, not the "(normal ...)" flags group).
+      "for o in $(xrandr --query 2>/dev/null | awk '$2==\"connected\" && $3 ~ /^\\(/{print $1}'); do "
+      "xrandr --output \"$o\" --auto 2>&1 | sed \"s/^/[provider-link] auto $o: /\" >&2; "
+      "done";
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + inner + "'";
+  std::system(cmd.c_str());
+  return true;
+}
+
 bool X11Backend::adopt_output(const std::string& output_name) {
   if (!safe_output_name(output_name)) return false;
   const std::string inner =
