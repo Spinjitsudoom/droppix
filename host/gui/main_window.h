@@ -78,8 +78,9 @@ class MainWindow : public QMainWindow {
   void refreshAdvertising();    // (re)publish _droppix._tcp for the current port; idempotent
   bool minimizeToTrayRequested() const;   // reads the <config>/minimize_on_close marker
   void setupTray();             // create the tray icon + Show/Quit menu (if a tray exists)
-  void showPairingPopup(const QString& ip);   // pop the pairing code when a device connects
+  void showPairingPopup(const QString& ip, int port);   // pop the pairing code + QR when a device connects
   void hidePairingPopup();
+  void refreshPairingUi();      // proactive scan-to-pair QR (host LAN IP) while a session waits
   // Append a synthetic (non-streamer) event into the debug-log console.
   void logEvent(const QString& key, const QString& source, LogLevel level, const QString& text);
   void manageDevices();         // dialog to view/forget remembered (approved) devices
@@ -94,6 +95,7 @@ class MainWindow : public QMainWindow {
   QDialog* pairingPopup_ = nullptr;   // non-modal "Pairing code: NNNNNN" shown on connect
   QLabel* pairingInfo_ = nullptr;
   QLabel* pairingCodeLabel_ = nullptr;
+  QLabel* pairingQrLabel_ = nullptr;
   QTimer* pairingHideTimer_ = nullptr;
   QListWidget* devicesList_;
   QPushButton* connectBtn_;
@@ -102,6 +104,8 @@ class MainWindow : public QMainWindow {
   QLabel* webUrlLabel_ = nullptr;
   QLabel* webQrLabel_ = nullptr;
   QPushButton* webCopyBtn_ = nullptr;
+  QLabel* pairingScanCaption_ = nullptr;   // proactive "Scan to pair / code" caption
+  QLabel* pairingScanQr_ = nullptr;        // proactive scan-to-pair QR (host LAN IP)
   bool anyConnected_ = false;   // any session has a client connected (drives the status dot)
   void refreshWebClientUi();    // URL + QR for the newest session when webClient enabled
 

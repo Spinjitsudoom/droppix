@@ -2,6 +2,7 @@
 #include "args_builder.h"
 #include "settings_dialog.h"
 #include "web_url.h"
+#include "qr_generator.h"
 #include "log_forwarder.h"
 #include "log_classify.h"
 #include "server_control.h"
@@ -251,8 +252,17 @@ MainWindow::MainWindow(QWidget* parent)
     if (!webUrlLabel_->text().isEmpty())
       QGuiApplication::clipboard()->setText(webUrlLabel_->text());
   });
+  // Proactive scan-to-pair QR: shown while a WiFi session waits, so the tablet can
+  // scan BEFORE connecting. Encodes droppix://<host LAN IP>:<port>?code (not the
+  // client IP, and not tied to the reactive "device connecting" popup).
+  pairingScanCaption_ = new QLabel; pairingScanCaption_->setObjectName("caption");
+  pairingScanCaption_->setAlignment(Qt::AlignCenter); pairingScanCaption_->setWordWrap(true);
+  pairingScanCaption_->hide();
+  pairingScanQr_ = new QLabel; pairingScanQr_->setAlignment(Qt::AlignCenter); pairingScanQr_->hide();
   auto* monLayout = new QVBoxLayout;
   monLayout->addWidget(monitorsList_);
+  monLayout->addWidget(pairingScanCaption_);
+  monLayout->addWidget(pairingScanQr_);
   monLayout->addWidget(webUrlLabel_);
   monLayout->addWidget(webQrLabel_);
   monLayout->addWidget(webCopyBtn_);
@@ -376,7 +386,7 @@ MainWindow::MainWindow(QWidget* parent)
   connect(pairingHideTimer_, &QTimer::timeout, this, &MainWindow::hidePairingPopup);
 }
 
-void MainWindow::showPairingPopup(const QString& ip) {
+void MainWindow::showPairingPopup(const QString& ip, int port) {
   if (ip.isEmpty() || ip == "127.0.0.1") return;   // USB / AOA / localhost: no pairing code
   if (!pairingPopup_) {
     pairingPopup_ = new QDialog(this);
@@ -384,16 +394,37 @@ void MainWindow::showPairingPopup(const QString& ip) {
     pairingPopup_->setModal(false);
     auto* v = new QVBoxLayout(pairingPopup_);
     pairingInfo_ = new QLabel; pairingInfo_->setAlignment(Qt::AlignCenter); pairingInfo_->setWordWrap(true);
+    pairingQrLabel_ = new QLabel; pairingQrLabel_->setAlignment(Qt::AlignCenter); pairingQrLabel_->hide();
     pairingCodeLabel_ = new QLabel; pairingCodeLabel_->setAlignment(Qt::AlignCenter);
     pairingCodeLabel_->setStyleSheet("font-size:34px; font-weight:700; letter-spacing:6px; color:#14b8a6;");
     auto* closeBtn = new QPushButton("Close");
     connect(closeBtn, &QPushButton::clicked, this, &MainWindow::hidePairingPopup);
     v->addWidget(pairingInfo_);
+    v->addWidget(pairingQrLabel_);
     v->addWidget(pairingCodeLabel_);
     v->addWidget(closeBtn);
   }
-  pairingInfo_->setText(QString("A device (%1) is connecting.\nEnter this pairing code on the tablet:").arg(ip));
-  pairingCodeLabel_->setText(cert_.pairingCode());
+  const QString code = cert_.pairingCode();
+  pairingCodeLabel_->setText(code);
+  // Build a scannable QR (droppix://<host LAN IP>:port?code). NOTE: `ip` here is the
+  // connecting CLIENT's address (for the info text); the QR must encode the HOST's
+  // own LAN IP so the tablet dials the PC, not itself.
+  bool qrShown = false;
+  const auto inc = included_ifaces(lan_ipv4_ifaces(), excludedAdapters_);
+  const QString hostIp = inc.isEmpty() ? QString() : inc.first().ip;
+  if (port > 0 && !hostIp.isEmpty() && hostIp != "127.0.0.1") {
+    const std::string uri = generate_qr_uri(hostIp.toStdString(), port, code.toStdString());
+    const QImage qr = make_qr_image(QString::fromStdString(uri), 8);
+    if (!qr.isNull()) {
+      pairingQrLabel_->setPixmap(QPixmap::fromImage(qr));
+      pairingQrLabel_->show();
+      qrShown = true;
+    }
+  }
+  if (!qrShown) pairingQrLabel_->hide();
+  pairingInfo_->setText(QString("A device (%1) is connecting.\n%2")
+      .arg(ip, qrShown ? "Scan the QR code on the tablet, or enter this pairing code:"
+                       : "Enter this pairing code on the tablet:"));
   pairingPopup_->show();
   pairingPopup_->raise();
   pairingPopup_->activateWindow();
@@ -817,6 +848,7 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   monitorsList_->addItem(row);
   monitorsBox_->show();
   refreshWebClientUi();
+  refreshPairingUi();
   refreshAdvertising();
   updateStatus();
   if (directTablet) directTablet();
@@ -852,6 +884,40 @@ void MainWindow::refreshWebClientUi() {
   } else {
     webQrLabel_->hide();
   }
+}
+
+void MainWindow::refreshPairingUi() {
+  // Show a scannable pairing QR whenever a WiFi session is live and we have a real LAN
+  // IP. Encodes droppix://<host LAN IP>:<session port>?code=<pairing code> so the
+  // tablet can scan it to pair before any connection exists. USB/AOA use localhost +
+  // the "Connect via USB" button instead, so no QR there. Respects the same LAN
+  // enable/adapter-exclusion settings as the web-client QR.
+  if (!lanEnabled_ || sessions_.count() == 0) {
+    pairingScanCaption_->hide();
+    pairingScanQr_->hide();
+    return;
+  }
+  const Session& sess = sessions_.list().last();
+  const auto inc = included_ifaces(lan_ipv4_ifaces(), excludedAdapters_);
+  const QString ip = inc.isEmpty() ? QString() : inc.first().ip;
+  if (sess.transport == "usb-aoa" || ip.isEmpty() || ip == "127.0.0.1") {
+    pairingScanCaption_->hide();
+    pairingScanQr_->hide();
+    return;
+  }
+  const QString code = cert_.pairingCode();
+  const std::string uri = generate_qr_uri(ip.toStdString(), sess.port, code.toStdString());
+  const QImage qr = make_qr_image(QString::fromStdString(uri), 8);   // larger: scannable from a phone
+  if (qr.isNull()) {
+    pairingScanCaption_->hide();
+    pairingScanQr_->hide();
+    return;
+  }
+  pairingScanQr_->setPixmap(QPixmap::fromImage(qr));
+  pairingScanQr_->show();
+  pairingScanCaption_->setText(
+      QString("Scan to pair this PC (%1:%2) — or enter code %3").arg(ip).arg(sess.port).arg(code));
+  pairingScanCaption_->show();
 }
 
 void MainWindow::loadInterfacePrefs() {
@@ -966,6 +1032,7 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
         delete monitorsList_->takeItem(i);
     if (sessions_.count() == 0) { monitorsBox_->hide(); anyConnected_ = false; hidePairingPopup(); }
     refreshWebClientUi();
+    refreshPairingUi();
     updateStatus();
     if (key == serverKey_) {   // the primary Server-toggle listener ended
       serverKey_.clear();
@@ -982,7 +1049,8 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
   });
   connect(c, &StreamController::connecting, this, [this, key](const QString& ip){
     logEvent(key, QStringLiteral("conn"), LogLevel::Info, QStringLiteral("client connecting ip=%1").arg(ip));
-    showPairingPopup(ip);
+    Session* s = sessions_.find(key);
+    showPairingPopup(ip, s ? s->port : 0);
   });
   connect(c, &StreamController::approvalRequested, this,
     [this, c, key](const QString& id, const QString& name, const QString& ip){

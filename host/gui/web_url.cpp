@@ -61,14 +61,19 @@ QImage make_qr_image(const QString& text, int scale) {
     const QrCode qr = QrCode::encodeText(text.toUtf8().constData(), QrCode::Ecc::MEDIUM);
     const int size = qr.getSize();
     if (scale < 1) scale = 1;
-    QImage img(size * scale, size * scale, QImage::Format_RGB32);
+    // QR codes need a "quiet zone" — a white margin of >=4 modules — or scanners
+    // (incl. ZXing on a phone) fail to detect them, especially against a dark UI
+    // background. Render the modules inset by `border` modules of white.
+    const int border = 4;
+    const int dim = (size + 2 * border) * scale;
+    QImage img(dim, dim, QImage::Format_RGB32);
     img.fill(Qt::white);
     for (int y = 0; y < size; ++y) {
       for (int x = 0; x < size; ++x) {
         if (!qr.getModule(x, y)) continue;
         for (int dy = 0; dy < scale; ++dy)
           for (int dx = 0; dx < scale; ++dx)
-            img.setPixel(x * scale + dx, y * scale + dy, qRgb(0, 0, 0));
+            img.setPixel((x + border) * scale + dx, (y + border) * scale + dy, qRgb(0, 0, 0));
       }
     }
     return img;

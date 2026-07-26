@@ -168,6 +168,7 @@ add_executable(droppix_tests
   tests/test_tether_discovery.cpp
   tests/test_mdns_browse.cpp
   tests/test_pairing_code.cpp
+  tests/test_qr_generator.cpp
   tests/test_audio_sink.cpp
   tests/test_aoa_scan.cpp
   tests/test_desktop_backend.cpp
