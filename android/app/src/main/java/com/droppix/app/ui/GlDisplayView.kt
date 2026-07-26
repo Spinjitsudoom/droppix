@@ -308,6 +308,15 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     @Volatile var brightness: Int = 0
     @Volatile var contrast: Int = 100
 
+    // The video content's actual pixel dimensions, as reported by the host's CONFIG message
+    // (set by StreamActivity.onConfig). Read by the GL thread every frame to letterbox/
+    // pillarbox the quad so the image is never non-uniformly stretched when the streamed
+    // resolution's aspect ratio doesn't exactly match the view's on-screen pixel aspect
+    // (e.g. evdi/CVT mode-timing rounding, or the negotiated size not matching the view
+    // exactly). 0 until the first CONFIG arrives.
+    @Volatile var videoWidth: Int = 0
+    @Volatile var videoHeight: Int = 0
+
     private val renderer = GlRenderer()
 
     init {
@@ -330,8 +339,12 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
         private val stMatrix = FloatArray(16)
         private val texMatrix = FloatArray(16)
         private val mirror = FloatArray(16)
+        private var viewW = 0
+        private var viewH = 0
 
-        // Fullscreen triangle-strip quad: clip-space positions + texcoords.
+        // Triangle-strip quad: clip-space positions + texcoords. Position extents are
+        // rewritten every frame in onDrawFrame (via fitScale) to letterbox/pillarbox instead
+        // of always filling -1..1 — see fitScale's doc comment.
         private val quad: FloatBuffer = floatBuf(floatArrayOf(
             //   x,    y,     u, v
             -1f, -1f,   0f, 0f,
@@ -365,7 +378,10 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             post { maybeDeliverSurface() }
         }
 
-        override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) = GLES20.glViewport(0, 0, w, h)
+        override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
+            viewW = w; viewH = h
+            GLES20.glViewport(0, 0, w, h)
+        }
 
         override fun onDrawFrame(gl: GL10?) {
             val st = surfaceTexture ?: return
@@ -381,6 +397,13 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             } else {
                 System.arraycopy(stMatrix, 0, texMatrix, 0, 16)
             }
+            val (sx, sy) = AspectFit.scale(videoWidth, videoHeight, viewW, viewH)
+            quad.clear()
+            quad.put(floatArrayOf(
+                -sx, -sy,   0f, 0f,
+                 sx, -sy,   1f, 0f,
+                -sx,  sy,   0f, 1f,
+                 sx,  sy,   1f, 1f))
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
             GLES20.glUseProgram(program)
             GLES20.glActiveTexture(GLES20.GL_TEXTURE0)

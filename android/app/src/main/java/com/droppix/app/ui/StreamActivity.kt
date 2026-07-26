@@ -225,7 +225,11 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
                     c.sendOrientation(orientationMapper.currentCode())  // sync host to current orientation
                     val s = surface ?: return
-                    runOnUiThread { surfaceView.holder.setFixedSize(config.width, config.height) }
+                    runOnUiThread {
+                        surfaceView.holder.setFixedSize(config.width, config.height)
+                        surfaceView.videoWidth = config.width
+                        surfaceView.videoHeight = config.height
+                    }
                     decoder?.release()
                     decoder = try {
                         VideoDecoder(s, config.width, config.height, stats)
