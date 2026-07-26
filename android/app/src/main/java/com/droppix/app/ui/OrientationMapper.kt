@@ -53,6 +53,6 @@ class OrientationMapper(
         // Physical quarter -> ORIENTATION code (host KWin rotation). Identity default;
         // the 90°/270° direction is the on-device calibration constant — swap indices
         // 1 and 3 here if rotating the tablet turns the desktop the wrong way.
-        private val QUARTER_TO_CODE = intArrayOf(0, 1, 2, 3)
+        private val QUARTER_TO_CODE = intArrayOf(0, 3, 2, 1)
     }
 }
