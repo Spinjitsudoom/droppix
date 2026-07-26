@@ -19,6 +19,8 @@ import com.droppix.app.net.PairingCode
 import com.droppix.app.net.TlsTrust
 import com.droppix.app.net.certFingerprint
 import com.droppix.app.net.WakeService
+import com.droppix.app.net.parseQrUri
+import com.google.zxing.integration.android.IntentIntegrator
 import java.net.InetSocketAddress
 import java.security.cert.X509Certificate
 import javax.net.ssl.SSLSocket
@@ -62,11 +64,45 @@ class ConnectActivity : AppCompatActivity() {
         }
 
         connectBtn.setOnClickListener { onConnectClicked() }
+        findViewById<Button>(R.id.scan_qr_btn).setOnClickListener {
+            IntentIntegrator(this)
+                .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+                .setPrompt("Scan the QR code shown on the PC")
+                .setBeepEnabled(true)
+                .setOrientationLocked(false)
+                .initiateScan()
+        }
+        findViewById<Button>(R.id.usb_btn).setOnClickListener {
+            // Classic USB path: the host runs `adb reverse tcp:27000 tcp:27000`, so the
+            // tablet reaches it on localhost. 127.0.0.1 is auto-trusted (no PIN).
+            status.text = "Connecting over USB (127.0.0.1:27000)..."
+            connectTo("127.0.0.1", 27000)
+        }
         updateReconnectRow()
         reconnectBtn.setOnClickListener { onReconnectClicked() }
         settingsBtn.setOnClickListener {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val result = IntentIntegrator.parseActivityResult(requestCode, resultCode, data)
+        if (result == null) {
+            super.onActivityResult(requestCode, resultCode, data)
+            return
+        }
+        val contents = result.contents
+        if (contents == null) {
+            status.text = "Scan cancelled"
+            return
+        }
+        val parsed = parseQrUri(contents)
+        if (parsed == null) {
+            Toast.makeText(this, "Invalid droppix QR code", Toast.LENGTH_SHORT).show()
+            return
+        }
+        status.text = "Pairing with ${parsed.host}:${parsed.port} via QR..."
+        connectWithScannedCode(parsed.host, parsed.port, parsed.code)
     }
 
     override fun onResume() {
@@ -175,6 +211,14 @@ class ConnectActivity : AppCompatActivity() {
         }
     }
 
+    private fun connectWithScannedCode(host: String, port: Int, scannedCode: String) {
+        when {
+            host == "127.0.0.1" -> launchStream(host, port)
+            tlsTrust.isPaired(host) -> launchStream(host, port)
+            else -> pairThenConnect(host, port, scannedCode)
+        }
+    }
+
     private fun launchStream(host: String, port: Int) {
         getSharedPreferences("droppix", MODE_PRIVATE).edit()
             .putString("last_host", host).putInt("last_port", port).apply()
@@ -182,7 +226,7 @@ class ConnectActivity : AppCompatActivity() {
             .putExtra("host", host).putExtra("port", port))
     }
 
-    private fun pairThenConnect(host: String, port: Int) {
+    private fun pairThenConnect(host: String, port: Int, presetCode: String? = null) {
         thread(name = "droppix-pair-probe") {
             var captured: X509Certificate? = null
             var ok = false
@@ -202,6 +246,14 @@ class ConnectActivity : AppCompatActivity() {
             runOnUiThread {
                 if (!ok || cert == null) {
                     Toast.makeText(this, "Could not reach $host", Toast.LENGTH_SHORT).show()
+                } else if (presetCode != null) {
+                    if (presetCode == PairingCode.derive(cert.encoded)) {
+                        tlsTrust.pin(host, certFingerprint(cert))
+                        Toast.makeText(this, "Paired via QR", Toast.LENGTH_SHORT).show()
+                        launchStream(host, port)
+                    } else {
+                        Toast.makeText(this, "QR code doesn't match this PC — try manual entry", Toast.LENGTH_LONG).show()
+                    }
                 } else {
                     showPairDialog(host, port, cert)
                 }

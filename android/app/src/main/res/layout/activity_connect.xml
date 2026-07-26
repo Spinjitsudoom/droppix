@@ -80,6 +80,24 @@
         android:textColor="#1b1f24"
         android:layout_marginBottom="12dp" />
 
+    <Button
+        android:id="@+id/scan_qr_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Scan QR to Pair"
+        android:backgroundTint="#2a2f36"
+        android:textColor="#14b8a6"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/usb_btn"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Connect via USB (adb)"
+        android:backgroundTint="#2a2f36"
+        android:textColor="#14b8a6"
+        android:layout_marginBottom="12dp" />
+
     <TextView
         android:id="@+id/status"
         android:layout_width="match_parent"

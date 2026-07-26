@@ -43,5 +43,14 @@ android {
 
 dependencies {
     implementation("com.google.android.material:material:1.12.0")
+
+    // ZXing for QR code scanning.
+    // 3.6.0 is the last release supporting minSdk < 24 (Nexus 10 is API 22); the
+    // androidx-based 4.x line requires minSdk 24. 3.6.0 pulls the legacy support
+    // library, so android.enableJetifier=true is set in gradle.properties, and the
+    // scan is launched via IntentIntegrator/onActivityResult (no ScanContract).
+    // core is left transitive (3.6.0 → zxing core 3.3.x, safe on API 22).
+    implementation("com.journeyapps:zxing-android-embedded:3.6.0")
+
     testImplementation("junit:junit:4.13.2")
 }
