@@ -16,6 +16,8 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
+| L-2026-07-26-x11-evdi-prime-deadlock | evdi never gets a mode on X11 (Cinnamon/XFCE/etc) — ordering deadlock | host, evdi, desktop-backend, silent-failure | high | 2026-07-26 | [x11-evdi-prime-deadlock.md](x11-evdi-prime-deadlock.md) |
+| G-2026-07-19-zxing-embedded-minsdk | zxing-android-embedded 4.x needs minSdk 24 (crashes on Nexus 10 / API 22) | android, packaging, gotcha | high | 2026-07-19 | [zxing-embedded-minsdk.md](zxing-embedded-minsdk.md) |
 | L-2026-07-18-ghost-ws-stream | Video keeps playing after disconnect (orphaned WebSocket) | client, transport, silent-failure | high | 2026-07-18 | [ghost-ws-stream.md](ghost-ws-stream.md) |
 | L-2026-07-18-delta-drop-corruption | Shaky/corrupted video from dropping delta frames | client, encoder, wrong-answer, performance | high | 2026-07-18 | [delta-drop-corruption.md](delta-drop-corruption.md) |
 | G-2026-07-18-playwright-autoplay | Playwright Chromium never suspends AudioContext; `await resume()` hangs connect under real autoplay | client, audio, flake | high | 2026-07-18 | [playwright-autoplay.md](playwright-autoplay.md) |

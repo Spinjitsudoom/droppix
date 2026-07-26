@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-07-24 on `master` (host build in droppix-dev distrobox: 240/240 tests; web PWA served + browser-verified).
+**Last verified:** 2026-07-26 on `master` (244/244 host tests; QR pairing + X11 reverse-PRIME evdi fix + orientation calibration fix added — Android build pending on-device retest).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -14,7 +14,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Linux desktop receive client (`client/`) | **Shipped** |
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
-| Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open |
+| Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open. X11 reverse-PRIME evdi (separate-GPU provider, e.g. Cinnamon/Xorg) fixed 2026-07-26: provider link + auto-enable now run concurrently with the mode-wait, not after |
 | Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir |
 | In-GUI Debug log console (F12) | **Shipped** — dockable panel capturing streamer + GUI logs |
 
@@ -33,7 +33,8 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Mirror / extend layout toggle | Shipped | `LayoutMode`, `DesktopBackend::apply_layout` |
 | Audio to tablet (PipeWire) | Shipped | `audio_streamer.*`, `audio_sink.*` |
 | WiFi discovery + TLS PIN pairing | Shipped | `mdns_*`, `cert_manager.*`, Android `TlsTrust` |
-| USB `adb reverse` | Shipped | host GUI / streamer USB path |
+| QR-code pairing (scan to skip PIN typing) | Shipped (host); Android build/on-device retest pending | `host/src/qr_generator.*`, `main_window::refreshPairingUi`/`showPairingPopup`; Android `net/QrUri.kt`, ZXing scan in `ui/ConnectActivity.kt` |
+| USB `adb reverse` | Shipped | host GUI / streamer USB path; Android "Connect via USB (adb)" button restored 2026-07-26 |
 | USB tethering transport | Shipped | `tether_discovery.*`, `TetherProbe.kt` |
 | AOA USB accessory transport | Shipped | `aoa_{channel,connect,scan}.*`, Android `UsbAccessory` |
 | Multi-monitor (N tablets) | Shipped | `session_manager.*`, `port_alloc.*` |
