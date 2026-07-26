@@ -1083,6 +1083,7 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
           const QString devLabel = name.isEmpty() ? ip : name;
           s->label = devLabel;
           addMonitorRow(key, devLabel, s->transport, s->port, s->mirror);
+          updateStatus();   // header text ("Listening…" -> "N monitor(s) · waiting") follows the row
         }
       };
       const QString akey = id.isEmpty() ? ip : id;
@@ -1159,11 +1160,22 @@ void MainWindow::toggleSelectedMonitorMirror() {
 }
 
 void MainWindow::updateStatus() {
-  const int n = sessions_.count();
-  if (n == 0) { setStatusDot(kDotStopped); streamLabel_->setText("Stopped"); statsLabel_->setText("—"); return; }
+  if (sessions_.count() == 0) {
+    setStatusDot(kDotStopped); streamLabel_->setText("Stopped"); statsLabel_->setText("—");
+    return;
+  }
+  // monitorsList_ only ever holds rows for identified/approved devices (see
+  // addMonitorRow()) — the blind "Server" listener has zero rows until one connects, so
+  // counting rows here (not sessions_.count()) keeps "N monitor(s)" from claiming a
+  // monitor exists before any device actually has.
+  const int devices = monitorsList_->count();
+  if (devices == 0) {
+    setStatusDot(kDotWaiting); streamLabel_->setText("Listening…"); statsLabel_->setText("—");
+    return;
+  }
   setStatusDot(anyConnected_ ? kDotConnected : kDotWaiting);
   streamLabel_->setText(QString("%1 monitor%2%3")
-      .arg(n).arg(n == 1 ? "" : "s").arg(anyConnected_ ? "" : " · waiting"));
+      .arg(devices).arg(devices == 1 ? "" : "s").arg(anyConnected_ ? "" : " · waiting"));
   statsLabel_->setText("—");
 }
 
