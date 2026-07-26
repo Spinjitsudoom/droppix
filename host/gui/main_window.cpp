@@ -232,9 +232,11 @@ MainWindow::MainWindow(QWidget* parent)
   deviceLabel_->hide();   // reserved for a future discovery-status hint; unused for now
 
   // --- Start/Stop + log ---
-  startBtn_ = new QPushButton("▶  Server: Off");
-  startBtn_->setObjectName("startButton");
-  startBtn_->setCheckable(true);   // persistent on/off Server toggle (start/stop the listener)
+  serverStartBtn_ = new QPushButton("▶  Start Server");
+  serverStartBtn_->setObjectName("startButton");
+  serverStopBtn_ = new QPushButton("■  Stop Server");
+  serverStopBtn_->setObjectName("startButton");
+  serverStopBtn_->setEnabled(false);   // server starts off
 
   // (auth setup moved to the Settings menu → "Remember authentication")
 
@@ -290,7 +292,10 @@ MainWindow::MainWindow(QWidget* parent)
   root->addLayout(profRow);
   root->addLayout(statusRow);
   root->addWidget(deviceLabel_);
-  root->addWidget(startBtn_);
+  auto* serverBtnRow = new QHBoxLayout;
+  serverBtnRow->addWidget(serverStartBtn_);
+  serverBtnRow->addWidget(serverStopBtn_);
+  root->addLayout(serverBtnRow);
 
   // --- Communication interfaces (adapters + LAN/USB toggles) ---
   loadInterfacePrefs();
@@ -332,7 +337,8 @@ MainWindow::MainWindow(QWidget* parent)
   stageWebAssets();   // ensure the PWA assets are where the (root) streamer can read them
 
   // --- Wiring ---
-  connect(startBtn_, &QPushButton::toggled, this, &MainWindow::onServerToggled);
+  connect(serverStartBtn_, &QPushButton::clicked, this, [this]{ onServerToggled(true); });
+  connect(serverStopBtn_, &QPushButton::clicked, this, [this]{ onServerToggled(false); });
   connect(saveBtn, &QPushButton::clicked, this, [this]{
     const QString n = profileBox_->currentText();
     if (!n.isEmpty()) { store_.save(n, collectSettings()); store_.setLastUsed(n); refreshProfiles(); }
@@ -376,7 +382,7 @@ MainWindow::MainWindow(QWidget* parent)
   // Restore the Server toggle: if it was on last launch, auto-start after the window paints
   // (deferred so the pkexec prompt, if any, doesn't block the first frame).
   if (QFile::exists(configDir() + "/server_enabled"))
-    QTimer::singleShot(0, this, [this]{ startBtn_->setChecked(true); });
+    QTimer::singleShot(0, this, [this]{ onServerToggled(true); });
 
   audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
   setupTray();           // tray icon for "minimize to tray on close" (if a tray exists)
@@ -780,9 +786,8 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::updateServerButton() {
-  const QSignalBlocker block(startBtn_);   // reflect state without re-entering onServerToggled
-  startBtn_->setChecked(serverEnabled_);
-  startBtn_->setText(serverEnabled_ ? "■  Server: On" : "▶  Server: Off");
+  serverStartBtn_->setEnabled(!serverEnabled_);
+  serverStopBtn_->setEnabled(serverEnabled_);
 }
 
 // The Server toggle: on -> start a primary listener that waits for a device (and re-arms
@@ -811,7 +816,12 @@ void MainWindow::startServerSession() {
   serverKey_ = QString("server:%1").arg(port);
   serverStartMs_ = QDateTime::currentMSecsSinceEpoch();
   serverEverConnected_ = false;
-  startSession(serverKey_, "Server — waiting for a device…", QString(), port, QString(), {});
+  // No row yet: this is a blind listener with no device identified. A row is added once
+  // a real device is approved (see the approvalRequested handler in wireSession()), so
+  // the Active-monitors list only ever shows actually-connecting devices, never a
+  // permanent "waiting" placeholder.
+  startSession(serverKey_, "Server", QString(), port, QString(), {}, /*mirror=*/false,
+               /*addRowNow=*/false);
 }
 
 void MainWindow::stopServerSession() {
@@ -820,9 +830,20 @@ void MainWindow::stopServerSession() {
     if (s->controller) s->controller->stop();   // runningChanged(false) tears the session down
 }
 
+void MainWindow::addMonitorRow(const QString& key, const QString& label, const QString& transport,
+                               int port, bool mirror) {
+  for (int i = 0; i < monitorsList_->count(); ++i)
+    if (monitorsList_->item(i)->data(Qt::UserRole).toString() == key) return;   // already shown
+  auto* row = new QListWidgetItem(
+      QString("%1  ·  %2  ·  :%3%4").arg(label, transport.isEmpty() ? "—" : transport)
+          .arg(port).arg(mirror ? " — Mirror" : ""));
+  row->setData(Qt::UserRole, key);
+  monitorsList_->addItem(row);
+}
+
 void MainWindow::startSession(const QString& key, const QString& label, const QString& transport,
                               int port, const QString& id, std::function<void()> directTablet,
-                              bool mirror) {
+                              bool mirror, bool addRowNow) {
   auto* c = new StreamController(this);
   wireSession(c, key);
   Settings s = collectSettings();
@@ -841,11 +862,7 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   sess.mirror = mirror;
   sessions_.add(sess);
 
-  auto* row = new QListWidgetItem(
-      QString("%1  ·  %2  ·  :%3%4").arg(label, transport.isEmpty() ? "—" : transport)
-          .arg(port).arg(mirror ? " — Mirror" : ""));
-  row->setData(Qt::UserRole, key);
-  monitorsList_->addItem(row);
+  if (addRowNow) addMonitorRow(key, label, transport, port, mirror);
   monitorsBox_->show();
   refreshWebClientUi();
   refreshPairingUi();
@@ -1057,18 +1074,30 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
       logEvent(key, QStringLiteral("pair"), LogLevel::Info,
                QStringLiteral("approval requested id=%1 name=%2 ip=%3").arg(id, name, ip));
       hidePairingPopup();
+      // Only once this device is actually approved: add its Active-monitors row (no-op
+      // if one already exists, e.g. USB/AOA/mDNS sessions that had one from the start —
+      // only the blind "Server" listener reaches this with no row yet) and record its
+      // identity as the session's label. A denied device never gets a row.
+      auto onApproved = [this, key, name, ip]{
+        if (Session* s = sessions_.find(key)) {
+          const QString devLabel = name.isEmpty() ? ip : name;
+          s->label = devLabel;
+          addMonitorRow(key, devLabel, s->transport, s->port, s->mirror);
+        }
+      };
       const QString akey = id.isEmpty() ? ip : id;
       const qint64 woken = pendingWakes_.value(ip, 0);
       if (woken && QDateTime::currentMSecsSinceEpoch() - woken < 15000) {
         pendingWakes_.remove(ip);
         approved_.approve(akey);
+        onApproved();
         c->writeLine("approve " + akey);
         return;
       }
-      if (approved_.isApproved(akey)) { c->writeLine("approve " + akey); return; }
+      if (approved_.isApproved(akey)) { onApproved(); c->writeLine("approve " + akey); return; }
       auto btn = QMessageBox::question(this, "Allow connection?",
           QString("Allow \"%1\" (%2) to connect?").arg(name.isEmpty() ? ip : name, ip));
-      if (btn == QMessageBox::Yes) { approved_.approve(akey); c->writeLine("approve " + akey); }
+      if (btn == QMessageBox::Yes) { approved_.approve(akey); onApproved(); c->writeLine("approve " + akey); }
       else c->writeLine("deny " + akey);
     });
 }

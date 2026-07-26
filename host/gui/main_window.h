@@ -43,7 +43,7 @@ class MainWindow : public QMainWindow {
   void onServerToggled(bool on);   // Server toggle -> start/stop the primary listener + persist
   void startServerSession();       // spawn the primary "server:<port>" listener on a free port
   void stopServerSession();        // stop the primary listener (no re-arm)
-  void updateServerButton();       // reflect serverEnabled_ in the toggle's text/checked state
+  void updateServerButton();       // reflect serverEnabled_ in the Start/Stop buttons' enabled state
   void onLanToggled(bool on);      // Network transport on/off (advertise + browse)
   void onUsbToggled(bool on);      // USB transport on/off (tether + AOA scanners)
   void refreshInterfaces();        // rebuild the per-adapter checkbox rows
@@ -54,7 +54,12 @@ class MainWindow : public QMainWindow {
   // `mirror` selects Mirror mode (evdi mirrors an existing display) vs. the default Extend.
   void startSession(const QString& key, const QString& label, const QString& transport,
                     int port, const QString& id, std::function<void()> directTablet,
-                    bool mirror = false);
+                    bool mirror = false, bool addRowNow = true);
+  // Adds a monitorsList_ row for `key` unless one already exists (idempotent) — lets a
+  // session start with no row (the blind "Server" listener) and gain one later once a
+  // real device is identified (see the approvalRequested handler in wireSession()).
+  void addMonitorRow(const QString& key, const QString& label, const QString& transport,
+                     int port, bool mirror);
   void wireSession(StreamController* c, const QString& key);
   void stopSelectedMonitor();   // stop the session selected in the Active-monitors list
   void toggleSelectedMonitorMirror();   // flip Extend<->Mirror for the selected monitor (stop+restart)
@@ -88,7 +93,9 @@ class MainWindow : public QMainWindow {
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
   SettingsDialog* settingsDialog_;
-  QComboBox* profileBox_; QPushButton* startBtn_;
+  QComboBox* profileBox_;
+  QPushButton* serverStartBtn_;   // "Start Server" — enabled while off
+  QPushButton* serverStopBtn_;    // "Stop Server" — enabled while on
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
   QGroupBox* devicesBox_;
