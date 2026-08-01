@@ -1,4 +1,5 @@
 #include "settings_dialog.h"
+#include "autostart.h"
 #include <QtWidgets>
 
 namespace droppix {
@@ -14,22 +15,19 @@ QString appConfigDir() {
 QString minimizeMarkerPath() { return appConfigDir() + "/minimize_on_close"; }
 
 // Write (or remove) the XDG autostart entry that launches droppix at login.
+// Exec resolution + .desktop text live in the pure, unit-tested autostart.{h,cpp}
+// (handles the AppImage / Flatpak / plain-binary cases and appends --minimized).
 void setLaunchAtLogin(bool on) {
   const QString path = autostartPath();
   if (!on) { QFile::remove(path); return; }
   QDir().mkpath(QFileInfo(path).absolutePath());
-  // For an AppImage, $APPIMAGE is the real .AppImage path; applicationFilePath()
-  // would point inside the mount, which is gone after exit.
-  QString exec = qEnvironmentVariable("APPIMAGE");
-  if (exec.isEmpty()) exec = QCoreApplication::applicationFilePath();
+  const AutostartEnv env{ qEnvironmentVariable("APPIMAGE").toStdString(),
+                          qEnvironmentVariable("FLATPAK_ID").toStdString(),
+                          QCoreApplication::applicationFilePath().toStdString() };
+  const std::string content = autostart_desktop(autostart_exec_command(env));
   QFile f(path);
-  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    QTextStream(&f)
-        << "[Desktop Entry]\n" << "Type=Application\n" << "Name=Droppix\n"
-        << "Comment=Use a tablet as a second monitor\n"
-        << "Exec=" << exec << "\n" << "Icon=droppix\n" << "Terminal=false\n"
-        << "X-GNOME-Autostart-enabled=true\n";
-  }
+  if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    f.write(content.c_str(), static_cast<qint64>(content.size()));
 }
 
 // Toggle the marker file MainWindow::closeEvent checks for minimize-to-tray.

@@ -102,6 +102,7 @@ if(Qt6_FOUND)
     gui/cert_manager.cpp
     gui/audio_sink.cpp
     gui/settings_dialog.cpp
+    gui/autostart.cpp
     gui/port_alloc.cpp
     gui/session_manager.cpp
     gui/auto_connect.cpp
@@ -155,6 +156,7 @@ add_executable(droppix_tests
   tests/test_stats_json.cpp
   tests/test_stats_parser.cpp
   tests/test_args_builder.cpp
+  tests/test_autostart.cpp
   tests/test_cvt.cpp
   tests/test_input_map.cpp
   tests/test_mt_slots.cpp
@@ -177,6 +179,7 @@ add_executable(droppix_tests
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
+  gui/autostart.cpp
   gui/audio_sink.cpp
   gui/port_alloc.cpp
 )
