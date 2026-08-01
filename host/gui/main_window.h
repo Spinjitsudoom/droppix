@@ -32,6 +32,9 @@ class MainWindow : public QMainWindow {
   Q_OBJECT
  public:
   explicit MainWindow(QWidget* parent = nullptr);
+  // Start hidden to the system tray (tray icon visible, window not shown) when a tray
+  // exists; falls back to a normal show() otherwise so --minimized never strands the user.
+  void startMinimizedToTray();
  protected:
   void closeEvent(QCloseEvent* event) override;
  private:

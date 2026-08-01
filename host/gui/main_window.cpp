@@ -493,6 +493,14 @@ void MainWindow::setupTray() {
   });
 }
 
+void MainWindow::startMinimizedToTray() {
+  if (tray_ && QSystemTrayIcon::isSystemTrayAvailable()) {
+    tray_->show();          // make the tray icon visible; keep the window hidden
+  } else {
+    show();                 // no tray -> don't strand the user
+  }
+}
+
 bool MainWindow::minimizeToTrayRequested() const {
   return QFile::exists(configDir() + "/minimize_on_close");
 }
