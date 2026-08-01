@@ -50,6 +50,12 @@ struct DesktopBackend {
   virtual bool apply_layout(const std::string& evdi_output, LayoutMode mode) {
     (void)evdi_output; (void)mode; return false;
   }
+  // Place the droppix output at an absolute pixel position (client-declared monitor-grid
+  // wall_col/wall_row -> pixel offset, computed by grid_position). Default no-op (Generic);
+  // KWin/X11 override. Returns true if the command was issued.
+  virtual bool place_output(const std::string& evdi_output, int x, int y) {
+    (void)evdi_output; (void)x; (void)y; return false;
+  }
 };
 
 // KDE Plasma: today's behavior, relocated (kscreen-doctor -o + KWin InputDevice DBus).
@@ -60,6 +66,7 @@ class KWinBackend : public DesktopBackend {
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
   bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool place_output(const std::string& evdi_output, int x, int y) override;
 };
 
 // Non-KDE X11 desktops (Cinnamon, XFCE, MATE, GNOME-on-Xorg, i3, ...): xrandr for
@@ -73,6 +80,7 @@ class X11Backend : public DesktopBackend {
   bool link_providers() override;
   bool adopt_output(const std::string& output) override;
   bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool place_output(const std::string& evdi_output, int x, int y) override;
 
  private:
   // Shared `xinput map-to-output` retry/settle script: touch and pen are both absolute
@@ -104,6 +112,18 @@ BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has
 // unsafe.
 std::string layout_command(BackendKind kind, const std::string& evdi_output,
                           const std::string& primary_output, int primary_id, LayoutMode mode);
+
+// Absolute pixel position of a cell in the client-declared monitor grid (wall_col/wall_row),
+// anchored at (anchor_x, anchor_y) -- typically the primary output's top-left corner.
+struct GridPoint { int x, y; };
+
+// PURE (unit-tested). cell -> pixel: anchor + col/row * own output size.
+GridPoint grid_position(int col, int row, int own_w, int own_h, int anchor_x, int anchor_y);
+
+// PURE (unit-tested). Returns the compositor command to place evdi_output at absolute pixel
+// (x, y) (no user_session_prefix/timeout wrapper; the caller adds those). Empty string when
+// unsupported (Generic) or when the output name is unsafe.
+std::string place_command(BackendKind kind, const std::string& evdi_output, int x, int y);
 
 // Detect the desktop (env + `command -v kscreen-doctor`), pick the backend, log it.
 std::shared_ptr<DesktopBackend> make_desktop_backend();

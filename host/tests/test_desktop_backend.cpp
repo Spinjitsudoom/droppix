@@ -70,3 +70,17 @@ TEST(LayoutCommand, GenericEmpty) {
 TEST(LayoutCommand, UnsafeNameRejected) {
   EXPECT_TRUE(layout_command(BackendKind::X11, "X; rm -rf /", "Y", 0, LayoutMode::Mirror).empty());
 }
+
+using droppix::grid_position; using droppix::place_command; using droppix::BackendKind;
+TEST(GridPosition, CellToPixel) {
+  EXPECT_EQ(grid_position(0,0,1280,800, 1920,0).x, 1920);
+  EXPECT_EQ(grid_position(0,0,1280,800, 1920,0).y, 0);
+  auto p = grid_position(2,1,1280,800, 1920,0);
+  EXPECT_EQ(p.x, 1920 + 2*1280); EXPECT_EQ(p.y, 800);
+}
+TEST(PlaceCommand, X11AndKwin) {
+  EXPECT_NE(place_command(BackendKind::X11, "DVI-I-1", 3200, 0).find("--pos 3200x0"), std::string::npos);
+  EXPECT_NE(place_command(BackendKind::KWin, "DVI-I-1", 3200, 800).find("position.3200,800"), std::string::npos);
+  EXPECT_TRUE(place_command(BackendKind::Generic, "X", 0, 0).empty());
+  EXPECT_TRUE(place_command(BackendKind::X11, "bad;name", 0, 0).empty());   // safe_output_name
+}

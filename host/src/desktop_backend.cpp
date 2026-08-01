@@ -263,6 +263,24 @@ bool X11Backend::apply_layout(const std::string& evdi, LayoutMode mode) {
   return run_layout(BackendKind::X11, evdi, mode, outputs());
 }
 
+bool KWinBackend::place_output(const std::string& evdi, int x, int y) {
+  if (!safe_output_name(evdi)) return false;
+  std::string base = place_command(BackendKind::KWin, evdi, x, y);
+  if (base.empty()) return false;
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + base + "'";
+  std::system(cmd.c_str());
+  return true;
+}
+
+bool X11Backend::place_output(const std::string& evdi, int x, int y) {
+  if (!safe_output_name(evdi)) return false;
+  std::string base = place_command(BackendKind::X11, evdi, x, y);
+  if (base.empty()) return false;
+  std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + base + "'";
+  std::system(cmd.c_str());
+  return true;
+}
+
 // Unsupported compositor: logs a warning and no-ops (display still works via evdi).
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
@@ -295,6 +313,19 @@ std::string layout_command(BackendKind kind, const std::string& evdi,
         : "xrandr --output " + evdi + " --auto --right-of " + primary;
     case BackendKind::Generic: default:
       return {};
+  }
+}
+
+GridPoint grid_position(int col, int row, int own_w, int own_h, int ax, int ay) {
+  return { ax + col * own_w, ay + row * own_h };
+}
+
+std::string place_command(BackendKind kind, const std::string& evdi, int x, int y) {
+  if (!safe_output_name(evdi)) return {};
+  switch (kind) {
+    case BackendKind::X11:  return "xrandr --output " + evdi + " --pos " + std::to_string(x) + "x" + std::to_string(y);
+    case BackendKind::KWin: return "kscreen-doctor \"output." + evdi + ".position." + std::to_string(x) + "," + std::to_string(y) + "\"";
+    case BackendKind::Generic: default: return {};
   }
 }
 
