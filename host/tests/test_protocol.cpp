@@ -239,6 +239,21 @@ TEST(Protocol, HelloV4DecodesBitrateSentinelZero) {
   EXPECT_EQ(name, "n"); EXPECT_EQ(id, "i");      // strings still parse (offset 22)
 }
 
+TEST(Protocol, HelloV6WallRoundTrip) {
+  auto b = droppix::encode_hello(6, 1280, 800, 213, "Tab", "id1", 60, 1, 0, 8000, /*col*/2, /*row*/1);
+  uint32_t ver,w,h,d,fps,br; uint8_t au,ori; uint16_t col,row; std::string n,i;
+  ASSERT_TRUE(droppix::decode_hello(b, ver,w,h,d,fps,au,ori,br,col,row,n,i));
+  EXPECT_EQ(ver,6u); EXPECT_EQ(col,2); EXPECT_EQ(row,1);
+  EXPECT_EQ(br,8000u); EXPECT_EQ(n,"Tab"); EXPECT_EQ(i,"id1");
+}
+TEST(Protocol, HelloV5BodyDecodesWallZero) {
+  auto b5 = droppix::encode_hello(5, 1280, 800, 213, "Tab", "id1", 60, 1, 0, 8000);
+  uint32_t ver,w,h,d,fps,br; uint8_t au,ori; uint16_t col,row; std::string n,i;
+  ASSERT_TRUE(droppix::decode_hello(b5, ver,w,h,d,fps,au,ori,br,col,row,n,i));
+  EXPECT_EQ(ver,5u); EXPECT_EQ(col,0); EXPECT_EQ(row,0);   // pre-v6 -> 0
+  EXPECT_EQ(n,"Tab"); EXPECT_EQ(i,"id1");                  // strings still parse
+}
+
 TEST(Protocol, ScrollRoundTrip) {
   auto b = droppix::encode_scroll(-3, 5, 1000, 2000);
   int16_t dx, dy; uint16_t x, y;

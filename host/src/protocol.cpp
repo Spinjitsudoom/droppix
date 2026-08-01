@@ -64,7 +64,7 @@ bool MessageParser::next(ParsedMessage& out) {
 std::vector<unsigned char> encode_hello(uint32_t version, uint32_t w, uint32_t h,
                                         uint32_t d, const std::string& name, const std::string& id,
                                         uint32_t fps, uint8_t audio_wanted, uint8_t orientation_code,
-                                        uint32_t bitrate_kbps) {
+                                        uint32_t bitrate_kbps, uint16_t wall_col, uint16_t wall_row) {
   std::vector<unsigned char> b;
   put_u32(b, version); put_u32(b, w); put_u32(b, h); put_u32(b, d);
   if (version >= 4) {
@@ -73,6 +73,9 @@ std::vector<unsigned char> encode_hello(uint32_t version, uint32_t w, uint32_t h
   if (version >= 5) {
     put_u32(b, bitrate_kbps);
   }
+  if (version >= 6) {
+    put_u16(b, wall_col); put_u16(b, wall_row);
+  }
   put_u16(b, (uint16_t)name.size()); b.insert(b.end(), name.begin(), name.end());
   put_u16(b, (uint16_t)id.size());   b.insert(b.end(), id.begin(),   id.end());
   return b;
@@ -80,11 +83,13 @@ std::vector<unsigned char> encode_hello(uint32_t version, uint32_t w, uint32_t h
 bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
                   uint32_t& w, uint32_t& h, uint32_t& d, uint32_t& fps,
                   uint8_t& audio_wanted, uint8_t& orientation_code,
-                  uint32_t& bitrate_kbps, std::string& name, std::string& id) {
+                  uint32_t& bitrate_kbps, uint16_t& wall_col, uint16_t& wall_row,
+                  std::string& name, std::string& id) {
   if (b.size() < 16) return false;
   version = get_u32(b.data()); w = get_u32(b.data()+4);
   h = get_u32(b.data()+8); d = get_u32(b.data()+12);
   fps = 0; audio_wanted = 0; orientation_code = 0; bitrate_kbps = 0;
+  wall_col = 0; wall_row = 0;
   name.clear(); id.clear();
   size_t p = 16;
   if (version >= 4) {
@@ -95,6 +100,12 @@ bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
       if (b.size() < 26) return true;            // truncated v5 fixed block: keep bitrate sentinel
       bitrate_kbps = get_u32(b.data()+22);
       p = 26;
+      if (version >= 6) {
+        if (b.size() < 30) return true;          // truncated v6 fixed block: keep wall sentinels
+        wall_col = (uint16_t)((b[26]<<8)|b[27]);
+        wall_row = (uint16_t)((b[28]<<8)|b[29]);
+        p = 30;
+      }
     }
   }
   if (b.size() >= p+2) { uint16_t n = get_u16(b.data()+p); p += 2;
@@ -102,6 +113,15 @@ bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
   if (b.size() >= p+2) { uint16_t n = get_u16(b.data()+p); p += 2;
     if (b.size() >= p+n) { id.assign(b.begin()+p, b.begin()+p+n); } }
   return true;
+}
+// Back-compat: thin forwarder for pre-v6 callers that don't need wall_col/wall_row.
+bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,
+                  uint32_t& w, uint32_t& h, uint32_t& d, uint32_t& fps,
+                  uint8_t& audio_wanted, uint8_t& orientation_code,
+                  uint32_t& bitrate_kbps, std::string& name, std::string& id) {
+  uint16_t wc, wr;
+  return decode_hello(b, version, w, h, d, fps, audio_wanted, orientation_code,
+                      bitrate_kbps, wc, wr, name, id);
 }
 // Back-compat: thin forwarder for pre-v5 callers that don't need bitrate_kbps.
 bool decode_hello(const std::vector<unsigned char>& b, uint32_t& version,

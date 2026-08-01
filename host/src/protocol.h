@@ -20,7 +20,7 @@ struct TouchContact {
 };
 
 // Protocol version sent in HELLO. Bump on any wire-format change.
-constexpr uint32_t kProtocolVersion = 5;
+constexpr uint32_t kProtocolVersion = 6;
 
 // NOTE: the encoder uses x264 repeat-headers, so SPS/PPS travel IN-BAND ahead of
 // each IDR. The CONFIG message's extradata is therefore typically empty and a
@@ -47,24 +47,34 @@ class MessageParser {
 };
 
 // Payload codecs (all integers big-endian).
-// HELLO v5: u32 version, u32 width, u32 height, u32 density, u32 fps, u8 audio_wanted,
-// u8 orientation_code, u32 bitrate_kbps, then u16-prefixed name and id strings.
-// Back-compatible with v4 bodies (bitrate_kbps defaults to 0), v3 bodies (fps/audio/
-// orientation/bitrate default to 0) and v2 bodies (no name/id).
+// HELLO v6: u32 version, u32 width, u32 height, u32 density, u32 fps, u8 audio_wanted,
+// u8 orientation_code, u32 bitrate_kbps, u16 wall_col, u16 wall_row, then u16-prefixed
+// name and id strings.
+// Back-compatible with v5 bodies (wall_col/wall_row default to 0), v4 bodies
+// (bitrate_kbps also defaults to 0), v3 bodies (fps/audio/orientation/bitrate default
+// to 0) and v2 bodies (no name/id).
 std::vector<unsigned char> encode_hello(uint32_t version, uint32_t width,
                                         uint32_t height, uint32_t density,
                                         const std::string& name, const std::string& id,
                                         uint32_t fps = 0, uint8_t audio_wanted = 0,
                                         uint8_t orientation_code = 0,
-                                        uint32_t bitrate_kbps = 0);
-// Full v5 decode. Back-compatible with v4/v3/v2 bodies (bitrate_kbps/fps/audio/
-// orientation come back 0).
+                                        uint32_t bitrate_kbps = 0,
+                                        uint16_t wall_col = 0, uint16_t wall_row = 0);
+// Full v6 decode. Back-compatible with v5/v4/v3/v2 bodies (wall_col/wall_row come back
+// 0 for pre-v6 bodies; bitrate_kbps/fps/audio/orientation come back 0 for older still).
+bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
+                  uint32_t& width, uint32_t& height, uint32_t& density,
+                  uint32_t& fps, uint8_t& audio_wanted, uint8_t& orientation_code,
+                  uint32_t& bitrate_kbps, uint16_t& wall_col, uint16_t& wall_row,
+                  std::string& name, std::string& id);
+// Back-compat overload (pre-v6 callers) for callers that don't need wall_col/wall_row.
+// Thin forwarder to the 13-arg decode_hello above with discarded local wall_col/wall_row.
 bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
                   uint32_t& width, uint32_t& height, uint32_t& density,
                   uint32_t& fps, uint8_t& audio_wanted, uint8_t& orientation_code,
                   uint32_t& bitrate_kbps, std::string& name, std::string& id);
 // Back-compat overload (pre-v5 callers) for callers that don't need bitrate_kbps.
-// Thin forwarder to the 11-arg decode_hello above with a discarded local bitrate.
+// Thin forwarder to the decode_hello above with a discarded local bitrate.
 bool decode_hello(const std::vector<unsigned char>& body, uint32_t& version,
                   uint32_t& width, uint32_t& height, uint32_t& density,
                   uint32_t& fps, uint8_t& audio_wanted, uint8_t& orientation_code,

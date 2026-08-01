@@ -24,7 +24,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 |---|---|---|
 | Extended virtual display (evdi) | Shipped | `host/src/evdi_frame_source.*`, `virtual_display.*` |
 | H.264 encode Autocascade (NVENC → VAAPI → x264) | Shipped | `host/src/{encoder_factory,nvenc_encoder,vaapi_encoder,software_encoder}.*` |
-| Wire protocol v5 | Shipped | `host/src/protocol.*`, `android/.../protocol/Protocol.kt` |
+| Wire protocol v6 | Shipped (C++ HELLO codec only — `wall_col`/`wall_row` fields added for the in-progress client-declared monitor grid feature; not yet sent by Android or consumed by the host beyond decode) | `host/src/protocol.*`, `android/.../protocol/Protocol.kt` |
 | Touch + multi-touch + 2-finger right-click | Shipped | `input_injector.*`, `mt_slots.*`, `tap_gesture.*` |
 | Stylus (pressure + eraser) | Shipped | `MsgType::Pen`, `map_pen`, Android pen path |
 | Keyboard + on-screen keyboard | Shipped | `MsgType::Key`, Android `KeyMap` / soft keyboard |
