@@ -1,7 +1,7 @@
 # Driver at login — complete the autostart (unobtrusive start + Flatpak)
 
 **Date:** 2026-07-16
-**Status:** Design approved; implementation plan pending. **Scope corrected after reading the code: "Launch at login" already exists — this COMPLETES it.**
+**Status:** Shipped on master (2026-07-16) — AppImage/plain-binary login autostart is `--minimized` (starts hidden to tray). **Flatpak autostart *firing* is a documented follow-up (see below).** Scope corrected after reading the code: "Launch at login" already existed — this completed it.
 **Roadmap:** tier T3 "Driver service at boot" (HOST) — the achievable "available after login" increment.
 
 ## What already exists (do not rebuild)
@@ -14,7 +14,8 @@ The host GUI **already** has this feature partly built:
 ## The two real gaps this fills
 
 1. **The autostart start is intrusive.** `setLaunchAtLogin` writes `Exec=<binary>` with **no `--minimized`**, and `main.cpp` always calls `w.show()`. So every login pops the window up — the opposite of "available in the background." Fix: `Exec=<launch> --minimized` + a real `--minimized` start-hidden-to-tray path.
-2. **Flatpak autostart is broken.** The `Exec` resolves to `$APPIMAGE` or `applicationFilePath()`; under Flatpak the latter is an **in-sandbox** path the host session can't launch. Fix: detect `$FLATPAK_ID` → `flatpak run <id>`.
+2. **Flatpak autostart exec string was wrong.** The `Exec` resolved to `applicationFilePath()` — an **in-sandbox** path the host session can't launch. Fix: detect `$FLATPAK_ID` → `flatpak run <id> --minimized` (the correct host-launchable command).
+   > **Follow-up (not delivered here):** under Flatpak the `.desktop` is written via `QStandardPaths`, which the sandbox remaps to `~/.var/app/<id>/config/autostart/` — a path the host session does **not** scan, so autostart still doesn't *fire* under Flatpak. Making it fire needs a host-side write (the freedesktop **Background portal** `RequestBackground(autostart=true)`, or a `flatpak-spawn --host` write to the real `~/.config/autostart/`, plus a host-aware exists-check for the checkbox). This is a documented backlog item — **AppImage and plain-binary autostart (the primary distribution) work fully**; the Flatpak firing was already broken before this change (this at least prepares the correct exec string).
 
 Plus: the exec/`.desktop` logic is inline free functions in `settings_dialog.cpp` (untestable) — **extract to a pure, unit-tested `autostart.{h,cpp}`**.
 
