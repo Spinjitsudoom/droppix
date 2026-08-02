@@ -168,4 +168,12 @@ class ProtocolTest {
         assertEquals(0x03.toByte(), b[4]); assertEquals(0x84.toByte(), b[5])
         assertEquals(0x03.toByte(), b[6])
     }
+
+    @Test fun encodeHelloV6Wall() {
+        val b = Protocol.encodeHello(6, 1280, 800, 213, "Tab", "id", 60, 1, 0, 8000, 2, 1)
+        // after v5 fixed block (offset 26): wall_col=2 (00 02), wall_row=1 (00 01)
+        assertEquals(0x00.toByte(), b[26]); assertEquals(0x02.toByte(), b[27])
+        assertEquals(0x00.toByte(), b[28]); assertEquals(0x01.toByte(), b[29])
+        assertEquals(6, Protocol.VERSION)
+    }
 }
