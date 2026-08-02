@@ -12,6 +12,8 @@
 #include <QApplication>
 #include <QTextStream>
 #include <QtWidgets>
+#include <QStackedWidget>
+#include <QStyle>
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QCoreApplication>
@@ -176,21 +178,11 @@ MainWindow::MainWindow(QWidget* parent)
   setWindowIcon(QIcon(":/icon.png"));
   settingsDialog_ = new SettingsDialog(this);   // advanced options live in this dialog
 
-  // --- Header: logo + wordmark, with Settings + About icon buttons top-right ---
+  // --- Header: logo + wordmark (theme toggle button added lower, after headerRow exists) ---
   auto* logo = new QLabel; logo->setObjectName("logo");
   logo->setPixmap(QPixmap(":/logo.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   auto* title = new QLabel("Droppix"); title->setObjectName("header");
 
-  auto* settingsBtn = new QToolButton; settingsBtn->setObjectName("iconButton");
-  settingsBtn->setIcon(QIcon(":/ic-settings.png")); settingsBtn->setIconSize(QSize(22, 22));
-  settingsBtn->setAutoRaise(true); settingsBtn->setToolTip("Settings");
-  settingsBtn->setCursor(Qt::PointingHandCursor);
-  connect(settingsBtn, &QToolButton::clicked, this, [this]{ settingsDialog_->exec(); });
-  auto* aboutBtn = new QToolButton; aboutBtn->setObjectName("iconButton");
-  aboutBtn->setIcon(QIcon(":/ic-about.png")); aboutBtn->setIconSize(QSize(22, 22));
-  aboutBtn->setAutoRaise(true); aboutBtn->setToolTip("About Droppix");
-  aboutBtn->setCursor(Qt::PointingHandCursor);
-  connect(aboutBtn, &QToolButton::clicked, this, &MainWindow::showAbout);
   connect(settingsDialog_, &SettingsDialog::rememberAuthRequested, this, &MainWindow::setupAuth);
   connect(settingsDialog_, &SettingsDialog::manageDevicesRequested, this, &MainWindow::manageDevices);
   // Perf-overlay checkbox applies live: if a stream is running, push "overlay N" to the
@@ -205,7 +197,6 @@ MainWindow::MainWindow(QWidget* parent)
   auto* headerRow = new QHBoxLayout;
   headerRow->addWidget(logo); headerRow->addSpacing(10);
   headerRow->addWidget(title); headerRow->addStretch();
-  headerRow->addWidget(settingsBtn); headerRow->addWidget(aboutBtn);
 
   // --- Profile row ---
   profileBox_ = new QComboBox;
@@ -287,17 +278,18 @@ MainWindow::MainWindow(QWidget* parent)
   devicesBox_ = new QGroupBox("Available clients");
   devicesBox_->setLayout(devicesLayout);
 
-  auto* root = new QVBoxLayout;
-  root->setContentsMargins(16, 16, 16, 16);
-  root->setSpacing(12);
-  root->addLayout(headerRow);
-  root->addLayout(profRow);
-  root->addLayout(statusRow);
-  root->addWidget(deviceLabel_);
+  // Page 0 holds today's full layout verbatim (peeled apart in later tasks).
+  auto* page0 = new QWidget;
+  auto* p0 = new QVBoxLayout(page0);
+  p0->setContentsMargins(0, 0, 0, 0);
+  p0->setSpacing(12);
+  p0->addLayout(profRow);
+  p0->addLayout(statusRow);
+  p0->addWidget(deviceLabel_);
   auto* serverBtnRow = new QHBoxLayout;
   serverBtnRow->addWidget(serverStartBtn_);
   serverBtnRow->addWidget(serverStopBtn_);
-  root->addLayout(serverBtnRow);
+  p0->addLayout(serverBtnRow);
 
   // --- Communication interfaces (adapters + LAN/USB toggles) ---
   loadInterfacePrefs();
@@ -316,13 +308,41 @@ MainWindow::MainWindow(QWidget* parent)
   connect(lanToggle_, &QCheckBox::toggled, this, &MainWindow::onLanToggled);
   connect(usbToggle_, &QCheckBox::toggled, this, &MainWindow::onUsbToggled);
   refreshInterfaces();   // populate the per-adapter checkbox rows
-  root->addWidget(commBox_);
+  p0->addWidget(commBox_);
 
-  root->addWidget(monitorsBox_);
-  root->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
+  p0->addWidget(monitorsBox_);
+  p0->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
+
+  stack_ = new QStackedWidget;
+  stack_->addWidget(page0);                       // 0 Status
+  for (int i = 1; i < 5; ++i) stack_->addWidget(new QWidget);   // 1..4 placeholders
+
+  static const char* kNav[5] = {"Status", "Connections", "Interfaces", "Settings", "About"};
+  auto* navRow = new QHBoxLayout; navRow->setSpacing(6);
+  for (int i = 0; i < 5; ++i) {
+    auto* b = new QPushButton(kNav[i]); b->setObjectName("navButton");
+    b->setCheckable(true); b->setCursor(Qt::PointingHandCursor);
+    connect(b, &QPushButton::clicked, this, [this, i]{ selectSection(i); });
+    navButtons_ << b; navRow->addWidget(b);
+  }
+
+  // Header: logo + wordmark + stretch + theme toggle (replaces the gear/about icon btns).
+  auto* themeBtn = new QPushButton("Theme"); themeBtn->setObjectName("iconButton");
+  themeBtn->setCursor(Qt::PointingHandCursor);
+  connect(themeBtn, &QPushButton::clicked, this, [this]{
+    setTheme(currentTheme_ == Theme::Dark ? Theme::Light : Theme::Dark);
+  });
+  headerRow->addWidget(themeBtn);   // headerRow already has logo+title+stretch
+
+  auto* root = new QVBoxLayout;
+  root->setContentsMargins(16, 16, 16, 16); root->setSpacing(12);
+  root->addLayout(headerRow);
+  root->addLayout(navRow);
+  root->addWidget(stack_, 1);
   auto* central = new QWidget; central->setLayout(root);
   setCentralWidget(central);
-  resize(600, 560);
+  selectSection(0);
+  resize(720, 640);
 
   // --- Debug log console ---
   logBuffer_ = new LogBuffer(this);
@@ -483,6 +503,16 @@ void MainWindow::setTheme(Theme t) {
   currentTheme_ = t;
   qApp->setStyleSheet(droppix::styleSheet(t));   // qualified: QWidget::styleSheet() would win unqualified
   saveThemePref(configDir().toStdString(), t);
+}
+
+void MainWindow::selectSection(int i) {
+  stack_->setCurrentIndex(i);
+  for (int k = 0; k < navButtons_.size(); ++k) {
+    navButtons_[k]->setChecked(k == i);
+    navButtons_[k]->setProperty("current", k == i);
+    navButtons_[k]->style()->unpolish(navButtons_[k]);
+    navButtons_[k]->style()->polish(navButtons_[k]);   // re-evaluate [current="true"] QSS
+  }
 }
 
 void MainWindow::setupTray() {

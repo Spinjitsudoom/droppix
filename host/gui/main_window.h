@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <QHash>
+#include <QList>
 #include <QSet>
 #include <QString>
 #include <QTimer>
@@ -25,7 +26,7 @@
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
 class QListWidget; class QGroupBox; class QSystemTrayIcon; class QDialog;
-class QVBoxLayout;
+class QVBoxLayout; class QStackedWidget;
 
 namespace droppix {
 class SettingsDialog;
@@ -94,6 +95,7 @@ class MainWindow : public QMainWindow {
   void logEvent(const QString& key, const QString& source, LogLevel level, const QString& text);
   void manageDevices();         // dialog to view/forget remembered (approved) devices
   void setTheme(Theme t);       // applies the QSS + persists the choice
+  void selectSection(int i);    // switches stack_ to page i + updates navButtons_ checked/[current]
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
@@ -158,5 +160,7 @@ class MainWindow : public QMainWindow {
   bool trayHintShown_ = false;        // show the "still running" balloon only once
   std::string streamBin_;
   Theme currentTheme_ = Theme::Dark;
+  QStackedWidget* stack_ = nullptr;   // page 0 = Status (today's content); 1..4 placeholders
+  QList<QPushButton*> navButtons_;    // the 5 section-nav buttons, in stack_ order
 };
 }  // namespace droppix
