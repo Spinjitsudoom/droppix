@@ -110,7 +110,8 @@ void MainWindow::onSettingsAction() {
                        next.fps != settings_.fps || next.audio != settings_.audio ||
                        next.rotation != settings_.rotation ||
                        next.bitrate_kbps != settings_.bitrate_kbps ||
-                       next.flip_horizontal != settings_.flip_horizontal;
+                       next.flip_horizontal != settings_.flip_horizontal ||
+                       next.wall_col != settings_.wall_col || next.wall_row != settings_.wall_row;
   settings_ = next;
   ClientSettingsStore::save(settings_);
   if (decoder_) {  // brightness/contrast are pure display transforms: apply live, no reconnect
@@ -157,6 +158,8 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   const uint8_t audio = settings_.audio ? 1 : 0;
   const uint8_t orient = static_cast<uint8_t>(rotation_to_code(settings_.rotation));
   const uint32_t bitrate = static_cast<uint32_t>(settings_.bitrate_kbps);
+  const uint16_t wall_col = static_cast<uint16_t>(settings_.wall_col);
+  const uint16_t wall_row = static_cast<uint16_t>(settings_.wall_row);
   // Flip is applied here on netThread_; brightness/contrast are also applied live from
   // onSettingsAction (GUI thread; the decoder's fields are atomic). Applying flip here, once per
   // netThreadMain invocation, means both the initial connect and any settings-triggered
@@ -185,7 +188,8 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
     }
     QMetaObject::invokeMethod(this, [this]{ statusLabel_->setText("Streaming"); },
                               Qt::QueuedConnection);
-    client_->runOverChannel(*channel, w, h, density, fps, audio, orient, bitrate, listener,
+    client_->runOverChannel(*channel, w, h, density, fps, audio, orient, bitrate,
+                            wall_col, wall_row, listener,
                             [this]{ return running_.load(); }, name, id);
     channel->close();
     if (running_.load()) {

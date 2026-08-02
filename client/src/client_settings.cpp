@@ -12,6 +12,8 @@ ClientSettings ClientSettingsStore::load() {
   s.flip_horizontal = q.value("flip_h", false).toBool();
   s.brightness = q.value("brightness", 0).toInt();
   s.contrast = q.value("contrast", 100).toInt();
+  s.wall_col = q.value("wall_col", 0).toInt();
+  s.wall_row = q.value("wall_row", 0).toInt();
   return s;
 }
 void ClientSettingsStore::save(const ClientSettings& s) {
@@ -23,5 +25,7 @@ void ClientSettingsStore::save(const ClientSettings& s) {
   q.setValue("flip_h", s.flip_horizontal);
   q.setValue("brightness", s.brightness);
   q.setValue("contrast", s.contrast);
+  q.setValue("wall_col", s.wall_col);
+  q.setValue("wall_row", s.wall_row);
 }
 }  // namespace droppix

@@ -77,6 +77,7 @@ void TransportClient::sendKey(uint16_t keycode, uint8_t action) {
 void TransportClient::runOverChannel(ByteChannel& channel, uint32_t width, uint32_t height,
                                     uint32_t density, uint32_t fps, uint8_t audio_wanted,
                                     uint8_t orientation_code, uint32_t bitrate_kbps,
+                                    uint16_t wall_col, uint16_t wall_row,
                                     StreamListener& listener,
                                     const std::function<bool()>& isRunning,
                                     const std::string& name, const std::string& id,
@@ -86,7 +87,8 @@ void TransportClient::runOverChannel(ByteChannel& channel, uint32_t width, uint3
     channel_ = &channel;
     auto hello = encode_message(MsgType::Hello,
         encode_hello(kProtocolVersion, width, height, density, name, id,
-                     fps, audio_wanted, orientation_code, bitrate_kbps));
+                     fps, audio_wanted, orientation_code, bitrate_kbps,
+                     wall_col, wall_row));
     if (!channel.send_all(hello.data(), hello.size())) { channel_ = nullptr; return; }
   }
 

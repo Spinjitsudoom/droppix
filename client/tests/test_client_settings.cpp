@@ -42,6 +42,14 @@ TEST(ClientSettings, BrightnessContrastDefaultAndRoundTrip) {
   const droppix::ClientSettings r = droppix::ClientSettingsStore::load();
   EXPECT_EQ(r.brightness, -40); EXPECT_EQ(r.contrast, 150);
 }
+TEST(ClientSettings, WallDefaultAndRoundTrip) {
+  static int argc = 0; static QCoreApplication app(argc, nullptr);
+  QSettings::setDefaultFormat(QSettings::IniFormat);   // avoid touching the real config
+  droppix::ClientSettings s; EXPECT_EQ(s.wall_col, 0); EXPECT_EQ(s.wall_row, 0);
+  s.wall_col = 2; s.wall_row = 1; droppix::ClientSettingsStore::save(s);
+  const droppix::ClientSettings r = droppix::ClientSettingsStore::load();
+  EXPECT_EQ(r.wall_col, 2); EXPECT_EQ(r.wall_row, 1);
+}
 TEST(ScancodeToEvdev, X11SubtractsEight) {
   EXPECT_EQ(droppix::scancode_to_evdev(38, false), 30);  // X11 code 38 -> KEY_A(30)
   EXPECT_EQ(droppix::scancode_to_evdev(9,  false), 1);   // X11 code 9  -> KEY_ESC(1)

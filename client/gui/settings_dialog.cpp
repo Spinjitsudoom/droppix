@@ -40,6 +40,14 @@ ClientSettingsDialog::ClientSettingsDialog(const ClientSettings& cur, const QStr
   bitrate_->addItem("High", QVariant(16000));
   bitrate_->setCurrentIndex(std::max(0, bitrate_->findData(cur.bitrate_kbps)));
 
+  wall_col_ = new QSpinBox;
+  wall_col_->setMinimum(0);
+  wall_col_->setValue(cur.wall_col);
+
+  wall_row_ = new QSpinBox;
+  wall_row_->setMinimum(0);
+  wall_row_->setValue(cur.wall_row);
+
   flip_ = new QCheckBox("Flip horizontal");
   flip_->setChecked(cur.flip_horizontal);
 
@@ -63,6 +71,8 @@ ClientSettingsDialog::ClientSettingsDialog(const ClientSettings& cur, const QStr
   form->addRow("", audio_);
   form->addRow("Rotation:", rotation_);
   form->addRow("Quality:", bitrate_);
+  form->addRow("Wall column:", wall_col_);
+  form->addRow("Wall row:", wall_row_);
   form->addRow("", flip_);
 
   auto* brightnessRow = new QHBoxLayout;
@@ -94,6 +104,8 @@ ClientSettings ClientSettingsDialog::result() const {
   s.audio = audio_->isChecked();
   s.rotation = rotation_->currentData().toInt();
   s.bitrate_kbps = bitrate_->currentData().toInt();
+  s.wall_col = wall_col_->value();
+  s.wall_row = wall_row_->value();
   s.flip_horizontal = flip_->isChecked();
   s.brightness = brightness_->value();
   s.contrast = contrast_->value();

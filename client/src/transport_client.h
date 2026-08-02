@@ -67,7 +67,8 @@ class TransportClient {
   // goes false. Caller owns `channel`'s lifetime and connects it beforehand.
   void runOverChannel(ByteChannel& channel, uint32_t width, uint32_t height, uint32_t density,
                       uint32_t fps, uint8_t audio_wanted, uint8_t orientation_code,
-                      uint32_t bitrate_kbps, StreamListener& listener,
+                      uint32_t bitrate_kbps, uint16_t wall_col, uint16_t wall_row,
+                      StreamListener& listener,
                       const std::function<bool()>& isRunning,
                       const std::string& name, const std::string& id,
                       int pingIntervalMs = 1000);

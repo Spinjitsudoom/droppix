@@ -1,5 +1,6 @@
 #pragma once
 #include <QDialog>
+#include <QSpinBox>
 #include "client_settings.h"
 
 class QComboBox;
@@ -30,6 +31,8 @@ class ClientSettingsDialog : public QDialog {
   QCheckBox* flip_;
   QSlider* brightness_;
   QSlider* contrast_;
+  QSpinBox* wall_col_;
+  QSpinBox* wall_row_;
 };
 
 }  // namespace droppix
