@@ -8,6 +8,8 @@
 #include "server_control.h"
 #include "lan_ifaces.h"
 #include "style.h"
+#include "theme_pref.h"
+#include <QApplication>
 #include <QTextStream>
 #include <QtWidgets>
 #include <QClipboard>
@@ -385,6 +387,10 @@ MainWindow::MainWindow(QWidget* parent)
     QTimer::singleShot(0, this, [this]{ onServerToggled(true); });
 
   audioSink_.ensure();   // create/adopt the droppix-audio sink for this session
+
+  currentTheme_ = loadThemePref(configDir().toStdString());
+  qApp->setStyleSheet(droppix::styleSheet(currentTheme_));   // honor the saved choice on launch
+
   setupTray();           // tray icon for "minimize to tray on close" (if a tray exists)
 
   pairingHideTimer_ = new QTimer(this);
@@ -471,6 +477,12 @@ void MainWindow::manageDevices() {
   connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
   v->addWidget(buttons);
   dlg.exec();
+}
+
+void MainWindow::setTheme(Theme t) {
+  currentTheme_ = t;
+  qApp->setStyleSheet(droppix::styleSheet(t));   // qualified: QWidget::styleSheet() would win unqualified
+  saveThemePref(configDir().toStdString(), t);
 }
 
 void MainWindow::setupTray() {

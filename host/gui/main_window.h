@@ -20,6 +20,7 @@
 #include "log_buffer.h"
 #include "log_panel.h"
 #include "log_entry.h"
+#include "theme.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
 class QLabel; class QPlainTextEdit; class QRadioButton; class QTimer;
@@ -92,6 +93,7 @@ class MainWindow : public QMainWindow {
   // Append a synthetic (non-streamer) event into the debug-log console.
   void logEvent(const QString& key, const QString& source, LogLevel level, const QString& text);
   void manageDevices();         // dialog to view/forget remembered (approved) devices
+  void setTheme(Theme t);       // applies the QSS + persists the choice
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
@@ -155,5 +157,6 @@ class MainWindow : public QMainWindow {
   bool quitting_ = false;             // true => closeEvent really quits (from tray Quit)
   bool trayHintShown_ = false;        // show the "still running" balloon only once
   std::string streamBin_;
+  Theme currentTheme_ = Theme::Dark;
 };
 }  // namespace droppix
