@@ -12,8 +12,8 @@
 namespace droppix {
 
 namespace {
-constexpr const char* kProjectUrl = "https://github.com/davidcarma/droppix";
-constexpr const char* kIssuesUrl  = "https://github.com/davidcarma/droppix/issues";
+constexpr const char* kProjectUrl = "https://github.com/Spinjitsudoom/droppix";
+constexpr const char* kIssuesUrl  = "https://github.com/Spinjitsudoom/droppix/issues";
 }  // namespace
 
 AboutPage::AboutPage(QWidget* parent) : QWidget(parent) {
