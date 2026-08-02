@@ -86,7 +86,7 @@ if(Qt6_FOUND)
     gui/stats_parser.cpp
     gui/args_builder.cpp
   )
-  target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen)
+  target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen gui/pages)
   # Dev/local builds: bake the source tree's web/dist so the GUI can locate + stage the
   # PWA assets (packaged builds ship them under share/droppix/web and ignore this path).
   target_compile_definitions(droppix_gui PRIVATE
@@ -123,6 +123,7 @@ if(Qt6_FOUND)
     gui/log_panel.cpp
     gui/server_control.cpp
     gui/lan_ifaces.cpp
+    gui/pages/about_page.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -218,8 +219,10 @@ if(Qt6_FOUND)
     gui/tests/test_interface_filter.cpp
     gui/lan_ifaces.cpp
     gui/tests/test_style_theme.cpp
+    gui/tests/test_about_page.cpp
+    gui/pages/about_page.cpp
   )
-  target_include_directories(droppix_gui_tests PRIVATE gui src)
+  target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network GTest::gtest_main)
   gtest_discover_tests(droppix_gui_tests)
 endif()

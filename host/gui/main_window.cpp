@@ -7,6 +7,7 @@
 #include "log_classify.h"
 #include "server_control.h"
 #include "lan_ifaces.h"
+#include "pages/about_page.h"
 #include "style.h"
 #include "theme_pref.h"
 #include <QApplication>
@@ -316,6 +317,10 @@ MainWindow::MainWindow(QWidget* parent)
   stack_ = new QStackedWidget;
   stack_->addWidget(page0);                       // 0 Status
   for (int i = 1; i < 5; ++i) stack_->addWidget(new QWidget);   // 1..4 placeholders
+
+  auto* aboutPage = new AboutPage;
+  stack_->removeWidget(stack_->widget(4));
+  stack_->insertWidget(4, aboutPage);
 
   static const char* kNav[5] = {"Status", "Connections", "Interfaces", "Settings", "About"};
   auto* navRow = new QHBoxLayout; navRow->setSpacing(6);
