@@ -172,13 +172,16 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     // At (0,0) grid_position resolves to the primary's right edge -- today's single-tablet
     // placement is unchanged. Prefer the flagged primary; fall back to the first enabled
     // non-droppix output if none is flagged.
+    // EXTEND ONLY: in mirror mode apply_layout already overlaid the output on the primary
+    // (X11 --same-as); repositioning it would silently convert mirror back into extend, so
+    // the wall cell is meaningless there and must not run.
     const OutputInfo* prim = nullptr;
     for (const auto& o : after_outputs)
       if (o.enabled && o.primary && o.name != droppix.name) { prim = &o; break; }
     if (!prim)
       for (const auto& o : after_outputs)
         if (o.enabled && o.name != droppix.name) { prim = &o; break; }
-    if (prim) {
+    if (prim && !cfg_.mirror) {
       GridPoint pos = grid_position(hwall_col, hwall_row, droppix.geom.w, droppix.geom.h,
                                     prim->geom.x + prim->geom.w, prim->geom.y);
       serviced([this, out_name, pos]{ return desktop_->place_output(out_name, pos.x, pos.y); });
