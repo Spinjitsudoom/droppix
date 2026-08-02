@@ -23,7 +23,8 @@ class TransportServer {
   void adopt_channel(std::unique_ptr<ByteChannel> ch, std::string peer = "");
   bool read_hello(uint32_t& version, uint32_t& w, uint32_t& h, uint32_t& density,
                   uint32_t& fps, uint8_t& audio_wanted, uint8_t& orientation,
-                  uint32_t& bitrate, std::string& name, std::string& id, int timeout_ms);
+                  uint32_t& bitrate, uint16_t& wall_col, uint16_t& wall_row,
+                  std::string& name, std::string& id, int timeout_ms);
   bool send_config(uint32_t w, uint32_t h, uint32_t fps,
                    const std::vector<unsigned char>& extradata);
   bool send_video(uint64_t pts_us, bool keyframe,

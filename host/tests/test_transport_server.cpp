@@ -45,8 +45,9 @@ TEST(TransportServer, FramingOverFakeChannel) {
       MsgType::Hello, encode_hello(kProtocolVersion, 800, 600, 200, "Fake", "fid"));
   s.adopt_channel(std::move(fake), "test");
 
-  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; std::string name, id;
-  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, name, id, 0));
+  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; uint16_t wcol, wrow;
+  std::string name, id;
+  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, wcol, wrow, name, id, 0));
   EXPECT_EQ(ver, kProtocolVersion);
   EXPECT_EQ(w, 800u); EXPECT_EQ(h, 600u);
   EXPECT_EQ(name, "Fake"); EXPECT_EQ(id, "fid");
@@ -66,8 +67,9 @@ TEST(TransportServer, ReadHelloV4Fields) {
       MsgType::Hello, encode_hello(4, 1600, 900, 120, "n", "i", 60, 1, 1));
   s.adopt_channel(std::move(fake), "test");
 
-  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; std::string name, id;
-  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, name, id, 1000));
+  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; uint16_t wcol, wrow;
+  std::string name, id;
+  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, wcol, wrow, name, id, 1000));
   EXPECT_EQ(fps, 60u); EXPECT_EQ(audio, 1); EXPECT_EQ(orient, 1); EXPECT_EQ(w, 1600u);
   EXPECT_EQ(bitrate, 0u);  // v4 body carries no bitrate field
 }
@@ -79,8 +81,9 @@ TEST(TransportServer, ReadHelloV5Bitrate) {
       MsgType::Hello, encode_hello(5, 1280, 720, 160, "n", "i", 30, 1, 1, 9000));
   s.adopt_channel(std::move(fake), "test");
 
-  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; std::string name, id;
-  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, name, id, 1000));
+  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; uint16_t wcol, wrow;
+  std::string name, id;
+  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, wcol, wrow, name, id, 1000));
   EXPECT_EQ(fps, 30u); EXPECT_EQ(audio, 1); EXPECT_EQ(orient, 1);
   EXPECT_EQ(bitrate, 9000u);
 }
@@ -121,8 +124,9 @@ TEST(TransportServer, HandshakeThenVideo) {
   std::thread t(client_thread, port, &client_ok);
 
   ASSERT_TRUE(s.accept_client(2000));
-  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; std::string name, id;
-  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, name, id, 2000));
+  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; uint16_t wcol, wrow;
+  std::string name, id;
+  ASSERT_TRUE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, wcol, wrow, name, id, 2000));
   EXPECT_EQ(ver, kProtocolVersion);
   EXPECT_EQ(w, 1920u); EXPECT_EQ(h, 1080u);
   EXPECT_EQ(name, "TestTablet"); EXPECT_EQ(id, "test-id-1");

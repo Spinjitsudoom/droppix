@@ -33,7 +33,9 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // prompts for the PIN) — the GUI uses this to show the pairing code right on time.
   std::fprintf(stderr, "client-connecting ip=%s\n", tx_.peer_ip().c_str());
   uint32_t cver, cw, ch, density, hfps, hbitrate; uint8_t haudio, hori; std::string cname, cid;
-  if (!tx_.read_hello(cver, cw, ch, density, hfps, haudio, hori, hbitrate, cname, cid, 10000)) {
+  uint16_t hwall_col, hwall_row;
+  if (!tx_.read_hello(cver, cw, ch, density, hfps, haudio, hori, hbitrate, hwall_col, hwall_row,
+                      cname, cid, 10000)) {
     std::fprintf(stderr, "no HELLO\n"); return false; }
   std::fprintf(stderr, "client HELLO v%u %ux%u fps=%u audio=%u orient=%u name=%s id=%s\n",
                cver, cw, ch, hfps, haudio, hori, cname.c_str(), cid.c_str());
@@ -164,6 +166,26 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     after_outputs = query_outputs();
     for (const auto& o : after_outputs)
       if (o.name == droppix.name) { droppix = o; break; }
+
+    // Client-declared monitor grid: place the evdi output at the wall cell the tablet
+    // reported in HELLO (wall_col/wall_row), anchored at the primary's top-right corner.
+    // At (0,0) grid_position resolves to the primary's right edge -- today's single-tablet
+    // placement is unchanged. Prefer the flagged primary; fall back to the first enabled
+    // non-droppix output if none is flagged.
+    const OutputInfo* prim = nullptr;
+    for (const auto& o : after_outputs)
+      if (o.enabled && o.primary && o.name != droppix.name) { prim = &o; break; }
+    if (!prim)
+      for (const auto& o : after_outputs)
+        if (o.enabled && o.name != droppix.name) { prim = &o; break; }
+    if (prim) {
+      GridPoint pos = grid_position(hwall_col, hwall_row, droppix.geom.w, droppix.geom.h,
+                                    prim->geom.x + prim->geom.w, prim->geom.y);
+      serviced([this, out_name, pos]{ return desktop_->place_output(out_name, pos.x, pos.y); });
+      after_outputs = query_outputs();     // re-read so set_geometry uses the placed rect
+      for (const auto& o : after_outputs)
+        if (o.name == droppix.name) { droppix = o; break; }
+    }
   }
 
   // Auto-orientation: the tablet reports its physical orientation. The stream is
