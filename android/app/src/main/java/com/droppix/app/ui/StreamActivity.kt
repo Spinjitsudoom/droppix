@@ -271,6 +271,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                             FileOutputStream(pfd.fileDescriptor), sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
                             sendBitrate,
+                            settings.wallCol, settings.wallRow,
                             listener, { running }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity))
@@ -294,6 +295,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                         c.run(host, port, sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
                             sendBitrate,
+                            settings.wallCol, settings.wallRow,
                             listener, { running }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity),

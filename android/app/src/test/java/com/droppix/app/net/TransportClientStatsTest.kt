@@ -67,7 +67,7 @@ class TransportClientStatsTest {
         val tlsTrust = TlsTrust(FakePinStore())
         val clientThread = thread {
             // pingIntervalMs=0 -> ping on the first loop iteration so the test is fast
-            client.run("127.0.0.1", port, 640, 480, 320, 0, 0, 0, 8000, listener, { !stop.get() },
+            client.run("127.0.0.1", port, 640, 480, 320, 0, 0, 0, 8000, 0, 0, listener, { !stop.get() },
                 stats, 0, tlsTrust = tlsTrust)
         }
 

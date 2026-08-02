@@ -65,7 +65,7 @@ class TransportClientTest {
         val client = TransportClient()
         val tlsTrust = TlsTrust(FakePinStore())
         val clientThread = thread {
-            client.run("127.0.0.1", port, 1920, 1080, 320, 0, 0, 0, 8000, listener, { true }, tlsTrust = tlsTrust)
+            client.run("127.0.0.1", port, 1920, 1080, 320, 0, 0, 0, 8000, 0, 0, listener, { true }, tlsTrust = tlsTrust)
         }
 
         assertTrue("did not receive config+video", latch.await(3, TimeUnit.SECONDS))
@@ -95,7 +95,7 @@ class TransportClientTest {
 
         try {
             assertThrows(IllegalStateException::class.java) {
-                client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, listener, { true }, tlsTrust = tlsTrust)
+                client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, 0, 0, listener, { true }, tlsTrust = tlsTrust)
             }
         } finally {
             serverThread.join(1000)
@@ -122,7 +122,7 @@ class TransportClientTest {
 
         try {
             assertThrows(CertChangedException::class.java) {
-                client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, listener, { true }, tlsTrust = tlsTrust)
+                client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, 0, 0, listener, { true }, tlsTrust = tlsTrust)
             }
         } finally {
             serverThread.join(1000)
@@ -158,7 +158,7 @@ class TransportClientTest {
         }
 
         // Should not throw — pin matches.
-        client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, listener, { false }, tlsTrust = tlsTrust)
+        client.run(PIN_TEST_HOST, port, 100, 100, 320, 0, 0, 0, 8000, 0, 0, listener, { false }, tlsTrust = tlsTrust)
         serverThread.join(1000)
     }
 
@@ -187,7 +187,7 @@ class TransportClientTest {
         val client = TransportClient()
         val tlsTrust = TlsTrust(FakePinStore())
         val clientRunning = java.util.concurrent.atomic.AtomicBoolean(true)
-        val t = thread { client.run("127.0.0.1", port, 1920, 1080, 320, 0, 0, 0, 8000, listener, { clientRunning.get() }, tlsTrust = tlsTrust) }
+        val t = thread { client.run("127.0.0.1", port, 1920, 1080, 320, 0, 0, 0, 8000, 0, 0, listener, { clientRunning.get() }, tlsTrust = tlsTrust) }
         assertTrue(latch.await(3, TimeUnit.SECONDS))
         assertArrayEquals(pcm, got)
         // stop the client run loop

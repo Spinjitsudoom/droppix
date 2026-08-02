@@ -87,6 +87,7 @@ class TransportClient {
     // run the protocol over its streams.
     fun run(host: String, port: Int, width: Int, height: Int, density: Int,
             fps: Int, audioWanted: Int, orientationCode: Int, bitrateKbps: Int,
+            wallCol: Int, wallRow: Int,
             listener: StreamListener, isRunning: () -> Boolean,
             stats: StatsSink? = null, pingIntervalMs: Long = 1000,
             name: String = "", id: String = "", tlsTrust: TlsTrust) {
@@ -110,6 +111,7 @@ class TransportClient {
             socket.soTimeout = 1000  // periodic wakeups so isRunning() is checked
             runOverChannel(socket.getInputStream(), socket.getOutputStream(),
                 width, height, density, fps, audioWanted, orientationCode, bitrateKbps,
+                wallCol, wallRow,
                 listener, isRunning, stats, pingIntervalMs, name, id)
         } finally {
             try { socket.close() } catch (_: Exception) {}
@@ -121,6 +123,7 @@ class TransportClient {
     // The caller owns `input`/`output` and closes them; this only nulls `out` on exit.
     fun runOverChannel(input: InputStream, output: OutputStream, width: Int, height: Int, density: Int,
                        fps: Int, audioWanted: Int, orientationCode: Int, bitrateKbps: Int,
+                       wallCol: Int, wallRow: Int,
                        listener: StreamListener, isRunning: () -> Boolean,
                        stats: StatsSink? = null, pingIntervalMs: Long = 1000,
                        name: String = "", id: String = "") {
@@ -129,7 +132,7 @@ class TransportClient {
             synchronized(sendLock) {
                 output.write(Protocol.encodeMessage(MsgType.HELLO,
                     Protocol.encodeHello(Protocol.VERSION, width, height, density, name, id,
-                        fps, audioWanted, orientationCode, bitrateKbps)))
+                        fps, audioWanted, orientationCode, bitrateKbps, wallCol, wallRow)))
                 output.flush()
             }
 

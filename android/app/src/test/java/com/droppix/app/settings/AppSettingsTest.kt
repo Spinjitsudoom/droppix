@@ -25,4 +25,8 @@ class AppSettingsTest {
         val s = AppSettings()
         assertEquals(0, s.brightness); assertEquals(100, s.contrast)
     }
+    @Test fun wallDefaults() {
+        val s = AppSettings()
+        assertEquals(0, s.wallCol); assertEquals(0, s.wallRow)
+    }
 }

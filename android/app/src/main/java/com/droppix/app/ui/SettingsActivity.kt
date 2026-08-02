@@ -2,6 +2,8 @@ package com.droppix.app.ui
 
 import android.app.Activity
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.*
 import com.droppix.app.R
@@ -47,6 +49,11 @@ class SettingsActivity : Activity() {
         contrastSeek.progress = cur.contrast                            // stored 0..200
         contrastVal.text = cur.contrast.toString()
 
+        val wallColInput = findViewById<EditText>(R.id.wall_col)
+        val wallRowInput = findViewById<EditText>(R.id.wall_row)
+        wallColInput.setText(cur.wallCol.toString())
+        wallRowInput.setText(cur.wallRow.toString())
+
         // Auto-save: persist the whole settings snapshot on every control change, so a change
         // survives leaving the screen via Back (previously only the Save button wrote settings).
         fun persist() {
@@ -61,7 +68,9 @@ class SettingsActivity : Activity() {
                 overlaySwitch.isChecked,
                 flipSwitch.isChecked,
                 brightnessSeek.progress - 100,
-                contrastSeek.progress))
+                contrastSeek.progress,
+                wallColInput.text.toString().toIntOrNull() ?: 0,
+                wallRowInput.text.toString().toIntOrNull() ?: 0))
         }
 
         // `ready` gates out the spinners' initial onItemSelected callback (delivered once after
@@ -88,6 +97,13 @@ class SettingsActivity : Activity() {
             override fun onStartTrackingTouch(sb: SeekBar) {}
             override fun onStopTrackingTouch(sb: SeekBar) { if (ready) persist() }
         })
+        val wallWatcher = object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) { if (ready) persist() }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        }
+        wallColInput.addTextChangedListener(wallWatcher)
+        wallRowInput.addTextChangedListener(wallWatcher)
 
         // Kept as an explicit "done"; auto-save already persisted every change.
         findViewById<Button>(R.id.save_btn).setOnClickListener { persist(); finish() }
