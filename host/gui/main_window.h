@@ -138,7 +138,6 @@ class MainWindow : public QMainWindow {
   bool lanEnabled_ = true;           // Network (Wi-Fi/Ethernet) transport toggle
   bool usbEnabled_ = true;           // USB (adb/tether/AOA) transport toggle
   QSet<QString> excludedAdapters_;   // adapter names unchecked (hidden from URL/QR)
-  QGroupBox* commBox_ = nullptr;
   QCheckBox* lanToggle_ = nullptr;
   QCheckBox* usbToggle_ = nullptr;
   QVBoxLayout* adapterRows_ = nullptr;

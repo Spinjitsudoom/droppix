@@ -124,6 +124,7 @@ if(Qt6_FOUND)
     gui/server_control.cpp
     gui/lan_ifaces.cpp
     gui/pages/about_page.cpp
+    gui/pages/interfaces_page.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()

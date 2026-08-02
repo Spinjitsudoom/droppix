@@ -8,6 +8,7 @@
 #include "server_control.h"
 #include "lan_ifaces.h"
 #include "pages/about_page.h"
+#include "pages/interfaces_page.h"
 #include "style.h"
 #include "theme_pref.h"
 #include <QApplication>
@@ -259,9 +260,6 @@ MainWindow::MainWindow(QWidget* parent)
   monLayout->addWidget(monitorsList_);
   monLayout->addWidget(pairingScanCaption_);
   monLayout->addWidget(pairingScanQr_);
-  monLayout->addWidget(webUrlLabel_);
-  monLayout->addWidget(webQrLabel_);
-  monLayout->addWidget(webCopyBtn_);
   monLayout->addWidget(stopMonBtn);
   monLayout->addWidget(toggleMirrorBtn);
   monitorsBox_ = new QGroupBox("Active monitors");
@@ -293,23 +291,18 @@ MainWindow::MainWindow(QWidget* parent)
   p0->addLayout(serverBtnRow);
 
   // --- Communication interfaces (adapters + LAN/USB toggles) ---
+  // Laid out by InterfacesPage (mounted at stack_ index 2); MainWindow still
+  // creates + owns + wires these widgets.
   loadInterfacePrefs();
-  commBox_ = new QGroupBox("Communication interfaces");
-  auto* commLayout = new QVBoxLayout;
   lanToggle_ = new QCheckBox("Network (Wi-Fi / Ethernet)");
   lanToggle_->setChecked(lanEnabled_);
-  commLayout->addWidget(lanToggle_);
   adapterRows_ = new QVBoxLayout;
   adapterRows_->setContentsMargins(18, 0, 0, 0);   // indent adapters under the LAN toggle
-  commLayout->addLayout(adapterRows_);
   usbToggle_ = new QCheckBox("USB (adb + tether + AOA)");
   usbToggle_->setChecked(usbEnabled_);
-  commLayout->addWidget(usbToggle_);
-  commBox_->setLayout(commLayout);
   connect(lanToggle_, &QCheckBox::toggled, this, &MainWindow::onLanToggled);
   connect(usbToggle_, &QCheckBox::toggled, this, &MainWindow::onUsbToggled);
   refreshInterfaces();   // populate the per-adapter checkbox rows
-  p0->addWidget(commBox_);
 
   p0->addWidget(monitorsBox_);
   p0->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
@@ -317,6 +310,11 @@ MainWindow::MainWindow(QWidget* parent)
   stack_ = new QStackedWidget;
   stack_->addWidget(page0);                       // 0 Status
   for (int i = 1; i < 5; ++i) stack_->addWidget(new QWidget);   // 1..4 placeholders
+
+  auto* ifacesPage = new InterfacesPage(lanToggle_, adapterRows_, usbToggle_,
+                                         webUrlLabel_, webQrLabel_, webCopyBtn_);
+  stack_->removeWidget(stack_->widget(2));
+  stack_->insertWidget(2, ifacesPage);
 
   auto* aboutPage = new AboutPage;
   stack_->removeWidget(stack_->widget(4));
