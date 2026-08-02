@@ -7,7 +7,7 @@
 int main(int argc, char** argv) {
   QApplication app(argc, argv);
   app.setStyle("Fusion");                  // consistent base for the custom dark QSS
-  app.setStyleSheet(droppix::styleSheet());
+  app.setStyleSheet(droppix::styleSheet(droppix::Theme::Dark));
   app.setWindowIcon(QIcon(":/icon.png"));  // taskbar / window-manager icon
 
   // --minimized: launch-at-login passes this so the GUI doesn't pop a window every

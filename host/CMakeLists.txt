@@ -214,6 +214,7 @@ if(Qt6_FOUND)
     gui/server_control.cpp
     gui/tests/test_interface_filter.cpp
     gui/lan_ifaces.cpp
+    gui/tests/test_style_theme.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network GTest::gtest_main)

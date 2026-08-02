@@ -1,85 +1,91 @@
 #pragma once
 #include <QString>
+#include "theme.h"
 
 namespace droppix {
 
-// Theme colors kept here so the whole look is easy to retint from one place.
+// Kept for existing callers (e.g. main_window.cpp's setStatusDot()) that reference
+// these directly and aren't theme-aware yet. Values match the dark palette below.
 constexpr const char* kAccent       = "#14b8a6";
 constexpr const char* kDotConnected = "#22c55e";
 constexpr const char* kDotWaiting   = "#f59e0b";
 constexpr const char* kDotStopped   = "#5b6573";
 
-// Self-contained dark theme. Applied app-wide over the Fusion base style so it looks
-// the same regardless of the user's system (KDE) theme.
-inline QString styleSheet() {
-  return QStringLiteral(R"QSS(
-QWidget { background: #1b1f24; color: #e6e9ef; font-size: 13px; }
+struct Palette {
+  const char *bg, *surface, *panel, *border, *borderStrong,
+             *text, *muted, *accent, *accent2, *good, *warn, *bad, *idle,
+             *accentInk;   // text drawn on an accent fill
+};
 
-QLabel { background: transparent; }
-QLabel#header  { font-size: 20px; font-weight: 700; }
-QLabel#caption { color: #8a93a3; font-size: 12px; }
-QLabel#logo {
-  /* logo.png is the full app icon (its own teal rounded square) — no extra
-     background/clip here; just size the label to the rendered pixmap. */
-  min-width: 36px; max-width: 36px; min-height: 36px; max-height: 36px;
+inline const Palette& palette(Theme t) {
+  static const Palette dark{
+    "#14181d","#1b1f24","#22272e","#2e343d","#3a424e",
+    "#e6e9ef","#8a93a3","#14b8a6","#2dd4bf","#22c55e","#f59e0b","#ef4444","#5b6573","#06231f"};
+  static const Palette light{
+    "#eaeef2","#ffffff","#ffffff","#dde3e9","#c6cfd8",
+    "#131820","#5b6674","#14b8a6","#0f9e8e","#16a34a","#d97706","#dc2626","#94a1af","#ffffff"};
+  return t == Theme::Light ? light : dark;
 }
-QLabel#statusText  { font-weight: 600; }
-QLabel#statusStats { color: #8a93a3; }
 
-QGroupBox {
-  background: #22272e; border: 1px solid #323a45; border-radius: 10px;
+inline QString styleSheet(Theme theme) {
+  const Palette& p = palette(theme);
+  auto c = [](const char* s){ return QString::fromLatin1(s); };
+  return QString(R"QSS(
+QWidget { background: %BG%; color: %TEXT%; font-size: 13px; }
+QLabel { background: transparent; }
+QLabel#header  { font-size: 20px; font-weight: 800; }
+QLabel#caption { color: %MUTED%; font-size: 12px; }
+QLabel#logo { min-width: 34px; max-width: 34px; min-height: 34px; max-height: 34px; }
+QLabel#statusText  { font-weight: 600; }
+QLabel#statusStats { color: %MUTED%; }
+QLabel#stateWord   { font-size: 30px; font-weight: 800; }
+QLabel#metricNum   { font-size: 22px; font-weight: 700; }
+
+QFrame#card, QGroupBox {
+  background: %PANEL%; border: 1px solid %BORDER%; border-radius: 12px;
   margin-top: 14px; padding: 12px; font-weight: 600;
 }
-QGroupBox::title {
-  subcontrol-origin: margin; subcontrol-position: top left;
-  left: 12px; padding: 0 4px; color: #8a93a3;
-}
+QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; left: 12px; padding: 0 4px; color: %MUTED%; }
 
 QComboBox, QSpinBox {
-  background: #1b1f24; border: 1px solid #323a45; border-radius: 6px;
-  padding: 5px 8px; min-height: 20px;
+  background: %BG%; border: 1px solid %BORDER%; border-radius: 6px; padding: 5px 8px; min-height: 20px;
 }
-QComboBox:hover, QSpinBox:hover { border-color: #14b8a6; }
+QComboBox:hover, QSpinBox:hover { border-color: %ACCENT%; }
 QComboBox::drop-down { border: none; width: 18px; }
-QComboBox QAbstractItemView {
-  background: #22272e; border: 1px solid #323a45;
-  selection-background-color: #14b8a6; selection-color: #06231f; outline: none;
-}
-QSpinBox::up-button, QSpinBox::down-button { width: 16px; background: #2b313a; border: none; }
+QComboBox QAbstractItemView { background: %PANEL%; border: 1px solid %BORDER%; selection-background-color: %ACCENT%; selection-color: %ACCENTINK%; outline: none; }
+QSpinBox::up-button, QSpinBox::down-button { width: 16px; background: %SURFACE%; border: none; }
 
 QRadioButton, QCheckBox { spacing: 7px; background: transparent; }
 QRadioButton::indicator, QCheckBox::indicator { width: 16px; height: 16px; }
-QCheckBox::indicator   { border: 1px solid #4a5360; border-radius: 4px; background: #1b1f24; }
-QRadioButton::indicator{ border: 1px solid #4a5360; border-radius: 8px; background: #1b1f24; }
-QCheckBox::indicator:checked, QRadioButton::indicator:checked {
-  background: #14b8a6; border-color: #14b8a6;
-}
+QCheckBox::indicator   { border: 1px solid %BORDERSTRONG%; border-radius: 4px; background: %BG%; }
+QRadioButton::indicator{ border: 1px solid %BORDERSTRONG%; border-radius: 8px; background: %BG%; }
+QCheckBox::indicator:checked, QRadioButton::indicator:checked { background: %ACCENT%; border-color: %ACCENT%; }
 
-QPushButton {
-  background: #2b313a; border: 1px solid #3a424e; border-radius: 6px;
-  padding: 6px 12px;
-}
-QPushButton:hover   { background: #333b45; border-color: #14b8a6; }
-QPushButton:pressed { background: #262b33; }
+QPushButton { background: %SURFACE%; border: 1px solid %BORDERSTRONG%; border-radius: 6px; padding: 6px 12px; }
+QPushButton:hover   { border-color: %ACCENT%; }
+QPushButton:pressed { background: %PANEL%; }
 
-QPushButton#startButton {
-  background: #14b8a6; border: none; border-radius: 8px; padding: 12px;
-  color: #06231f; font-size: 15px; font-weight: 700;
-}
-QPushButton#startButton:hover { background: #2dd4bf; }
-QPushButton#startButton[running="true"]        { background: #ef4444; color: #ffffff; }
-QPushButton#startButton[running="true"]:hover  { background: #f87171; }
+QPushButton#navButton { background: transparent; border: none; border-radius: 9px; padding: 11px 16px; color: %MUTED%; font-weight: 600; }
+QPushButton#navButton:hover { background: %PANEL%; color: %TEXT%; }
+QPushButton#navButton[current="true"] { background: %ACCENT%; color: %ACCENTINK%; }
 
-QPlainTextEdit {
-  background: #14171c; border: 1px solid #323a45; border-radius: 8px;
-  color: #c7cdd6; padding: 6px;
+QPushButton#startButton, QPushButton#serverSwitch {
+  background: %ACCENT%; border: none; border-radius: 8px; padding: 12px; color: %ACCENTINK%; font-size: 15px; font-weight: 700;
 }
+QPushButton#startButton:hover, QPushButton#serverSwitch[on="true"]:hover { background: %ACCENT2%; }
+QPushButton#startButton[running="true"], QPushButton#serverSwitch:!checked { background: %IDLE%; color: %TEXT%; }
 
+QPlainTextEdit { background: %BG%; border: 1px solid %BORDER%; border-radius: 8px; color: %TEXT%; padding: 6px; }
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
-QScrollBar::handle:vertical { background: #3a424e; border-radius: 5px; min-height: 24px; }
-QScrollBar::handle:vertical:hover { background: #4a5360; }
+QScrollBar::handle:vertical { background: %BORDERSTRONG%; border-radius: 5px; min-height: 24px; }
+QScrollBar::handle:vertical:hover { background: %MUTED%; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
-)QSS");
+)QSS")
+    .replace("%BG%", c(p.bg)).replace("%SURFACE%", c(p.surface)).replace("%PANEL%", c(p.panel))
+    .replace("%BORDERSTRONG%", c(p.borderStrong)).replace("%BORDER%", c(p.border))
+    .replace("%TEXT%", c(p.text)).replace("%MUTED%", c(p.muted))
+    .replace("%ACCENTINK%", c(p.accentInk)).replace("%ACCENT2%", c(p.accent2)).replace("%ACCENT%", c(p.accent))
+    .replace("%GOOD%", c(p.good)).replace("%WARN%", c(p.warn)).replace("%BAD%", c(p.bad)).replace("%IDLE%", c(p.idle));
 }
 
 }  // namespace droppix
