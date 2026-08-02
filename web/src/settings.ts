@@ -10,6 +10,8 @@ export interface ClientSettings {
   flip: boolean;
   brightness: number;
   contrast: number;
+  wallCol: number;
+  wallRow: number;
 }
 
 const KEY = "droppix.web.settings.v1";
@@ -31,6 +33,8 @@ export function loadSettings(): ClientSettings {
     flip: false,
     brightness: 1,
     contrast: 1,
+    wallCol: 0,
+    wallRow: 0,
   };
   try {
     const raw = localStorage.getItem(KEY);

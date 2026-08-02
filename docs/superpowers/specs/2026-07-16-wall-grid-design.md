@@ -1,7 +1,7 @@
 # Client-declared monitor grid (wall arrangement)
 
 **Date:** 2026-07-16
-**Status:** Shipped on master (2026-08-02). HELLO v6 (`wall_col`/`wall_row`) + host placement (`grid_position`/`place_output`, extend-only) + Android and Linux-client "Wall position" settings, all end-to-end. On-device 2-tablet grid verification pending (needs two same-model tablets). Update: wall placement is skipped in mirror mode (the output is overlaid on the primary there); the web PWA client stays on v5 and decodes back-compat as `(0,0)`.
+**Status:** Shipped on master (2026-08-02). HELLO v6 (`wall_col`/`wall_row`) + host placement (`grid_position`/`place_output`, extend-only) + Android and Linux-client "Wall position" settings, all end-to-end. On-device 2-tablet grid verification pending (needs two same-model tablets). Update: wall placement is skipped in mirror mode (the output is overlaid on the primary there). Follow-up (2026-08-02): the web PWA client (`web/`) was also upgraded to HELLO v6 with toolbar "Wall" col/row inputs, so all three clients now declare a cell.
 **Roadmap:** tier T4 "Video wall" — the **narrowed** interpretation the user chose: arrange the existing per-tablet monitors into a grid (NOT the single-framebuffer tiled-wall engine).
 
 ## Summary

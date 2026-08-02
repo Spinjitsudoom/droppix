@@ -18,6 +18,8 @@ const btnFullscreen = document.getElementById("btn-fullscreen") as HTMLButtonEle
 const btnInstall = document.getElementById("btn-install") as HTMLButtonElement;
 const fitSel = document.getElementById("fit-mode") as HTMLSelectElement;
 const muteEl = document.getElementById("mute") as HTMLInputElement;
+const wallColEl = document.getElementById("wall-col") as HTMLInputElement;
+const wallRowEl = document.getElementById("wall-row") as HTMLInputElement;
 const hud = document.getElementById("hud") as HTMLElement;
 const clickLayer = document.getElementById("click-layer") as HTMLElement;
 const mockLog = document.getElementById("mock-log") as HTMLElement;
@@ -27,6 +29,8 @@ const mockBadge = document.getElementById("mock-badge") as HTMLElement;
 let settings = loadSettings();
 fitSel.value = settings.fit;
 muteEl.checked = !settings.audio;
+wallColEl.value = String(settings.wallCol);
+wallRowEl.value = String(settings.wallRow);
 
 const mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
 const video = new VideoPipeline(canvas, {
@@ -183,6 +187,8 @@ async function connect() {
       fps: settings.fps,
       audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
       bitrateKbps: settings.bitrateKbps,
+      wallCol: settings.wallCol,
+      wallRow: settings.wallRow,
     });
     btnConnect.hidden = true;
     btnDisconnect.hidden = false;
@@ -228,6 +234,21 @@ muteEl.addEventListener("change", () => {
   settings.audio = !muteEl.checked;
   saveSettings(settings);
 });
+// Wall grid cell. Persisted immediately; sent in the next HELLO, so a change while
+// connected takes effect on reconnect (Disconnect -> Connect). 0,0 = today's default.
+function readWallCell(el: HTMLInputElement): number {
+  const n = Math.floor(Number(el.value));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+function saveWall() {
+  settings.wallCol = readWallCell(wallColEl);
+  settings.wallRow = readWallCell(wallRowEl);
+  wallColEl.value = String(settings.wallCol);
+  wallRowEl.value = String(settings.wallRow);
+  saveSettings(settings);
+}
+wallColEl.addEventListener("change", saveWall);
+wallRowEl.addEventListener("change", saveWall);
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {

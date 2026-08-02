@@ -1,6 +1,6 @@
-/** droppix wire protocol v5 bodies. WSS frames are [type][body] (no TCP u32 length). */
+/** droppix wire protocol v6 bodies. WSS frames are [type][body] (no TCP u32 length). */
 
-export const kProtocolVersion = 5;
+export const kProtocolVersion = 6;
 
 export const MsgType = {
   Hello: 1,
@@ -80,6 +80,8 @@ export function encodeHello(
   audioWanted = 0,
   orientationCode = 0,
   bitrateKbps = 0,
+  wallCol = 0,
+  wallRow = 0,
 ): Uint8Array {
   const nameBytes = new TextEncoder().encode(name);
   const idBytes = new TextEncoder().encode(id);
@@ -91,6 +93,12 @@ export function encodeHello(
   putU32(fps, out);
   out.push(audioWanted & 0xff, orientationCode & 0xff);
   putU32(bitrateKbps, out);
+  // v6 adds the client-declared wall cell (grid col,row) after bitrate, before the
+  // name/id strings. Version-gated to stay byte-identical to the C++/Kotlin codecs.
+  if (version >= 6) {
+    putU16(wallCol, out);
+    putU16(wallRow, out);
+  }
   putU16(nameBytes.length, out);
   for (const c of nameBytes) out.push(c);
   putU16(idBytes.length, out);

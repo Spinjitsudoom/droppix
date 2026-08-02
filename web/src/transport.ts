@@ -33,6 +33,8 @@ export class Transport {
     fps: number;
     audioWanted: number;
     bitrateKbps: number;
+    wallCol: number;
+    wallRow: number;
   }): void {
     this.close();
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -55,6 +57,8 @@ export class Transport {
         hello.audioWanted,
         0,
         hello.bitrateKbps,
+        hello.wallCol,
+        hello.wallRow,
       );
       ws.send(frameMessage(MsgType.Hello, body));
       this.handlers.onStatus("Connected - waiting for CONFIG");

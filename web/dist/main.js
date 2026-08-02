@@ -1,5 +1,5 @@
 // src/protocol.ts
-var kProtocolVersion = 5;
+var kProtocolVersion = 6;
 var MsgType = {
   Hello: 1,
   Config: 2,
@@ -40,7 +40,7 @@ function parseFrame(data) {
   if (u.length < 1) return null;
   return { type: u[0], body: u.subarray(1) };
 }
-function encodeHello(version, width, height, density, name, id, fps = 0, audioWanted = 0, orientationCode = 0, bitrateKbps = 0) {
+function encodeHello(version, width, height, density, name, id, fps = 0, audioWanted = 0, orientationCode = 0, bitrateKbps = 0, wallCol = 0, wallRow = 0) {
   const nameBytes = new TextEncoder().encode(name);
   const idBytes = new TextEncoder().encode(id);
   const out = [];
@@ -51,6 +51,10 @@ function encodeHello(version, width, height, density, name, id, fps = 0, audioWa
   putU32(fps, out);
   out.push(audioWanted & 255, orientationCode & 255);
   putU32(bitrateKbps, out);
+  if (version >= 6) {
+    putU16(wallCol, out);
+    putU16(wallRow, out);
+  }
   putU16(nameBytes.length, out);
   for (const c of nameBytes) out.push(c);
   putU16(idBytes.length, out);
@@ -137,7 +141,9 @@ var Transport = class {
         hello.fps,
         hello.audioWanted,
         0,
-        hello.bitrateKbps
+        hello.bitrateKbps,
+        hello.wallCol,
+        hello.wallRow
       );
       ws.send(frameMessage(MsgType.Hello, body));
       this.handlers.onStatus("Connected - waiting for CONFIG");
@@ -834,7 +840,9 @@ function loadSettings() {
     fit: "contain",
     flip: false,
     brightness: 1,
-    contrast: 1
+    contrast: 1,
+    wallCol: 0,
+    wallRow: 0
   };
   try {
     const raw = localStorage.getItem(KEY);
@@ -993,6 +1001,8 @@ var btnFullscreen = document.getElementById("btn-fullscreen");
 var btnInstall = document.getElementById("btn-install");
 var fitSel = document.getElementById("fit-mode");
 var muteEl = document.getElementById("mute");
+var wallColEl = document.getElementById("wall-col");
+var wallRowEl = document.getElementById("wall-row");
 var hud = document.getElementById("hud");
 var clickLayer = document.getElementById("click-layer");
 var mockLog = document.getElementById("mock-log");
@@ -1001,6 +1011,8 @@ var mockBadge = document.getElementById("mock-badge");
 var settings = loadSettings();
 fitSel.value = settings.fit;
 muteEl.checked = !settings.audio;
+wallColEl.value = String(settings.wallCol);
+wallRowEl.value = String(settings.wallRow);
 var mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
 var video = new VideoPipeline(canvas, {
   flip: settings.flip,
@@ -1129,7 +1141,9 @@ async function connect() {
       id: settings.id,
       fps: settings.fps,
       audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
-      bitrateKbps: settings.bitrateKbps
+      bitrateKbps: settings.bitrateKbps,
+      wallCol: settings.wallCol,
+      wallRow: settings.wallRow
     });
     btnConnect.hidden = true;
     btnDisconnect.hidden = false;
@@ -1172,6 +1186,19 @@ muteEl.addEventListener("change", () => {
   settings.audio = !muteEl.checked;
   saveSettings(settings);
 });
+function readWallCell(el) {
+  const n = Math.floor(Number(el.value));
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+function saveWall() {
+  settings.wallCol = readWallCell(wallColEl);
+  settings.wallRow = readWallCell(wallRowEl);
+  wallColEl.value = String(settings.wallCol);
+  wallRowEl.value = String(settings.wallRow);
+  saveSettings(settings);
+}
+wallColEl.addEventListener("change", saveWall);
+wallRowEl.addEventListener("change", saveWall);
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {
     if (!(e.target instanceof HTMLInputElement)) {

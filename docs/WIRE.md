@@ -75,3 +75,5 @@ When `droppix_stream` is started with `--web --web-root <dir>` (TLS required), t
 | WSS | one binary WebSocket frame = `[ type u8 ][ body… ]` (length = WS payload length) |
 
 After TLS, the streamer sniffs the first bytes: HTTP → static / WSS path; otherwise → native Android/Qt length-prefixed client. `/config.json` returns `{ "pairingCode": "NNNNNN" }` for the in-page PIN confirm UI.
+
+The web PWA client speaks **HELLO v6** (`web/src/protocol.ts` `kProtocolVersion = 6`): its `encodeHello` writes the same `wall_col`/`wall_row` u16 pair, byte-identical to the C++/Kotlin codecs, so the toolbar "Wall" col/row inputs place the browser screen in the grid exactly like the native clients.

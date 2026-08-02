@@ -31,6 +31,11 @@
           <option value="stretch">Stretch</option>
         </select>
         <label class="check"><input type="checkbox" id="mute" /> Mute</label>
+        <label class="wall" title="Wall grid cell — position this screen at column,row of the extended desktop (0,0 = default, right of the main monitor)">Wall
+          <input type="number" id="wall-col" min="0" max="15" step="1" value="0" aria-label="Wall column" />
+          <span>,</span>
+          <input type="number" id="wall-row" min="0" max="15" step="1" value="0" aria-label="Wall row" />
+        </label>
         <button id="btn-install" type="button" hidden>Install</button>
       </div>
       <div id="mock-badge" class="mock-badge" hidden>MOCK</div>

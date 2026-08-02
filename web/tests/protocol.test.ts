@@ -5,7 +5,9 @@ import {
   encodeMessageTcp,
   encodeKey,
   encodeTouch,
+  encodeHello,
   frameMessage,
+  kProtocolVersion,
 } from "../src/protocol.ts";
 
 test("TCP encode VIDEO matches locked hex prefix", () => {
@@ -37,4 +39,24 @@ test("TOUCH one contact body", () => {
 test("WSS frame is type+body without length", () => {
   const f = frameMessage(MsgType.Ping, new Uint8Array([1, 2, 3]));
   assert.deepEqual([...f], [0x04, 1, 2, 3]);
+});
+
+test("protocol version is 6 (HELLO v6 wall)", () => {
+  assert.equal(kProtocolVersion, 6);
+});
+
+test("HELLO v6 carries wall_col/wall_row after bitrate (col=2,row=1)", () => {
+  // Byte-identical to the C++ (test_protocol) and Kotlin (encodeHelloV6Wall) vectors:
+  // wall_col at bytes 26-27, wall_row at 28-29 (big-endian u16), strings start at 30.
+  const body = encodeHello(6, 1280, 800, 160, "", "", 30, 0, 0, 8000, 2, 1);
+  assert.deepEqual([...body.subarray(26, 30)], [0x00, 0x02, 0x00, 0x01]);
+  // name_len (u16) = 0 immediately after the wall fields, at offset 30.
+  assert.deepEqual([...body.subarray(30, 32)], [0x00, 0x00]);
+});
+
+test("HELLO v5 body omits wall fields (back-compat)", () => {
+  // A v5-versioned encode writes nothing after bitrate but the strings.
+  const body = encodeHello(5, 1280, 800, 160, "", "", 30, 0, 0, 8000, 2, 1);
+  // name_len (u16) = 0 sits right after bitrate (offset 26), no wall bytes.
+  assert.deepEqual([...body.subarray(26, 28)], [0x00, 0x00]);
 });
