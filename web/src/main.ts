@@ -5,21 +5,16 @@ import { InputBinder } from "./input.ts";
 import { loadSettings, saveSettings } from "./settings.ts";
 import { toggleFullscreen } from "./fullscreen.ts";
 import { MockOverlay } from "./mock-overlay.ts";
-import type { FitMode } from "./fit.ts";
+import { initTheme, setTheme, nextTheme } from "./theme.ts";
+import { pinMatches } from "./pin.ts";
+import { ConnectView } from "./connect-view.ts";
 
 const canvas = document.getElementById("video") as HTMLCanvasElement;
 const stage = document.getElementById("stage") as HTMLElement;
-const statusEl = document.getElementById("status")!;
-const pinCodeEl = document.getElementById("pin-code")!;
-const pinOk = document.getElementById("pin-ok") as HTMLInputElement;
-const btnConnect = document.getElementById("btn-connect") as HTMLButtonElement;
-const btnDisconnect = document.getElementById("btn-disconnect") as HTMLButtonElement;
-const btnFullscreen = document.getElementById("btn-fullscreen") as HTMLButtonElement;
+const app = document.getElementById("app")!;
+const statusEl = document.getElementById("status-pill") as HTMLElement;
+const btnTheme = document.getElementById("btn-theme") as HTMLButtonElement;
 const btnInstall = document.getElementById("btn-install") as HTMLButtonElement;
-const fitSel = document.getElementById("fit-mode") as HTMLSelectElement;
-const muteEl = document.getElementById("mute") as HTMLInputElement;
-const wallColEl = document.getElementById("wall-col") as HTMLInputElement;
-const wallRowEl = document.getElementById("wall-row") as HTMLInputElement;
 const hud = document.getElementById("hud") as HTMLElement;
 const clickLayer = document.getElementById("click-layer") as HTMLElement;
 const mockLog = document.getElementById("mock-log") as HTMLElement;
@@ -27,10 +22,7 @@ const mockBackdrop = document.getElementById("mock-backdrop") as HTMLCanvasEleme
 const mockBadge = document.getElementById("mock-badge") as HTMLElement;
 
 let settings = loadSettings();
-fitSel.value = settings.fit;
-muteEl.checked = !settings.audio;
-wallColEl.value = String(settings.wallCol);
-wallRowEl.value = String(settings.wallRow);
+let theme = initTheme();
 
 const mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
 const video = new VideoPipeline(canvas, {
@@ -41,6 +33,9 @@ const video = new VideoPipeline(canvas, {
 const audio = new AudioPlayer();
 // Paint video against the audio wire media clock (stream PTS), not wall time.
 video.setClock(() => audio.mediaPtsUs);
+video.setFit(settings.fit);
+mock.setFit(settings.fit);
+
 let transport: Transport | null = null;
 let input: InputBinder | null = null;
 let deferredPrompt: Event | null = null;
@@ -50,13 +45,25 @@ let lastBytesAt = performance.now();
 let kbps = 0;
 let isMock = false;
 let burnIn = false;
+// Served by config.json, matched locally against the typed code. Never rendered.
+let pairingCode = "------";
 
 function setStatus(s: string) {
   statusEl.textContent = s;
+  statusEl.hidden = false;
 }
 
-function syncConnectEnabled() {
-  btnConnect.disabled = !pinOk.checked;
+const connectView = new ConnectView((code) => {
+  void tryConnect(code);
+});
+
+async function tryConnect(code: string) {
+  if (!isMock && !pinMatches(code, pairingCode)) {
+    connectView.showError("That code doesn't match your PC — check the screen");
+    return;
+  }
+  app.dataset.view = "session";
+  await connect();
 }
 
 async function loadConfig() {
@@ -69,7 +76,7 @@ async function loadConfig() {
       e2eDesktop?: boolean;
       burnIn?: boolean;
     };
-    pinCodeEl.textContent = j.pairingCode ?? "------";
+    pairingCode = j.pairingCode ?? "------";
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
     mock.showIdle();
@@ -77,17 +84,14 @@ async function loadConfig() {
       mockBadge.hidden = false;
       // Start muted: autoplay policy blocks sound until a gesture anyway,
       // and unmuting is the gesture that resumes audio cleanly.
-      muteEl.checked = true;
       settings.audio = false;
       saveSettings(settings);
-      pinOk.checked = true;
-      syncConnectEnabled();
+      app.dataset.view = "session";
       setStatus("Ready - Connect for server video + audio");
       if (typeof VideoDecoder === "undefined") {
         setStatus("WebCodecs VideoDecoder missing - use Chromium");
       } else {
         window.setTimeout(() => {
-          if (!btnDisconnect.hidden) return;
           void connect();
         }, 300);
       }
@@ -96,7 +100,7 @@ async function loadConfig() {
       setStatus("Confirm PIN matches the PC, then Connect");
     }
   } catch (e) {
-    pinCodeEl.textContent = "------";
+    pairingCode = "------";
     setStatus(`config.json unavailable (${e}) - is the host serving with --web?`);
   }
 }
@@ -111,13 +115,13 @@ function wireTransport() {
       setStatus(`Disconnected: ${r}`);
       transport = null;
       connecting = false;
-      btnConnect.hidden = false;
-      btnDisconnect.hidden = true;
       hud.hidden = true;
       // Stop decode + blank canvas so no stale frames linger after close.
       video.close();
       audio.close();
       mock.showIdle();
+      app.dataset.view = "connect";
+      connectView.reset();
     },
     onConfig: (w, h) => {
       // Autoplay policy: without a user gesture the context stays suspended
@@ -161,11 +165,9 @@ async function connect() {
   connecting = true;
   try {
     settings = loadSettings();
-    settings.audio = !muteEl.checked;
-    saveSettings(settings);
     // Never let audio init block the stream - it must not throw or hang here.
     await audio.unlock();
-    audio.setMuted(muteEl.checked);
+    audio.setMuted(!settings.audio);
     audio.onStateChange = (s) => {
       if (s === "running" && statusEl.textContent?.includes("tap for audio")) {
         setStatus(statusEl.textContent.replace(" - tap for audio", ""));
@@ -185,13 +187,11 @@ async function connect() {
       name: settings.name,
       id: settings.id,
       fps: settings.fps,
-      audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
+      audioWanted: settings.audio ? 1 : 0,
       bitrateKbps: settings.bitrateKbps,
       wallCol: settings.wallCol,
       wallRow: settings.wallRow,
     });
-    btnConnect.hidden = true;
-    btnDisconnect.hidden = false;
     canvas.focus();
     // burnIn: marks are drawn into the video server-side, so no client poll.
     if (isMock && !burnIn) mock.startServerMarkPoll();
@@ -204,6 +204,9 @@ async function connect() {
   }
 }
 
+// No caller yet: the session view has no visible disconnect button until
+// Task 4's control bar wires `onDisconnect: disconnect`. Exiting a session
+// today happens via host BYE / socket close (the onClose handler above).
 function disconnect() {
   transport?.close();
   transport = null;
@@ -211,44 +214,15 @@ function disconnect() {
   audio.close();
   mock.showIdle();
   hud.hidden = true;
-  btnConnect.hidden = false;
-  btnDisconnect.hidden = true;
-  setStatus(isMock ? "Disconnected" : "Disconnected");
+  setStatus("Disconnected");
+  app.dataset.view = "connect";
+  connectView.reset();
 }
 
-pinOk.addEventListener("change", syncConnectEnabled);
-btnConnect.addEventListener("click", () => void connect());
-btnDisconnect.addEventListener("click", disconnect);
-btnFullscreen.addEventListener("click", () => toggleFullscreen(stage));
-fitSel.addEventListener("change", () => {
-  settings.fit = fitSel.value as FitMode;
-  saveSettings(settings);
-  input?.setFit(settings.fit);
-  video.setFit(settings.fit);
-  mock.setFit(settings.fit);
+btnTheme.addEventListener("click", () => {
+  theme = nextTheme(theme);
+  setTheme(theme);
 });
-video.setFit(settings.fit);
-mock.setFit(settings.fit);
-muteEl.addEventListener("change", () => {
-  audio.setMuted(muteEl.checked);
-  settings.audio = !muteEl.checked;
-  saveSettings(settings);
-});
-// Wall grid cell. Persisted immediately; sent in the next HELLO, so a change while
-// connected takes effect on reconnect (Disconnect -> Connect). 0,0 = today's default.
-function readWallCell(el: HTMLInputElement): number {
-  const n = Math.floor(Number(el.value));
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-}
-function saveWall() {
-  settings.wallCol = readWallCell(wallColEl);
-  settings.wallRow = readWallCell(wallRowEl);
-  wallColEl.value = String(settings.wallCol);
-  wallRowEl.value = String(settings.wallRow);
-  saveSettings(settings);
-}
-wallColEl.addEventListener("change", saveWall);
-wallRowEl.addEventListener("change", saveWall);
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {
@@ -292,5 +266,4 @@ dbg.__droppixDebug = () => ({
 });
 dbg.__droppixSuspendAudio = () => audio.suspendForTest();
 
-syncConnectEnabled();
 void loadConfig();

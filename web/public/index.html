@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#12121a" />
+  <meta name="theme-color" content="#14181d" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -14,40 +14,45 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div id="app">
-    <header id="toolbar">
-      <div class="brand">droppix</div>
-      <div id="pin-row" class="row">
-        <span>PIN <strong id="pin-code">------</strong></span>
-        <label class="check"><input type="checkbox" id="pin-ok" /> PIN matches PC</label>
-      </div>
-      <div class="row actions">
-        <button id="btn-connect" type="button" disabled>Connect</button>
-        <button id="btn-disconnect" type="button" hidden>Disconnect</button>
-        <button id="btn-fullscreen" type="button">Fullscreen</button>
-        <select id="fit-mode" aria-label="Fit mode">
-          <option value="contain">Contain</option>
-          <option value="cover">Cover</option>
-          <option value="stretch">Stretch</option>
-        </select>
-        <label class="check"><input type="checkbox" id="mute" /> Mute</label>
-        <label class="wall" title="Wall grid cell — position this screen at column,row of the extended desktop (0,0 = default, right of the main monitor)">Wall
-          <input type="number" id="wall-col" min="0" max="15" step="1" value="0" aria-label="Wall column" />
-          <span>,</span>
-          <input type="number" id="wall-row" min="0" max="15" step="1" value="0" aria-label="Wall row" />
-        </label>
-        <button id="btn-install" type="button" hidden>Install</button>
-      </div>
-      <div id="mock-badge" class="mock-badge" hidden>MOCK</div>
-      <div id="status" class="status">Idle</div>
+  <div id="app" data-view="connect">
+    <header id="topbar">
+      <div class="brand">droppi<span>x</span></div>
+      <span id="mock-badge" class="mock-badge" hidden>MOCK</span>
+      <button id="btn-install" type="button" hidden>Install</button>
+      <button id="btn-theme" type="button" aria-label="Toggle theme">&#9680;</button>
     </header>
+
+    <!-- CONNECT VIEW -->
+    <section id="connect">
+      <div class="card">
+        <h1>Enter your PC's code</h1>
+        <p class="lede">Open droppix on your computer and type the 6-digit code it shows.</p>
+        <div id="pin" class="code">
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 1" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 2" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 3" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 4" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 5" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 6" />
+        </div>
+        <button id="btn-connect" class="btn-primary" type="button" disabled>Connect</button>
+        <div id="c-status" class="status">Type the code shown on your PC</div>
+      </div>
+    </section>
+
+    <!-- SESSION VIEW -->
     <main id="stage">
       <canvas id="mock-backdrop" hidden aria-hidden="true"></canvas>
       <canvas id="video" tabindex="0"></canvas>
       <div id="click-layer" hidden aria-hidden="true"></div>
       <pre id="mock-log" hidden></pre>
       <div id="hud" hidden></div>
+      <div id="status-pill" hidden></div>
+      <div id="controls" class="controls"></div>
     </main>
+
+    <div id="scrim" hidden></div>
+    <aside id="drawer" hidden></aside>
   </div>
   <script type="module" src="./main.js"></script>
 </body>
