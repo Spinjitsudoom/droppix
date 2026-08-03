@@ -29,7 +29,7 @@ class QListWidget; class QGroupBox; class QSystemTrayIcon; class QDialog;
 class QVBoxLayout; class QStackedWidget;
 
 namespace droppix {
-class SettingsDialog;
+class SettingsPage;
 class MainWindow : public QMainWindow {
   Q_OBJECT
  public:
@@ -98,8 +98,8 @@ class MainWindow : public QMainWindow {
   void selectSection(int i);    // switches stack_ to page i + updates navButtons_ checked/[current]
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
-  // refresh/orientation/auto-adb/overlay) now live in SettingsDialog (gear icon).
-  SettingsDialog* settingsDialog_;
+  // refresh/orientation/auto-adb/overlay) now live in SettingsPage (Settings section).
+  SettingsPage* settingsPage_;
   QComboBox* profileBox_;
   QPushButton* serverStartBtn_;   // "Start Server" — enabled while off
   QPushButton* serverStopBtn_;    // "Stop Server" — enabled while on

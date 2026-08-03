@@ -101,7 +101,7 @@ if(Qt6_FOUND)
     gui/approved_store.cpp
     gui/cert_manager.cpp
     gui/audio_sink.cpp
-    gui/settings_dialog.cpp
+    gui/pages/settings_page.cpp
     gui/autostart.cpp
     gui/theme_pref.cpp
     gui/port_alloc.cpp
@@ -223,6 +223,9 @@ if(Qt6_FOUND)
     gui/tests/test_style_theme.cpp
     gui/tests/test_about_page.cpp
     gui/pages/about_page.cpp
+    gui/tests/test_settings_page.cpp
+    gui/pages/settings_page.cpp
+    gui/autostart.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network GTest::gtest_main)

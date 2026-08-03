@@ -1,0 +1,39 @@
+#include <gtest/gtest.h>
+#include <QApplication>
+#include "pages/settings_page.h"
+#include "settings.h"
+
+namespace {
+// SettingsPage is a real QWidget; Qt calls qFatal() if a QWidget is constructed
+// with no QApplication instance alive in the process. droppix_gui_tests links
+// GTest::gtest_main (no Qt-aware main of its own), so bootstrap one lazily —
+// guarded so future page-widget tests sharing this binary can call it too
+// without trying to create a second QApplication. (Same pattern as
+// test_about_page.cpp's ensureQApplication().)
+void ensureQApplication() {
+  if (QApplication::instance()) return;
+  static int argc = 1;
+  static char arg0[] = "droppix_gui_tests";
+  static char* argv[] = {arg0, nullptr};
+  static QApplication app(argc, argv);
+}
+}  // namespace
+
+using namespace droppix;
+
+TEST(SettingsPage, RoundTripsIncludingSurfacedFields) {
+  ensureQApplication();
+  SettingsPage page;
+  Settings in; in.bitrate_kbps = 16000; in.port = 34000; in.touch = true;
+  in.audio = true; in.orientation = 90; in.fps = 60; in.width = 1920; in.height = 1080;
+  page.load(in);
+  Settings out; page.store(out);
+  EXPECT_EQ(out.bitrate_kbps, 16000);
+  EXPECT_EQ(out.port, 34000);
+  EXPECT_TRUE(out.touch);
+  EXPECT_TRUE(out.audio);
+  EXPECT_EQ(out.orientation, 90);
+  EXPECT_EQ(out.fps, 60);
+  EXPECT_EQ(out.width, 1920);
+  EXPECT_EQ(out.height, 1080);
+}

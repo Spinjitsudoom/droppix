@@ -1,6 +1,5 @@
 #include "main_window.h"
 #include "args_builder.h"
-#include "settings_dialog.h"
 #include "web_url.h"
 #include "qr_generator.h"
 #include "log_forwarder.h"
@@ -10,6 +9,7 @@
 #include "pages/about_page.h"
 #include "pages/interfaces_page.h"
 #include "pages/connections_page.h"
+#include "pages/settings_page.h"
 #include "style.h"
 #include "theme_pref.h"
 #include <QApplication>
@@ -179,23 +179,24 @@ MainWindow::MainWindow(QWidget* parent)
   stageCertsToHost();   // Flatpak: mirror cert/key to the host for the streamer (else no-op)
   setWindowTitle("Droppix");
   setWindowIcon(QIcon(":/icon.png"));
-  settingsDialog_ = new SettingsDialog(this);   // advanced options live in this dialog
+  settingsPage_ = new SettingsPage;   // Settings section (stack_ index 3)
 
   // --- Header: logo + wordmark (theme toggle button added lower, after headerRow exists) ---
   auto* logo = new QLabel; logo->setObjectName("logo");
   logo->setPixmap(QPixmap(":/logo.png").scaled(36, 36, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   auto* title = new QLabel("Droppix"); title->setObjectName("header");
 
-  connect(settingsDialog_, &SettingsDialog::rememberAuthRequested, this, &MainWindow::setupAuth);
-  connect(settingsDialog_, &SettingsDialog::manageDevicesRequested, this, &MainWindow::manageDevices);
+  connect(settingsPage_, &SettingsPage::rememberAuthRequested, this, &MainWindow::setupAuth);
+  connect(settingsPage_, &SettingsPage::manageDevicesRequested, this, &MainWindow::manageDevices);
   // Perf-overlay checkbox applies live: if a stream is running, push "overlay N" to the
   // streamer's stdin so the tablet shows/hides it without a restart. store()/load() still
   // persist the setting for the next launch.
-  connect(settingsDialog_, &SettingsDialog::overlayToggled, this, [this](bool on){
+  connect(settingsPage_, &SettingsPage::overlayToggled, this, [this](bool on){
     for (auto& s : sessions_.list())
       if (s.controller && s.controller->running())
         s.controller->writeLine(QString("overlay %1").arg(on ? 1 : 0));
   });
+  connect(settingsPage_, &SettingsPage::themeChangeRequested, this, &MainWindow::setTheme);
 
   auto* headerRow = new QHBoxLayout;
   headerRow->addWidget(logo); headerRow->addSpacing(10);
@@ -210,10 +211,9 @@ MainWindow::MainWindow(QWidget* parent)
   profRow->addWidget(new QLabel("Profile:")); profRow->addWidget(profileBox_, 1);
   profRow->addWidget(saveBtn); profRow->addWidget(saveAsBtn); profRow->addWidget(delBtn);
 
-  // (stream options — source, touch, bitrate/port/refresh/auto-adb/overlay — live in
-  // the Settings dialog, open it via the gear icon. Resolution/fps/audio/orientation
-  // are now client-driven per session via HELLO; Settings keeps them only as
-  // pre-v4-client fallback defaults, no longer user-editable here.)
+  // (ALL stream/session/application options — including resolution/fps/audio/
+  // orientation, which are otherwise client-driven per session via HELLO — now live
+  // in the Settings section (SettingsPage, stack_ index 3); see settingsPage_ below.)
 
   // --- Status row: colored dot + state + compact stats ---
   statusDot_   = new QLabel; statusDot_->setObjectName("statusDot");
@@ -307,6 +307,9 @@ MainWindow::MainWindow(QWidget* parent)
                                          webUrlLabel_, webQrLabel_, webCopyBtn_);
   stack_->removeWidget(stack_->widget(2));
   stack_->insertWidget(2, ifacesPage);
+
+  stack_->removeWidget(stack_->widget(3));
+  stack_->insertWidget(3, settingsPage_);
 
   auto* aboutPage = new AboutPage;
   stack_->removeWidget(stack_->widget(4));
@@ -405,6 +408,7 @@ MainWindow::MainWindow(QWidget* parent)
 
   currentTheme_ = loadThemePref(configDir().toStdString());
   qApp->setStyleSheet(droppix::styleSheet(currentTheme_));   // honor the saved choice on launch
+  settingsPage_->setTheme(currentTheme_);   // keep the Settings theme control in sync at startup
 
   setupTray();           // tray icon for "minimize to tray on close" (if a tray exists)
 
@@ -498,6 +502,10 @@ void MainWindow::setTheme(Theme t) {
   currentTheme_ = t;
   qApp->setStyleSheet(droppix::styleSheet(t));   // qualified: QWidget::styleSheet() would win unqualified
   saveThemePref(configDir().toStdString(), t);
+  // Keep the header theme button (Task 4) and the Settings theme control in sync. Null-
+  // guarded: setTheme() can run (e.g. via the header button) before settingsPage_ exists
+  // is not expected in practice, but this stays defensive since ctor ordering can shift.
+  if (settingsPage_) settingsPage_->setTheme(t);
 }
 
 void MainWindow::selectSection(int i) {
@@ -704,7 +712,8 @@ void MainWindow::refreshAdvertising() {
 
 Settings MainWindow::collectSettings() const {
   Settings s;
-  settingsDialog_->store(s);   // source/touch/bitrate/port/refresh/auto-adb/overlay (resolution/fps/audio/orientation stay at Settings defaults; client-driven)
+  settingsPage_->store(s);   // all Settings fields (source/touch/bitrate/port/refresh/auto-adb/
+                              // overlay/autoConnect/webClient + resolution/fps/audio/orientation)
   s.tls = true;
   // In a Flatpak the streamer runs on the host, so hand it the host-mirrored cert/key paths.
   if (!flatpakHostCert_.isEmpty()) {
@@ -720,7 +729,7 @@ Settings MainWindow::collectSettings() const {
 }
 
 void MainWindow::applySettings(const Settings& s) {
-  settingsDialog_->load(s);    // source/touch/bitrate/port/refresh/auto-adb/overlay (resolution/fps/audio/orientation have no UI anymore)
+  settingsPage_->load(s);   // all Settings fields, including resolution/fps/audio/orientation
 }
 
 void MainWindow::refreshProfiles() {
