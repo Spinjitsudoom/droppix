@@ -10,6 +10,7 @@
 #include "pages/interfaces_page.h"
 #include "pages/connections_page.h"
 #include "pages/settings_page.h"
+#include "pages/status_page.h"
 #include "style.h"
 #include "theme_pref.h"
 #include <QApplication>
@@ -202,39 +203,31 @@ MainWindow::MainWindow(QWidget* parent)
   headerRow->addWidget(logo); headerRow->addSpacing(10);
   headerRow->addWidget(title); headerRow->addStretch();
 
-  // --- Profile row ---
+  // --- Profile row (widgets only; StatusPage lays them out into the Status hero) ---
   profileBox_ = new QComboBox;
-  auto* saveBtn = new QPushButton("Save");
-  auto* saveAsBtn = new QPushButton("Save As");
-  auto* delBtn = new QPushButton("Delete");
-  auto* profRow = new QHBoxLayout;
-  profRow->addWidget(new QLabel("Profile:")); profRow->addWidget(profileBox_, 1);
-  profRow->addWidget(saveBtn); profRow->addWidget(saveAsBtn); profRow->addWidget(delBtn);
+  profSaveBtn_ = new QPushButton("Save");
+  profSaveAsBtn_ = new QPushButton("Save As");
+  profDeleteBtn_ = new QPushButton("Delete");
 
   // (ALL stream/session/application options — including resolution/fps/audio/
   // orientation, which are otherwise client-driven per session via HELLO — now live
   // in the Settings section (SettingsPage, stack_ index 3); see settingsPage_ below.)
 
-  // --- Status row: colored dot + state + compact stats ---
+  // --- Status hero widgets: beacon dot + state word + compact stats sub-line ---
+  // Laid out by StatusPage (stack_ index 0), which also retags streamLabel_'s
+  // objectName to "stateWord" (style.h's large hero-word selector) when it arranges
+  // these into the hero card — see StatusPage's constructor.
   statusDot_   = new QLabel; statusDot_->setObjectName("statusDot");
-  streamLabel_ = new QLabel("Stopped"); streamLabel_->setObjectName("statusText");
+  streamLabel_ = new QLabel("Stopped");
   statsLabel_  = new QLabel("—");       statsLabel_->setObjectName("statusStats");
   setStatusDot(kDotStopped);
-  auto* statusRow = new QHBoxLayout;
-  statusRow->addWidget(statusDot_); statusRow->addSpacing(8);
-  statusRow->addWidget(streamLabel_); statusRow->addStretch();
-  statusRow->addWidget(statsLabel_);
   deviceLabel_ = new QLabel; deviceLabel_->setObjectName("caption");
-  deviceLabel_->hide();   // reserved for a future discovery-status hint; unused for now
+  deviceLabel_->hide();   // reserved for a future discovery-status hint; unused — kept as a
+                          // member but deliberately not added to any layout (Task 9 cleanup)
 
-  // --- Start/Stop + log ---
-  serverStartBtn_ = new QPushButton("▶  Start Server");
-  serverStartBtn_->setObjectName("startButton");
-  serverStopBtn_ = new QPushButton("■  Stop Server");
-  serverStopBtn_->setObjectName("startButton");
-  serverStopBtn_->setEnabled(false);   // server starts off
-
-  // (auth setup moved to the Settings menu → "Remember authentication")
+  // (auth setup moved to the Settings menu → "Remember authentication"; the old
+  // Start/Stop button pair is gone — StatusPage creates a single server toggle switch
+  // instead, see the statusPage_ construction + updateServerButton() below.)
 
   // --- Active monitors (one row per live streaming session) ---
   monitorsList_ = new QListWidget;
@@ -265,20 +258,7 @@ MainWindow::MainWindow(QWidget* parent)
   devicesList_ = new QListWidget;
   connectBtn_ = new QPushButton("Connect");
 
-  // Page 0 holds today's full layout verbatim (peeled apart in later tasks).
-  auto* page0 = new QWidget;
-  auto* p0 = new QVBoxLayout(page0);
-  p0->setContentsMargins(0, 0, 0, 0);
-  p0->setSpacing(12);
-  p0->addLayout(profRow);
-  p0->addLayout(statusRow);
-  p0->addWidget(deviceLabel_);
-  auto* serverBtnRow = new QHBoxLayout;
-  serverBtnRow->addWidget(serverStartBtn_);
-  serverBtnRow->addWidget(serverStopBtn_);
-  p0->addLayout(serverBtnRow);
-  p0->addWidget(pairingScanCaption_);
-  p0->addWidget(pairingScanQr_);
+  // Page 0 (Status) is built by StatusPage below, once the stack_ exists to mount it into.
 
   // --- Communication interfaces (adapters + LAN/USB toggles) ---
   // Laid out by InterfacesPage (mounted at stack_ index 2); MainWindow still
@@ -295,8 +275,7 @@ MainWindow::MainWindow(QWidget* parent)
   refreshInterfaces();   // populate the per-adapter checkbox rows
 
   stack_ = new QStackedWidget;
-  stack_->addWidget(page0);                       // 0 Status
-  for (int i = 1; i < 5; ++i) stack_->addWidget(new QWidget);   // 1..4 placeholders
+  for (int i = 0; i < 5; ++i) stack_->addWidget(new QWidget);   // 0..4 placeholders
 
   auto* connPage = new ConnectionsPage(devicesList_, connectBtn_, monitorsList_,
                                         stopMonBtn_, mirrorBtn_);
@@ -314,6 +293,16 @@ MainWindow::MainWindow(QWidget* parent)
   auto* aboutPage = new AboutPage;
   stack_->removeWidget(stack_->widget(4));
   stack_->insertWidget(4, aboutPage);
+
+  // StatusPage must exist before any updateServerButton()/updateStatus() call — both now
+  // reach through statusPage_ to drive the hero. Neither runs synchronously before this
+  // point in the ctor (the "restore last server state" call below is a deferred
+  // QTimer::singleShot(0, ...), so it always runs after the ctor — and this line — return).
+  statusPage_ = new StatusPage(profileBox_, profSaveBtn_, profSaveAsBtn_, profDeleteBtn_,
+                                statusDot_, streamLabel_, statsLabel_,
+                                pairingScanCaption_, pairingScanQr_);
+  stack_->removeWidget(stack_->widget(0));
+  stack_->insertWidget(0, statusPage_);
 
   static const char* kNav[5] = {"Status", "Connections", "Interfaces", "Settings", "About"};
   auto* navRow = new QHBoxLayout; navRow->setSpacing(6);
@@ -357,19 +346,22 @@ MainWindow::MainWindow(QWidget* parent)
   stageWebAssets();   // ensure the PWA assets are where the (root) streamer can read them
 
   // --- Wiring ---
-  connect(serverStartBtn_, &QPushButton::clicked, this, [this]{ onServerToggled(true); });
-  connect(serverStopBtn_, &QPushButton::clicked, this, [this]{ onServerToggled(false); });
-  connect(saveBtn, &QPushButton::clicked, this, [this]{
+  // `clicked`, not `toggled`: updateServerButton() drives the switch programmatically via
+  // setChecked(), which emits toggled but NOT clicked — so wiring onServerToggled() to
+  // `clicked` (a user gesture only) can never re-enter itself through that setChecked().
+  connect(statusPage_->serverSwitch(), &QPushButton::clicked, this,
+          [this](bool on){ onServerToggled(on); });
+  connect(profSaveBtn_, &QPushButton::clicked, this, [this]{
     const QString n = profileBox_->currentText();
     if (!n.isEmpty()) { store_.save(n, collectSettings()); store_.setLastUsed(n); refreshProfiles(); }
   });
-  connect(saveAsBtn, &QPushButton::clicked, this, [this]{
+  connect(profSaveAsBtn_, &QPushButton::clicked, this, [this]{
     bool ok; QString n = QInputDialog::getText(this, "Save profile", "Name:",
                                                QLineEdit::Normal, "", &ok);
     if (ok && !n.isEmpty()) { store_.save(n, collectSettings()); store_.setLastUsed(n);
                               refreshProfiles(); profileBox_->setCurrentText(n); }
   });
-  connect(delBtn, &QPushButton::clicked, this, [this]{
+  connect(profDeleteBtn_, &QPushButton::clicked, this, [this]{
     if (!profileBox_->currentText().isEmpty()) { store_.remove(profileBox_->currentText()); refreshProfiles(); }
   });
   connect(profileBox_, &QComboBox::currentTextChanged, this, [this](const QString& n){
@@ -840,8 +832,11 @@ void MainWindow::showAbout() {
 }
 
 void MainWindow::updateServerButton() {
-  serverStartBtn_->setEnabled(!serverEnabled_);
-  serverStopBtn_->setEnabled(serverEnabled_);
+  auto* sw = statusPage_->serverSwitch();
+  sw->setChecked(serverEnabled_);
+  sw->setProperty("on", serverEnabled_);
+  sw->setText(serverEnabled_ ? "Server ON" : "Server OFF");
+  sw->style()->unpolish(sw); sw->style()->polish(sw);   // re-apply [on="true"] QSS (see docs/lessons)
 }
 
 // The Server toggle: on -> start a primary listener that waits for a device (and re-arms
@@ -1214,8 +1209,12 @@ void MainWindow::toggleSelectedMonitorMirror() {
 }
 
 void MainWindow::updateStatus() {
+  // "Interfaces up" for the hero metric: how many transports are enabled (Network/USB),
+  // independent of whether any device is actually connected over them.
+  const int ifaces = (lanEnabled_ ? 1 : 0) + (usbEnabled_ ? 1 : 0);
   if (sessions_.count() == 0) {
     setStatusDot(kDotStopped); streamLabel_->setText("Stopped"); statsLabel_->setText("—");
+    statusPage_->setMetrics(0, 0, ifaces);
     return;
   }
   // monitorsList_ only ever holds rows for identified/approved devices (see
@@ -1225,12 +1224,14 @@ void MainWindow::updateStatus() {
   const int devices = monitorsList_->count();
   if (devices == 0) {
     setStatusDot(kDotWaiting); streamLabel_->setText("Listening…"); statsLabel_->setText("—");
+    statusPage_->setMetrics(devices, 0, ifaces);   // devices == 0 here
     return;
   }
   setStatusDot(anyConnected_ ? kDotConnected : kDotWaiting);
   streamLabel_->setText(QString("%1 monitor%2%3")
       .arg(devices).arg(devices == 1 ? "" : "s").arg(anyConnected_ ? "" : " · waiting"));
   statsLabel_->setText("—");
+  statusPage_->setMetrics(devices, anyConnected_ ? devices : 0, ifaces);
 }
 
 void MainWindow::setStatusDot(const char* color) {

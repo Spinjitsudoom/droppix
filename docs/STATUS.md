@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-07-26 on `master` (244/244 host tests; QR pairing + X11 reverse-PRIME evdi fix + orientation calibration fix added — Android build pending on-device retest).
+**Last verified:** 2026-08-03 on `master` (261/261 host tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -9,7 +9,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Area | State |
 |---|---|
 | Core extend path (evdi → H.264 → Android MediaCodec) | **Shipped** |
-| Host GUI (Qt6 multi-session control panel) | **Shipped** |
+| Host GUI (Qt6 multi-session control panel) | **Shipped** — redesigned (2026-08-03) into spacedesk-style sections (Status/Connections/Interfaces/Settings/About) behind a `QStackedWidget`, with a Status hero (server ON/OFF switch + live monitors/clients/interfaces metrics + scan-to-pair), dark+light themes with a persisted in-app toggle, and previously-hidden resolution/fps/audio/orientation settings surfaced in Settings |
 | Android client (minSdk 21) | **Shipped** |
 | Linux desktop receive client (`client/`) | **Shipped** |
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
@@ -49,6 +49,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | In-GUI Debug log console (F12 dock) | Shipped | `host/gui/log_{buffer,classify,forwarder,model,panel}.*` |
 | Persistent Server toggle (re-arm + restore) | Shipped | `host/gui/server_control.*`, `host/gui/main_window.*` |
 | Communication Interfaces panel (adapter list + LAN/USB toggles) | Shipped | `host/gui/lan_ifaces.*`, `host/gui/main_window.*` |
+| Host GUI redesign (sectioned `QStackedWidget`, Status hero, dual theme) | Shipped | `host/gui/pages/{status,connections,interfaces,settings,about}_page.*`, `host/gui/style.h`, `host/gui/theme{,_pref}.*`, `host/gui/main_window.*` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)
@@ -96,6 +97,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | `2026-07-18-cgvirtualdisplay-oss-research.md` | Findings — own thin `macos/` wrapper; DeskPad/VDK/daylight-mirror as cribs; no BetterDisplay/DisplayLink dep |
 | `2026-07-20-server-toggle-design.md` | Shipped |
 | `2026-07-21-comm-interfaces-design.md` | Shipped |
+| `2026-08-03-host-gui-redesign-design.md` | Shipped |
 
 ## How to keep this current
 

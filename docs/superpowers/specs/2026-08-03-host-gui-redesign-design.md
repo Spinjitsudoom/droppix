@@ -1,7 +1,14 @@
 # Host GUI redesign (spacedesk-modeled sections + status hero + dual theme)
 
 **Date:** 2026-08-03
-**Status:** Design approved; implementation plan pending.
+**Status:** Shipped on master (2026-08-03).
+**Update:** Implemented in 6 tasks (Task 1 theme system + QSS restyle; Tasks 2–3 header/nav
+scaffolding; Tasks 4–8 per-section `gui/pages/*` extraction — Connections, Interfaces,
+Settings retiring the dialog, About; Task 9 — this one — turned page 0 into the real
+Status hero: server ON/OFF **switch** (not a checkbox toggle) replacing Start/Stop,
+live monitors/clients/interfaces metrics, and self-managed empty states in
+`ConnectionsPage` (a muted `QLabel`, not a placeholder row, so `QListWidget::count()`
+stays the real tally `MainWindow::updateStatus()` depends on). 261/261 host tests green.
 **Roadmap:** UI overhaul — **host first**; the web PWA client is a separate follow-up spec.
 **Mockup:** approved interactive preview — artifact `77b2eea9-e75c-462a-8491-bfe2ba032b44` (5 sections + Status hero + collapsible debug log, dark/light toggle).
 

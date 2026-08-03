@@ -71,6 +71,26 @@ graph LR
 | `droppix_stream` | often root via `pkexec` | Accept client, create evdi, encode, inject input, stream audio |
 | Android / `droppix_client` / web PWA | device / user / browser | Decode, display, capture input, send HELLO settings |
 
+### `droppix_gui` window structure (2026-08-03 redesign)
+
+`MainWindow`'s central widget is a `QStackedWidget` (`stack_`) of section widgets under
+`host/gui/pages/`, switched by a row of exclusive nav buttons (`selectSection(int)`):
+`StatusPage` (index 0 — server ON/OFF switch, live monitors/clients/interfaces metrics,
+scan-to-pair QR, profile row), `ConnectionsPage` (1), `InterfacesPage` (2), `SettingsPage`
+(3), `AboutPage` (4). Each page is a thin layout container — it arranges
+`MainWindow`-owned widgets (lists, buttons, labels) into cards; `MainWindow` still creates,
+owns, and wires almost every widget's signals (session start/stop, discovery, profile
+save/load, pairing). The one exception is `StatusPage`'s server toggle switch
+(`serverSwitch()`), which the page creates itself so `MainWindow` can wire it once, at
+construction, with `clicked` rather than `toggled` (see `docs/lessons/` for why
+programmatic `setChecked()` calls must not re-enter the toggle handler).
+
+Theming is a single QSS string, `styleSheet(Theme)` in `host/gui/style.h`, generated from a
+per-theme `Palette` token table (dark/light); `MainWindow::setTheme(Theme)` applies it via
+`qApp->setStyleSheet(...)` and persists the choice through `theme_pref.{h,cpp}`
+(`loadThemePref`/`saveThemePref`, a `<config>/theme` marker file, mirroring the existing
+`minimize_on_close`/`ProfileStore` marker pattern) so it survives restarts.
+
 ## Video path
 
 Capture is CPU BGRA from evdi today (no zero-copy GPU capture). Encode prefers GPU when available.

@@ -16,6 +16,7 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
+| G-2026-08-03-qss-property-repolish | QSS `[prop="true"]` selectors don't re-apply after `setProperty()` alone — need `style()->unpolish/polish()` | gui, gotcha | medium | 2026-08-03 | [qss-property-repolish.md](qss-property-repolish.md) |
 | G-2026-08-02-web-dist-committed-sw-cache | web/dist is committed (rebuild off-mount) and sw.js caches the shell (bump CACHE) | client, packaging, gotcha, silent-failure | medium | 2026-08-02 | [web-dist-committed-sw-cache.md](web-dist-committed-sw-cache.md) |
 | L-2026-07-26-x11-evdi-prime-deadlock | evdi never gets a mode on X11 (Cinnamon/XFCE/etc) — ordering deadlock | host, evdi, desktop-backend, silent-failure | high | 2026-07-26 | [x11-evdi-prime-deadlock.md](x11-evdi-prime-deadlock.md) |
 | G-2026-07-19-zxing-embedded-minsdk | zxing-android-embedded 4.x needs minSdk 24 (crashes on Nexus 10 / API 22) | android, packaging, gotcha | high | 2026-07-19 | [zxing-embedded-minsdk.md](zxing-embedded-minsdk.md) |

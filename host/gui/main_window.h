@@ -30,6 +30,7 @@ class QVBoxLayout; class QStackedWidget;
 
 namespace droppix {
 class SettingsPage;
+class StatusPage;
 class MainWindow : public QMainWindow {
   Q_OBJECT
  public:
@@ -48,7 +49,7 @@ class MainWindow : public QMainWindow {
   void onServerToggled(bool on);   // Server toggle -> start/stop the primary listener + persist
   void startServerSession();       // spawn the primary "server:<port>" listener on a free port
   void stopServerSession();        // stop the primary listener (no re-arm)
-  void updateServerButton();       // reflect serverEnabled_ in the Start/Stop buttons' enabled state
+  void updateServerButton();       // reflect serverEnabled_ in the Status hero's server switch
   void onLanToggled(bool on);      // Network transport on/off (advertise + browse)
   void onUsbToggled(bool on);      // USB transport on/off (tether + AOA scanners)
   void refreshInterfaces();        // rebuild the per-adapter checkbox rows
@@ -99,10 +100,12 @@ class MainWindow : public QMainWindow {
 
   // widgets — ALL stream options (source/resolution/touch/audio/fps/bitrate/port/
   // refresh/orientation/auto-adb/overlay) now live in SettingsPage (Settings section).
-  SettingsPage* settingsPage_;
+  SettingsPage* settingsPage_ = nullptr;
+  StatusPage* statusPage_ = nullptr;   // Status section (stack_ index 0): hero + metrics
   QComboBox* profileBox_;
-  QPushButton* serverStartBtn_;   // "Start Server" — enabled while off
-  QPushButton* serverStopBtn_;    // "Stop Server" — enabled while on
+  QPushButton* profSaveBtn_ = nullptr;      // "Save" (profile row, now laid out by StatusPage)
+  QPushButton* profSaveAsBtn_ = nullptr;    // "Save As"
+  QPushButton* profDeleteBtn_ = nullptr;    // "Delete"
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
   QDialog* pairingPopup_ = nullptr;   // non-modal "Pairing code: NNNNNN" shown on connect
