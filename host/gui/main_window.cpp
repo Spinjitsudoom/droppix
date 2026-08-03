@@ -9,6 +9,7 @@
 #include "lan_ifaces.h"
 #include "pages/about_page.h"
 #include "pages/interfaces_page.h"
+#include "pages/connections_page.h"
 #include "style.h"
 #include "theme_pref.h"
 #include <QApplication>
@@ -238,8 +239,8 @@ MainWindow::MainWindow(QWidget* parent)
   // --- Active monitors (one row per live streaming session) ---
   monitorsList_ = new QListWidget;
   monitorsList_->setMaximumHeight(96);
-  auto* stopMonBtn = new QPushButton("Stop selected");
-  auto* toggleMirrorBtn = new QPushButton("Toggle mirror");
+  stopMonBtn_ = new QPushButton("Stop selected");
+  mirrorBtn_ = new QPushButton("Toggle mirror");
   webUrlLabel_ = new QLabel; webUrlLabel_->setObjectName("caption");
   webUrlLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
   webUrlLabel_->hide();
@@ -251,31 +252,18 @@ MainWindow::MainWindow(QWidget* parent)
   });
   // Proactive scan-to-pair QR: shown while a WiFi session waits, so the tablet can
   // scan BEFORE connecting. Encodes droppix://<host LAN IP>:<port>?code (not the
-  // client IP, and not tied to the reactive "device connecting" popup).
+  // client IP, and not tied to the reactive "device connecting" popup). Lives on
+  // the Status page (page 0) — see Task 9 for scan-to-pair placement there.
   pairingScanCaption_ = new QLabel; pairingScanCaption_->setObjectName("caption");
   pairingScanCaption_->setAlignment(Qt::AlignCenter); pairingScanCaption_->setWordWrap(true);
   pairingScanCaption_->hide();
   pairingScanQr_ = new QLabel; pairingScanQr_->setAlignment(Qt::AlignCenter); pairingScanQr_->hide();
-  auto* monLayout = new QVBoxLayout;
-  monLayout->addWidget(monitorsList_);
-  monLayout->addWidget(pairingScanCaption_);
-  monLayout->addWidget(pairingScanQr_);
-  monLayout->addWidget(stopMonBtn);
-  monLayout->addWidget(toggleMirrorBtn);
-  monitorsBox_ = new QGroupBox("Active monitors");
-  monitorsBox_->setLayout(monLayout);
-  monitorsBox_->hide();   // shown when >= 1 session is live
-  connect(stopMonBtn, &QPushButton::clicked, this, &MainWindow::stopSelectedMonitor);
-  connect(toggleMirrorBtn, &QPushButton::clicked, this, &MainWindow::toggleSelectedMonitorMirror);
+  connect(stopMonBtn_, &QPushButton::clicked, this, &MainWindow::stopSelectedMonitor);
+  connect(mirrorBtn_, &QPushButton::clicked, this, &MainWindow::toggleSelectedMonitorMirror);
 
   // --- Devices on network (mDNS-discovered tablets) ---
   devicesList_ = new QListWidget;
   connectBtn_ = new QPushButton("Connect");
-  auto* devicesLayout = new QVBoxLayout;
-  devicesLayout->addWidget(devicesList_);
-  devicesLayout->addWidget(connectBtn_);
-  devicesBox_ = new QGroupBox("Available clients");
-  devicesBox_->setLayout(devicesLayout);
 
   // Page 0 holds today's full layout verbatim (peeled apart in later tasks).
   auto* page0 = new QWidget;
@@ -289,6 +277,8 @@ MainWindow::MainWindow(QWidget* parent)
   serverBtnRow->addWidget(serverStartBtn_);
   serverBtnRow->addWidget(serverStopBtn_);
   p0->addLayout(serverBtnRow);
+  p0->addWidget(pairingScanCaption_);
+  p0->addWidget(pairingScanQr_);
 
   // --- Communication interfaces (adapters + LAN/USB toggles) ---
   // Laid out by InterfacesPage (mounted at stack_ index 2); MainWindow still
@@ -304,12 +294,14 @@ MainWindow::MainWindow(QWidget* parent)
   connect(usbToggle_, &QCheckBox::toggled, this, &MainWindow::onUsbToggled);
   refreshInterfaces();   // populate the per-adapter checkbox rows
 
-  p0->addWidget(monitorsBox_);
-  p0->addWidget(devicesBox_, 1);   // the client list now fills the space the log used to
-
   stack_ = new QStackedWidget;
   stack_->addWidget(page0);                       // 0 Status
   for (int i = 1; i < 5; ++i) stack_->addWidget(new QWidget);   // 1..4 placeholders
+
+  auto* connPage = new ConnectionsPage(devicesList_, connectBtn_, monitorsList_,
+                                        stopMonBtn_, mirrorBtn_);
+  stack_->removeWidget(stack_->widget(1));
+  stack_->insertWidget(1, connPage);
 
   auto* ifacesPage = new InterfacesPage(lanToggle_, adapterRows_, usbToggle_,
                                          webUrlLabel_, webQrLabel_, webCopyBtn_);
@@ -916,7 +908,7 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   sessions_.add(sess);
 
   if (addRowNow) addMonitorRow(key, label, transport, port, mirror);
-  monitorsBox_->show();
+  // (monitors list is always visible now — Task 9 adds an empty-state)
   refreshWebClientUi();
   refreshPairingUi();
   refreshAdvertising();
@@ -1100,7 +1092,7 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
     for (int i = monitorsList_->count() - 1; i >= 0; --i)
       if (monitorsList_->item(i)->data(Qt::UserRole).toString() == key)
         delete monitorsList_->takeItem(i);
-    if (sessions_.count() == 0) { monitorsBox_->hide(); anyConnected_ = false; hidePairingPopup(); }
+    if (sessions_.count() == 0) { anyConnected_ = false; hidePairingPopup(); }
     refreshWebClientUi();
     refreshPairingUi();
     updateStatus();

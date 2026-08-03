@@ -105,7 +105,6 @@ class MainWindow : public QMainWindow {
   QPushButton* serverStopBtn_;    // "Stop Server" — enabled while on
   QLabel* statusDot_;
   QLabel* deviceLabel_; QLabel* streamLabel_; QLabel* statsLabel_;
-  QGroupBox* devicesBox_;
   QDialog* pairingPopup_ = nullptr;   // non-modal "Pairing code: NNNNNN" shown on connect
   QLabel* pairingInfo_ = nullptr;
   QLabel* pairingCodeLabel_ = nullptr;
@@ -113,8 +112,9 @@ class MainWindow : public QMainWindow {
   QTimer* pairingHideTimer_ = nullptr;
   QListWidget* devicesList_;
   QPushButton* connectBtn_;
-  QGroupBox* monitorsBox_;      // "Active monitors" panel
   QListWidget* monitorsList_;   // one row per live session
+  QPushButton* stopMonBtn_ = nullptr;   // "Stop selected" (Active-monitors card)
+  QPushButton* mirrorBtn_ = nullptr;    // "Toggle mirror" (Active-monitors card)
   QLabel* webUrlLabel_ = nullptr;
   QLabel* webQrLabel_ = nullptr;
   QPushButton* webCopyBtn_ = nullptr;
