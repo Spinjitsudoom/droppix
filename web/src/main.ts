@@ -8,6 +8,8 @@ import { MockOverlay } from "./mock-overlay.ts";
 import { initTheme, setTheme, nextTheme } from "./theme.ts";
 import { pinMatches } from "./pin.ts";
 import { ConnectView } from "./connect-view.ts";
+import { SessionControls } from "./session-controls.ts";
+import type { FitMode } from "./fit.ts";
 
 const canvas = document.getElementById("video") as HTMLCanvasElement;
 const stage = document.getElementById("stage") as HTMLElement;
@@ -63,6 +65,7 @@ async function tryConnect(code: string) {
     return;
   }
   app.dataset.view = "session";
+  controls.show();
   await connect();
 }
 
@@ -87,6 +90,7 @@ async function loadConfig() {
       settings.audio = false;
       saveSettings(settings);
       app.dataset.view = "session";
+      controls.show();
       setStatus("Ready - Connect for server video + audio");
       if (typeof VideoDecoder === "undefined") {
         setStatus("WebCodecs VideoDecoder missing - use Chromium");
@@ -212,9 +216,6 @@ async function connect() {
   }
 }
 
-// No caller yet: the session view has no visible disconnect button until
-// Task 4's control bar wires `onDisconnect: disconnect`. Exiting a session
-// today happens via host BYE / socket close (the onClose handler above).
 function disconnect() {
   transport?.close();
   transport = null;
@@ -226,6 +227,37 @@ function disconnect() {
   app.dataset.view = "connect";
   connectView.reset();
 }
+
+// Stub: the settings drawer itself is Task 5. The control bar's Settings
+// button already needs somewhere to call today.
+function openDrawer() {
+  /* wired in Task 5 */
+}
+
+function cycleFit() {
+  const order: FitMode[] = ["contain", "cover", "stretch"];
+  settings.fit = order[(order.indexOf(settings.fit) + 1) % 3]!;
+  saveSettings(settings);
+  video.setFit(settings.fit);
+  input?.setFit(settings.fit);
+  mock.setFit(settings.fit);
+}
+
+const controls = new SessionControls({
+  onDisconnect: disconnect,
+  onFullscreen: () => toggleFullscreen(stage),
+  onMute: () => {
+    settings.audio = !settings.audio;
+    saveSettings(settings);
+    audio.setMuted(!settings.audio);
+  },
+  onHud: () => {
+    showHud = !showHud;
+    hud.hidden = !showHud;
+  },
+  onSettings: () => openDrawer(),
+  onFit: () => cycleFit(),
+});
 
 btnTheme.addEventListener("click", () => {
   theme = nextTheme(theme);
