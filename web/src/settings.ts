@@ -1,4 +1,5 @@
 import type { FitMode } from "./fit.ts";
+import type { Theme } from "./theme.ts";
 
 export interface ClientSettings {
   name: string;
@@ -12,6 +13,7 @@ export interface ClientSettings {
   contrast: number;
   wallCol: number;
   wallRow: number;
+  theme: Theme;
 }
 
 const KEY = "droppix.web.settings.v1";
@@ -35,6 +37,7 @@ export function loadSettings(): ClientSettings {
     contrast: 1,
     wallCol: 0,
     wallRow: 0,
+    theme: "dark",
   };
   try {
     const raw = localStorage.getItem(KEY);
