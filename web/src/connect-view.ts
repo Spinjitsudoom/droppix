@@ -30,6 +30,7 @@ export class ConnectView {
   private value(): string { return normalizePin(this.inputs.map((i) => i.value).join("")); }
   private sync(): void { this.btn.disabled = !pinComplete(this.value()); }
   showError(msg: string): void { this.wrap.classList.add("err"); this.statusEl.textContent = msg; }
+  setStatus(msg: string): void { this.statusEl.textContent = msg; }
   reset(): void { this.inputs.forEach((i) => { i.value = ""; i.classList.remove("filled"); }); this.wrap.classList.remove("err"); this.sync(); }
   focus(): void { this.inputs[0]?.focus(); }
 }

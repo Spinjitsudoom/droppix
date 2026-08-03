@@ -101,7 +101,12 @@ async function loadConfig() {
     }
   } catch (e) {
     pairingCode = "------";
-    setStatus(`config.json unavailable (${e}) - is the host serving with --web?`);
+    // Most common failure: host not serving --web. This must land on the visible
+    // connect card (#c-status) too — #status-pill is hidden while data-view="connect",
+    // so writing it there alone leaves the real error invisible.
+    const msg = `Can't reach the PC — is droppix serving with --web? (${e})`;
+    setStatus(msg);
+    connectView.setStatus(msg);
   }
 }
 
@@ -122,6 +127,9 @@ function wireTransport() {
       mock.showIdle();
       app.dataset.view = "connect";
       connectView.reset();
+      // reset() only clears the PIN inputs; set the reason after it so it isn't
+      // wiped, and so a session that bounces back to connect isn't silent.
+      connectView.setStatus(`Disconnected: ${r}`);
     },
     onConfig: (w, h) => {
       // Autoplay policy: without a user gesture the context stays suspended
