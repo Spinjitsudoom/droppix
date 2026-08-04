@@ -123,10 +123,12 @@ class MainWindow : public QMainWindow {
   QLabel* webUrlLabel_ = nullptr;
   QLabel* webQrLabel_ = nullptr;
   QPushButton* webCopyBtn_ = nullptr;
+  QPushButton* statusCopyUrlBtn_ = nullptr;   // prominent "Copy web URL" on the Status page
   QLabel* pairingScanCaption_ = nullptr;   // proactive "Scan to pair / code" caption
   QLabel* pairingScanQr_ = nullptr;        // proactive scan-to-pair QR (host LAN IP)
   bool anyConnected_ = false;   // any session has a client connected (drives the status dot)
   void refreshWebClientUi();    // URL + QR for the newest session when webClient enabled
+  QString currentWebUrl();   // https://ip:port for the newest non-AOA web session, else "" (non-const: SessionManager::list())
 
   ProfileStore store_;
   ApprovedStore approved_;

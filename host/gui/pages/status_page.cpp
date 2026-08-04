@@ -30,7 +30,7 @@ QVBoxLayout* metricColumn(QWidget* parent, const char* caption, QLabel** numOut)
 
 StatusPage::StatusPage(QComboBox* profile, QPushButton* save, QPushButton* saveAs, QPushButton* del,
                        QLabel* dot, QLabel* stateText, QLabel* stats,
-                       QLabel* scanCaption, QLabel* scanQr, QWidget* parent)
+                       QLabel* scanCaption, QLabel* scanQr, QPushButton* copyUrl, QWidget* parent)
     : QWidget(parent) {
   // --- Hero card: beacon + state word + server switch, and a sub-line underneath ---
   auto* hero = new QFrame(this);
@@ -74,6 +74,7 @@ StatusPage::StatusPage(QComboBox* profile, QPushButton* save, QPushButton* saveA
   auto* scanLayout = new QVBoxLayout;
   scanLayout->addWidget(scanCaption);
   scanLayout->addWidget(scanQr);
+  scanLayout->addWidget(copyUrl);   // prominent "Copy web URL" (visibility driven by MainWindow)
   scanCard->setLayout(scanLayout);
 
   auto* root = new QVBoxLayout(this);

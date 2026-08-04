@@ -24,7 +24,7 @@ class StatusPage : public QWidget {
  public:
   StatusPage(QComboBox* profile, QPushButton* save, QPushButton* saveAs, QPushButton* del,
              QLabel* dot, QLabel* stateText, QLabel* stats,
-             QLabel* scanCaption, QLabel* scanQr, QWidget* parent = nullptr);
+             QLabel* scanCaption, QLabel* scanQr, QPushButton* copyUrl, QWidget* parent = nullptr);
 
   QPushButton* serverSwitch();                       // checkable QPushButton#serverSwitch
   void setMetrics(int monitors, int clients, int ifaces);   // updates the 3 metric numbers

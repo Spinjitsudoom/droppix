@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-08-04 on `master` (261/261 host tests, 16/16 web tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle; web PWA client redesign shipped — PIN-entry connect screen, in-session auto-hiding control bar, settings drawer, dual dark/light theme with persisted toggle).
+**Last verified:** 2026-08-05 on `master` (264/264 host tests, 16/16 web tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle; web PWA client redesign shipped — PIN-entry connect screen, in-session auto-hiding control bar, settings drawer, dual dark/light theme with persisted toggle; live server refresh + prominent Copy-web-URL shipped).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -50,6 +50,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Persistent Server toggle (re-arm + restore) | Shipped | `host/gui/server_control.*`, `host/gui/main_window.*` |
 | Communication Interfaces panel (adapter list + LAN/USB toggles) | Shipped | `host/gui/lan_ifaces.*`, `host/gui/main_window.*` |
 | Host GUI redesign (sectioned `QStackedWidget`, Status hero, dual theme) | Shipped | `host/gui/pages/{status,connections,interfaces,settings,about}_page.*`, `host/gui/style.h`, `host/gui/theme{,_pref}.*`, `host/gui/main_window.*` |
+| Live server refresh + prominent Copy web URL | Shipped | With the Server ON, changing any streamer setting (`SettingsPage::settingsChanged`) or Interfaces toggle restarts the listener (debounced 600 ms, race-safe one-shot restart) so it applies immediately; a "Copy web URL" button on Status + Interfaces surfaces `currentWebUrl()` whenever server + web client are on. `host/gui/pages/settings_page.*`, `host/gui/pages/status_page.*`, `host/gui/main_window.*` |
 | Web PWA client redesign (PIN-entry connect screen, in-session control bar, settings drawer, dual theme) | Shipped | `web/src/{pin,theme,connect-view,session-controls,settings-drawer}.ts`, `web/public/{index.html,styles.css}` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 

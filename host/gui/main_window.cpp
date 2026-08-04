@@ -243,8 +243,8 @@ MainWindow::MainWindow(QWidget* parent)
   webQrLabel_ = new QLabel; webQrLabel_->setAlignment(Qt::AlignCenter); webQrLabel_->hide();
   webCopyBtn_ = new QPushButton("Copy web URL"); webCopyBtn_->hide();
   connect(webCopyBtn_, &QPushButton::clicked, this, [this]{
-    if (!webUrlLabel_->text().isEmpty())
-      QGuiApplication::clipboard()->setText(webUrlLabel_->text());
+    const QString u = currentWebUrl();
+    if (!u.isEmpty()) QGuiApplication::clipboard()->setText(u);
   });
   // Proactive scan-to-pair QR: shown while a WiFi session waits, so the tablet can
   // scan BEFORE connecting. Encodes droppix://<host LAN IP>:<port>?code (not the
@@ -297,13 +297,21 @@ MainWindow::MainWindow(QWidget* parent)
   stack_->removeWidget(stack_->widget(4));
   stack_->insertWidget(4, aboutPage);
 
+  // Prominent "Copy web URL" on the Status page (visibility driven by refreshWebClientUi()).
+  statusCopyUrlBtn_ = new QPushButton("Copy web URL");
+  statusCopyUrlBtn_->hide();
+  connect(statusCopyUrlBtn_, &QPushButton::clicked, this, [this]{
+    const QString u = currentWebUrl();
+    if (!u.isEmpty()) QGuiApplication::clipboard()->setText(u);
+  });
+
   // StatusPage must exist before any updateServerButton()/updateStatus() call — both now
   // reach through statusPage_ to drive the hero. Neither runs synchronously before this
   // point in the ctor (the "restore last server state" call below is a deferred
   // QTimer::singleShot(0, ...), so it always runs after the ctor — and this line — return).
   statusPage_ = new StatusPage(profileBox_, profSaveBtn_, profSaveAsBtn_, profDeleteBtn_,
                                 statusDot_, streamLabel_, statsLabel_,
-                                pairingScanCaption_, pairingScanQr_);
+                                pairingScanCaption_, pairingScanQr_, statusCopyUrlBtn_);
   stack_->removeWidget(stack_->widget(0));
   stack_->insertWidget(0, statusPage_);
 
@@ -952,26 +960,41 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   if (directTablet) directTablet();
 }
 
-void MainWindow::refreshWebClientUi() {
+// The web-client URL (https://ip:port) for the newest session that can serve the PWA —
+// requires the web client enabled, LAN on, at least one session (the Server listener
+// counts), and a non-AOA transport. Empty string when unavailable. Used by both the
+// Interfaces card and the prominent Status "Copy web URL" button.
+QString MainWindow::currentWebUrl() {
   Settings s = collectSettings();
-  if (!s.webClient || !lanEnabled_ || sessions_.count() == 0) {
+  if (!s.webClient || !lanEnabled_ || sessions_.count() == 0) return {};
+  const Session& sess = sessions_.list().last();   // newest session is last
+  if (sess.transport == "usb-aoa") return {};       // web client unavailable over AOA
+  const auto inc = included_ifaces(lan_ipv4_ifaces(), excludedAdapters_);
+  const QString ip = inc.isEmpty() ? QStringLiteral("127.0.0.1") : inc.first().ip;
+  return session_web_url(ip, sess.port);
+}
+
+void MainWindow::refreshWebClientUi() {
+  // AOA sessions can't serve the web client: keep the explicit "unavailable" hint on the
+  // Interfaces card (currentWebUrl() returns "" for AOA, so it's handled separately here).
+  Settings s = collectSettings();
+  if (s.webClient && lanEnabled_ && sessions_.count() > 0 &&
+      sessions_.list().last().transport == "usb-aoa") {
+    webUrlLabel_->setText("Web client unavailable for USB/AOA sessions");
+    webUrlLabel_->show();
+    webQrLabel_->hide();
+    webCopyBtn_->hide();
+    statusCopyUrlBtn_->hide();
+    return;
+  }
+  const QString url = currentWebUrl();
+  statusCopyUrlBtn_->setVisible(!url.isEmpty());   // prominent Status copy button
+  if (url.isEmpty()) {
     webUrlLabel_->hide();
     webQrLabel_->hide();
     webCopyBtn_->hide();
     return;
   }
-  // Newest session is last in the list.
-  const Session& sess = sessions_.list().last();
-  if (sess.transport == "usb-aoa") {
-    webUrlLabel_->setText("Web client unavailable for USB/AOA sessions");
-    webUrlLabel_->show();
-    webQrLabel_->hide();
-    webCopyBtn_->hide();
-    return;
-  }
-  const auto inc = included_ifaces(lan_ipv4_ifaces(), excludedAdapters_);
-  const QString ip = inc.isEmpty() ? QStringLiteral("127.0.0.1") : inc.first().ip;
-  const QString url = session_web_url(ip, sess.port);
   webUrlLabel_->setText(url);
   webUrlLabel_->show();
   webCopyBtn_->show();

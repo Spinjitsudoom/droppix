@@ -1,7 +1,7 @@
 # Live server refresh on settings change + prominent Copy URL
 
 **Date:** 2026-08-04
-**Status:** Design approved; implementation plan pending.
+**Status:** Shipped on master (2026-08-05).
 **Roadmap:** Host-GUI usability follow-up to the GUI redesign (`2026-08-03-host-gui-redesign-design.md`).
 
 ## Summary
