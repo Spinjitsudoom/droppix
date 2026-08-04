@@ -892,10 +892,23 @@ void MainWindow::scheduleServerRefresh() {
 
 void MainWindow::refreshServer() {
   if (!serverEnabled_) return;   // nothing to restart; settings apply on next Start
-  stopServerSession();
-  startServerSession();          // reads fresh collectSettings() -> new --web/port/args
-  refreshWebClientUi();
-  updateStatus();
+  Session* s = sessions_.find(serverKey_);
+  if (!s || !s->controller) return;   // nothing live to refresh; an in-flight start uses current settings
+  StreamController* c = s->controller;
+  serverRefreshing_ = true;
+  // Respawn only AFTER the old listener's teardown has run. This one-shot is connected
+  // here (after wireSession's teardown), so Qt fires them in connection order: teardown
+  // first (clears serverKey_, guarded below), then this. Holds for the graceful <3s sync
+  // exit and the async kill path. serverRefreshing_ suppresses the auto re-arm so this is
+  // the SINGLE restart (no duplicate/orphaned session).
+  connect(c, &StreamController::runningChanged, this, [this](bool r){
+    if (r) return;
+    serverRefreshing_ = false;
+    startServerSession();      // fresh collectSettings() -> new --web/port/args
+    refreshWebClientUi();
+    updateStatus();
+  }, Qt::SingleShotConnection);
+  c->stop();
 }
 
 void MainWindow::addMonitorRow(const QString& key, const QString& label, const QString& transport,
@@ -1124,14 +1137,20 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
     updateStatus();
     if (key == serverKey_) {   // the primary Server-toggle listener ended
       serverKey_.clear();
-      const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - serverStartMs_;
-      if (shouldRearm(serverEnabled_, elapsed, serverEverConnected_)) {
-        QTimer::singleShot(0, this, [this]{ if (serverEnabled_) startServerSession(); });  // keep listening
-      } else if (serverEnabled_) {   // enabled but a fast failure (pkexec denied, port clash…)
-        serverEnabled_ = false;
-        QFile::remove(configDir() + "/server_enabled");
-        updateServerButton();
-        qWarning("server failed to start (exited immediately) — turned off. See the log above.");
+      if (serverRefreshing_) {
+        // Intentional refresh: refreshServer()'s one-shot restarts the listener with
+        // fresh settings. Skip the auto re-arm/disable so we don't spawn a duplicate
+        // (leaked) session or turn the server off.
+      } else {
+        const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - serverStartMs_;
+        if (shouldRearm(serverEnabled_, elapsed, serverEverConnected_)) {
+          QTimer::singleShot(0, this, [this]{ if (serverEnabled_) startServerSession(); });  // keep listening
+        } else if (serverEnabled_) {   // enabled but a fast failure (pkexec denied, port clash…)
+          serverEnabled_ = false;
+          QFile::remove(configDir() + "/server_enabled");
+          updateServerButton();
+          qWarning("server failed to start (exited immediately) — turned off. See the log above.");
+        }
       }
     }
   });

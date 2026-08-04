@@ -141,6 +141,7 @@ class MainWindow : public QMainWindow {
   qint64 serverStartMs_ = 0;         // start time of the current server session
   bool serverEverConnected_ = false; // did the current server session ever have a client
   QTimer serverRefreshTimer_;        // debounces streamer-setting/interface edits into a server restart
+  bool serverRefreshing_ = false;    // true while refreshServer()'s stop->restart is in flight (suppresses auto re-arm)
   bool lanEnabled_ = true;           // Network (Wi-Fi/Ethernet) transport toggle
   bool usbEnabled_ = true;           // USB (adb/tether/AOA) transport toggle
   QSet<QString> excludedAdapters_;   // adapter names unchecked (hidden from URL/QR)
