@@ -229,7 +229,7 @@ if(Qt6_FOUND)
     gui/autostart.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages)
-  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network GTest::gtest_main)
+  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network Qt6::Test GTest::gtest_main)
   gtest_discover_tests(droppix_gui_tests)
 endif()
 endif()  # DROPPIX_BUILD_TESTS
