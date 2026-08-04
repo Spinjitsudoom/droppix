@@ -60,6 +60,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   fps_->addItems({"30", "60"});
   fps_->setCurrentText("30");
   bitrate_ = new QSpinBox; bitrate_->setRange(500, 60000); bitrate_->setSuffix(" kbps"); bitrate_->setValue(8000);
+  bitrate_->setObjectName("bitrateSpin");
   port_ = new QSpinBox; port_->setRange(1024, 65535); port_->setValue(27000);
   refresh_ = new QComboBox; refresh_->addItems({"30", "60"}); refresh_->setCurrentText("60");
 
@@ -117,6 +118,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
 
   themeDark_ = new QRadioButton("Dark");
   themeLight_ = new QRadioButton("Light");
+  themeDark_->setObjectName("themeDark");
   themeDark_->setChecked(true);
   connect(themeDark_, &QRadioButton::toggled, this, [this](bool on){
     if (on) emit themeChangeRequested(Theme::Dark);
@@ -159,9 +161,28 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   root->addWidget(sessionCard);
   root->addWidget(appCard);
   root->addStretch();
+
+  // --- live server refresh trigger: streamer-affecting controls only. NOT
+  // overlay_ (already live via stdin), NOT autoConnect_ (discovery behavior),
+  // NOT the theme/app-pref controls (no server impact). ---
+  for (QRadioButton* r : {srcTest_, srcEvdi_})
+    connect(r, &QRadioButton::toggled, this, &SettingsPage::settingsChanged);
+  for (QComboBox* c : {resolution_, fps_, refresh_, orientation_})
+    connect(c, &QComboBox::currentIndexChanged, this, &SettingsPage::settingsChanged);
+  for (QSpinBox* s : {bitrate_, port_})
+    connect(s, QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsPage::settingsChanged);
+  for (QCheckBox* cb : {touch_, audio_, webClient_})
+    connect(cb, &QCheckBox::toggled, this, &SettingsPage::settingsChanged);
 }
 
 void SettingsPage::load(const Settings& s) {
+  // Block the streamer-trigger controls for the whole function: load() is a
+  // programmatic widgets<-settings sync, not a user edit, so it must not fire
+  // settingsChanged() (that signal exists to trigger a live server restart).
+  const QSignalBlocker bSrcT(srcTest_), bSrcE(srcEvdi_), bRes(resolution_), bFps(fps_),
+      bBit(bitrate_), bPort(port_), bRef(refresh_), bTouch(touch_), bAudio(audio_),
+      bOri(orientation_), bWeb(webClient_);
+
   srcEvdi_->setChecked(s.source == Settings::Source::Evdi);
   srcTest_->setChecked(s.source == Settings::Source::TestPattern);
   touch_->setChecked(s.touch);

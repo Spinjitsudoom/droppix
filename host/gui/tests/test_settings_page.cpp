@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 #include <QApplication>
+#include <QSignalSpy>
+#include <QSpinBox>
+#include <QRadioButton>
 #include "pages/settings_page.h"
 #include "settings.h"
 
@@ -36,4 +39,33 @@ TEST(SettingsPage, RoundTripsIncludingSurfacedFields) {
   EXPECT_EQ(out.fps, 60);
   EXPECT_EQ(out.width, 1920);
   EXPECT_EQ(out.height, 1080);
+}
+
+TEST(SettingsPage, EmitsSettingsChangedOnStreamerControl) {
+  ensureQApplication();
+  droppix::SettingsPage page;
+  QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
+  auto* bitrate = page.findChild<QSpinBox*>("bitrateSpin");
+  ASSERT_NE(bitrate, nullptr);
+  bitrate->setValue(bitrate->value() + 1000);
+  EXPECT_GE(spy.count(), 1);
+}
+
+TEST(SettingsPage, AppPrefControlsDoNotEmitSettingsChanged) {
+  ensureQApplication();
+  droppix::SettingsPage page;
+  QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
+  auto* dark = page.findChild<QRadioButton*>("themeDark");
+  ASSERT_NE(dark, nullptr);
+  dark->setChecked(true);
+  EXPECT_EQ(spy.count(), 0);
+}
+
+TEST(SettingsPage, LoadDoesNotEmitSettingsChanged) {
+  ensureQApplication();
+  droppix::SettingsPage page;
+  QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
+  droppix::Settings s; s.bitrate_kbps = 16000; s.port = 34000; s.webClient = true;
+  page.load(s);
+  EXPECT_EQ(spy.count(), 0);
 }

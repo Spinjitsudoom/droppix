@@ -30,6 +30,7 @@ class SettingsPage : public QWidget {
   void manageDevicesRequested();    // user clicked "Manage remembered devices"
   void overlayToggled(bool show);   // perf-overlay checkbox flipped (apply live if streaming)
   void themeChangeRequested(Theme t);   // user flipped the Dark/Light control
+  void settingsChanged();   // a streamer control changed (not app-prefs, not during load())
 
  private:
   // --- Stream card ---
