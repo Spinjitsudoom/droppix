@@ -60,6 +60,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   background: var(--warn);
   color: #1a1400;
 }
+/* Lives outside #topbar (which is hidden in session view) so it stays visible
+   in both connect and session views; pin to a free corner in both layouts. */
+#mock-badge {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 50;
+  box-shadow: var(--shadow);
+}
 
 #topbar button {
   background: var(--panel); color: var(--text); border: 1px solid var(--border);
