@@ -50,6 +50,8 @@ class MainWindow : public QMainWindow {
   void startServerSession();       // spawn the primary "server:<port>" listener on a free port
   void stopServerSession();        // stop the primary listener (no re-arm)
   void updateServerButton();       // reflect serverEnabled_ in the Status hero's server switch
+  void scheduleServerRefresh();    // (re)start the debounce timer; coalesces rapid setting edits
+  void refreshServer();            // debounced: stop+restart the live server session with fresh settings
   void onLanToggled(bool on);      // Network transport on/off (advertise + browse)
   void onUsbToggled(bool on);      // USB transport on/off (tether + AOA scanners)
   void refreshInterfaces();        // rebuild the per-adapter checkbox rows
@@ -138,6 +140,7 @@ class MainWindow : public QMainWindow {
   QString serverKey_;                // key of the live "server:<port>" session (empty = none)
   qint64 serverStartMs_ = 0;         // start time of the current server session
   bool serverEverConnected_ = false; // did the current server session ever have a client
+  QTimer serverRefreshTimer_;        // debounces streamer-setting/interface edits into a server restart
   bool lanEnabled_ = true;           // Network (Wi-Fi/Ethernet) transport toggle
   bool usbEnabled_ = true;           // USB (adb/tether/AOA) transport toggle
   QSet<QString> excludedAdapters_;   // adapter names unchecked (hidden from URL/QR)

@@ -198,6 +198,9 @@ MainWindow::MainWindow(QWidget* parent)
         s.controller->writeLine(QString("overlay %1").arg(on ? 1 : 0));
   });
   connect(settingsPage_, &SettingsPage::themeChangeRequested, this, &MainWindow::setTheme);
+  // Streamer-setting edits (source/resolution/bitrate/port/...) debounce into a live
+  // server restart so a running listener picks them up without a manual Stop/Start.
+  connect(settingsPage_, &SettingsPage::settingsChanged, this, &MainWindow::scheduleServerRefresh);
 
   auto* headerRow = new QHBoxLayout;
   headerRow->addWidget(logo); headerRow->addSpacing(10);
@@ -380,6 +383,10 @@ MainWindow::MainWindow(QWidget* parent)
   autoConnectTimer_.setSingleShot(true);
   autoConnectTimer_.setInterval(750);   // let a just-appeared tablet settle before WAKE
   connect(&autoConnectTimer_, &QTimer::timeout, this, &MainWindow::evaluateAutoConnect);
+
+  serverRefreshTimer_.setSingleShot(true);
+  serverRefreshTimer_.setInterval(600);   // coalesce rapid setting/interface edits into one restart
+  connect(&serverRefreshTimer_, &QTimer::timeout, this, &MainWindow::refreshServer);
 
   if (lanEnabled_ && browser_.available()) browser_.start();
   if (usbEnabled_) {
@@ -879,6 +886,18 @@ void MainWindow::stopServerSession() {
     if (s->controller) s->controller->stop();   // runningChanged(false) tears the session down
 }
 
+void MainWindow::scheduleServerRefresh() {
+  serverRefreshTimer_.start();   // (re)start the debounce; coalesces rapid edits
+}
+
+void MainWindow::refreshServer() {
+  if (!serverEnabled_) return;   // nothing to restart; settings apply on next Start
+  stopServerSession();
+  startServerSession();          // reads fresh collectSettings() -> new --web/port/args
+  refreshWebClientUi();
+  updateStatus();
+}
+
 void MainWindow::addMonitorRow(const QString& key, const QString& label, const QString& transport,
                                int port, bool mirror) {
   for (int i = 0; i < monitorsList_->count(); ++i)
@@ -1026,6 +1045,7 @@ void MainWindow::onLanToggled(bool on) {
   }
   refreshInterfaces();     // enable/disable the adapter checkboxes
   refreshWebClientUi();
+  scheduleServerRefresh();
 }
 
 void MainWindow::onUsbToggled(bool on) {
@@ -1041,6 +1061,7 @@ void MainWindow::onUsbToggled(bool on) {
     aoaClients_.clear();
     rebuildClientList();
   }
+  scheduleServerRefresh();
 }
 
 void MainWindow::refreshInterfaces() {
@@ -1060,6 +1081,7 @@ void MainWindow::refreshInterfaces() {
       else excludedAdapters_.insert(name);
       saveInterfacePrefs();
       refreshWebClientUi();   // primary URL/QR follows the first included adapter
+      scheduleServerRefresh();
     });
     adapterRows_->addWidget(cb);
   }
