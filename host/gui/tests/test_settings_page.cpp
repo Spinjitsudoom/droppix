@@ -57,7 +57,9 @@ TEST(SettingsPage, AppPrefControlsDoNotEmitSettingsChanged) {
   QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
   auto* dark = page.findChild<QRadioButton*>("themeDark");
   ASSERT_NE(dark, nullptr);
-  dark->setChecked(true);
+  dark->setChecked(false);  // themeDark_ starts checked; this is a real true->false
+                             // transition (and flips themeLight_ true via the radio
+                             // group), so either theme radio being wired would trip the spy
   EXPECT_EQ(spy.count(), 0);
 }
 
@@ -66,6 +68,7 @@ TEST(SettingsPage, LoadDoesNotEmitSettingsChanged) {
   droppix::SettingsPage page;
   QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
   droppix::Settings s; s.bitrate_kbps = 16000; s.port = 34000; s.webClient = true;
+  s.touch = true; s.audio = true; s.orientation = 90; s.fps = 60; s.refresh_hz = 30;
   page.load(s);
   EXPECT_EQ(spy.count(), 0);
 }
