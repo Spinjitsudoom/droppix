@@ -842,7 +842,8 @@ function loadSettings() {
     brightness: 1,
     contrast: 1,
     wallCol: 0,
-    wallRow: 0
+    wallRow: 0,
+    theme: "dark"
   };
   try {
     const raw = localStorage.getItem(KEY);
@@ -989,30 +990,262 @@ var MockOverlay = class {
   }
 };
 
+// src/theme.ts
+function nextTheme(t) {
+  return t === "dark" ? "light" : "dark";
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+}
+function initTheme() {
+  const t = loadSettings().theme;
+  applyTheme(t);
+  return t;
+}
+function setTheme(t) {
+  applyTheme(t);
+  const s = loadSettings();
+  s.theme = t;
+  saveSettings(s);
+}
+
+// src/pin.ts
+function normalizePin(raw) {
+  return raw.replace(/\D/g, "").slice(0, 6);
+}
+function pinComplete(code) {
+  return /^\d{6}$/.test(code);
+}
+function pinMatches(entered, served) {
+  return normalizePin(entered) === normalizePin(served);
+}
+
+// src/connect-view.ts
+var ConnectView = class {
+  constructor(onConnect) {
+    this.onConnect = onConnect;
+    this.wrap = document.getElementById("pin");
+    this.inputs = [...this.wrap.querySelectorAll("input")];
+    this.btn = document.getElementById("btn-connect");
+    this.statusEl = document.getElementById("c-status");
+    this.inputs.forEach((inp, i) => {
+      inp.addEventListener("input", () => {
+        inp.value = normalizePin(inp.value).slice(0, 1);
+        inp.classList.toggle("filled", !!inp.value);
+        this.wrap.classList.remove("err");
+        if (inp.value && i < this.inputs.length - 1) this.inputs[i + 1].focus();
+        this.sync();
+      });
+      inp.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !inp.value && i > 0) this.inputs[i - 1].focus();
+      });
+    });
+    this.btn.addEventListener("click", () => {
+      if (!this.btn.disabled) this.onConnect(this.value());
+    });
+    this.sync();
+  }
+  inputs;
+  btn;
+  wrap;
+  statusEl;
+  value() {
+    return normalizePin(this.inputs.map((i) => i.value).join(""));
+  }
+  sync() {
+    this.btn.disabled = !pinComplete(this.value());
+  }
+  showError(msg) {
+    this.wrap.classList.add("err");
+    this.statusEl.textContent = msg;
+  }
+  setStatus(msg) {
+    this.statusEl.textContent = msg;
+  }
+  reset() {
+    this.inputs.forEach((i) => {
+      i.value = "";
+      i.classList.remove("filled");
+    });
+    this.wrap.classList.remove("err");
+    this.sync();
+  }
+  focus() {
+    this.inputs[0]?.focus();
+  }
+};
+
+// src/session-controls.ts
+var IDLE_MS = 2500;
+var SessionControls = class {
+  app;
+  stage;
+  controls;
+  hideTimer = null;
+  constructor(opts) {
+    this.app = document.getElementById("app");
+    this.stage = document.getElementById("stage");
+    this.controls = document.getElementById("controls");
+    const bind = (act, fn) => {
+      this.controls.querySelector(`[data-act="${act}"]`)?.addEventListener("click", fn);
+    };
+    bind("fit", opts.onFit);
+    bind("mute", opts.onMute);
+    bind("hud", opts.onHud);
+    bind("settings", opts.onSettings);
+    bind("fullscreen", opts.onFullscreen);
+    bind("disconnect", opts.onDisconnect);
+    this.stage.addEventListener("pointermove", () => this.show());
+    this.stage.addEventListener("pointerdown", () => this.show());
+  }
+  /** Clears `.hidden` and (re)arms the auto-hide timer. */
+  show() {
+    this.controls.classList.remove("hidden");
+    if (this.hideTimer !== null) window.clearTimeout(this.hideTimer);
+    this.hideTimer = window.setTimeout(() => {
+      if (this.app.dataset.view === "session") this.controls.classList.add("hidden");
+    }, IDLE_MS);
+  }
+};
+
+// src/settings-drawer.ts
+function intOrZero(v) {
+  const n = parseInt(v, 10);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
+}
+function floatOr(v, fallback) {
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+var SettingsDrawer = class {
+  constructor(onChange) {
+    this.onChange = onChange;
+    this.seed();
+    this.quality.addEventListener("change", () => this.commit());
+    this.fps.addEventListener("change", () => this.commit());
+    this.audio.addEventListener("change", () => this.commit());
+    this.flip.addEventListener("change", () => this.commit());
+    this.brightness.addEventListener("input", () => this.commit());
+    this.contrast.addEventListener("input", () => this.commit());
+    this.wallCol.addEventListener("input", () => this.commit());
+    this.wallRow.addEventListener("input", () => this.commit());
+    this.name.addEventListener("input", () => this.commit());
+    this.bindSeg(this.fitSeg, (v) => {
+      this.fit = v;
+      this.commit();
+    });
+    this.bindSeg(this.themeSeg, (v) => {
+      this.theme = v;
+      setTheme(this.theme);
+      this.commit();
+    });
+    this.scrim.addEventListener("click", () => this.close());
+    this.closeBtn.addEventListener("click", () => this.close());
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.app.classList.contains("drawer-open")) this.close();
+    });
+  }
+  app = document.getElementById("app");
+  scrim = document.getElementById("scrim");
+  drawer = document.getElementById("drawer");
+  closeBtn = document.getElementById("drawer-close");
+  quality = document.getElementById("set-quality");
+  fps = document.getElementById("set-fps");
+  audio = document.getElementById("set-audio");
+  fitSeg = document.getElementById("set-fit");
+  flip = document.getElementById("set-flip");
+  brightness = document.getElementById("set-brightness");
+  contrast = document.getElementById("set-contrast");
+  wallCol = document.getElementById("set-wall-col");
+  wallRow = document.getElementById("set-wall-row");
+  name = document.getElementById("set-name");
+  themeSeg = document.getElementById("set-theme");
+  fit = "contain";
+  theme = "dark";
+  /**
+   * Reads current persisted settings into every control (values, checkboxes,
+   * and segmented/`.seg` active states). Called at construction and again at
+   * the start of every `open()` so a control-bar change (mute/fit) made
+   * while the drawer was closed is reflected, not clobbered by a stale cache.
+   */
+  seed() {
+    const s = loadSettings();
+    this.quality.value = String(s.bitrateKbps);
+    this.fps.value = String(s.fps);
+    this.audio.checked = s.audio;
+    this.flip.checked = s.flip;
+    this.brightness.value = String(s.brightness);
+    this.contrast.value = String(s.contrast);
+    this.wallCol.value = String(s.wallCol);
+    this.wallRow.value = String(s.wallRow);
+    this.name.value = s.name;
+    this.fit = s.fit;
+    this.theme = s.theme;
+    this.setSeg(this.fitSeg, this.fit);
+    this.setSeg(this.themeSeg, this.theme);
+  }
+  setSeg(el, value) {
+    el.querySelectorAll(".seg-btn").forEach((b) => {
+      const active = b.dataset.value === value;
+      b.classList.toggle("is-active", active);
+      b.setAttribute("aria-pressed", String(active));
+    });
+  }
+  bindSeg(el, onPick) {
+    el.querySelectorAll(".seg-btn").forEach((b) => {
+      b.addEventListener("click", () => {
+        const value = b.dataset.value;
+        this.setSeg(el, value);
+        onPick(value);
+      });
+    });
+  }
+  /** Reads every control, persists the merged settings, and notifies the caller. */
+  commit() {
+    const prev = loadSettings();
+    const s = {
+      ...prev,
+      bitrateKbps: parseInt(this.quality.value, 10) || prev.bitrateKbps,
+      fps: parseInt(this.fps.value, 10) || prev.fps,
+      audio: this.audio.checked,
+      fit: this.fit,
+      flip: this.flip.checked,
+      brightness: floatOr(this.brightness.value, 1),
+      contrast: floatOr(this.contrast.value, 1),
+      wallCol: intOrZero(this.wallCol.value),
+      wallRow: intOrZero(this.wallRow.value),
+      name: this.name.value,
+      theme: this.theme
+    };
+    saveSettings(s);
+    this.onChange(s);
+  }
+  open() {
+    this.seed();
+    this.scrim.hidden = false;
+    this.drawer.hidden = false;
+    this.app.classList.add("drawer-open");
+  }
+  close() {
+    this.app.classList.remove("drawer-open");
+  }
+};
+
 // src/main.ts
 var canvas = document.getElementById("video");
 var stage = document.getElementById("stage");
-var statusEl = document.getElementById("status");
-var pinCodeEl = document.getElementById("pin-code");
-var pinOk = document.getElementById("pin-ok");
-var btnConnect = document.getElementById("btn-connect");
-var btnDisconnect = document.getElementById("btn-disconnect");
-var btnFullscreen = document.getElementById("btn-fullscreen");
+var app = document.getElementById("app");
+var statusEl = document.getElementById("status-pill");
+var btnTheme = document.getElementById("btn-theme");
+var btnSettings = document.getElementById("btn-settings");
 var btnInstall = document.getElementById("btn-install");
-var fitSel = document.getElementById("fit-mode");
-var muteEl = document.getElementById("mute");
-var wallColEl = document.getElementById("wall-col");
-var wallRowEl = document.getElementById("wall-row");
 var hud = document.getElementById("hud");
 var clickLayer = document.getElementById("click-layer");
 var mockLog = document.getElementById("mock-log");
 var mockBackdrop = document.getElementById("mock-backdrop");
 var mockBadge = document.getElementById("mock-badge");
 var settings = loadSettings();
-fitSel.value = settings.fit;
-muteEl.checked = !settings.audio;
-wallColEl.value = String(settings.wallCol);
-wallRowEl.value = String(settings.wallRow);
+var theme = initTheme();
 var mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
 var video = new VideoPipeline(canvas, {
   flip: settings.flip,
@@ -1021,6 +1254,8 @@ var video = new VideoPipeline(canvas, {
 });
 var audio = new AudioPlayer();
 video.setClock(() => audio.mediaPtsUs);
+video.setFit(settings.fit);
+mock.setFit(settings.fit);
 var transport = null;
 var input = null;
 var deferredPrompt = null;
@@ -1030,34 +1265,43 @@ var lastBytesAt = performance.now();
 var kbps = 0;
 var isMock = false;
 var burnIn = false;
+var pairingCode = "------";
 function setStatus(s) {
   statusEl.textContent = s;
+  statusEl.hidden = false;
 }
-function syncConnectEnabled() {
-  btnConnect.disabled = !pinOk.checked;
+var connectView = new ConnectView((code) => {
+  void tryConnect(code);
+});
+async function tryConnect(code) {
+  if (!isMock && !pinMatches(code, pairingCode)) {
+    connectView.showError("That code doesn't match your PC \u2014 check the screen");
+    return;
+  }
+  app.dataset.view = "session";
+  controls.show();
+  await connect();
 }
 async function loadConfig() {
   try {
     const r = await fetch("./config.json", { cache: "no-store" });
     if (!r.ok) throw new Error(String(r.status));
     const j = await r.json();
-    pinCodeEl.textContent = j.pairingCode ?? "------";
+    pairingCode = j.pairingCode ?? "------";
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
     mock.showIdle();
     if (isMock) {
       mockBadge.hidden = false;
-      muteEl.checked = true;
       settings.audio = false;
       saveSettings(settings);
-      pinOk.checked = true;
-      syncConnectEnabled();
+      app.dataset.view = "session";
+      controls.show();
       setStatus("Ready - Connect for server video + audio");
       if (typeof VideoDecoder === "undefined") {
         setStatus("WebCodecs VideoDecoder missing - use Chromium");
       } else {
         window.setTimeout(() => {
-          if (!btnDisconnect.hidden) return;
           void connect();
         }, 300);
       }
@@ -1066,8 +1310,10 @@ async function loadConfig() {
       setStatus("Confirm PIN matches the PC, then Connect");
     }
   } catch (e) {
-    pinCodeEl.textContent = "------";
-    setStatus(`config.json unavailable (${e}) - is the host serving with --web?`);
+    pairingCode = "------";
+    const msg = `Can't reach the PC \u2014 is droppix serving with --web? (${e})`;
+    setStatus(msg);
+    connectView.setStatus(msg);
   }
 }
 function wireTransport() {
@@ -1078,12 +1324,13 @@ function wireTransport() {
       setStatus(`Disconnected: ${r}`);
       transport = null;
       connecting = false;
-      btnConnect.hidden = false;
-      btnDisconnect.hidden = true;
       hud.hidden = true;
       video.close();
       audio.close();
       mock.showIdle();
+      app.dataset.view = "connect";
+      connectView.reset();
+      connectView.setStatus(`Disconnected: ${r}`);
     },
     onConfig: (w, h) => {
       const audioHint = audio.contextState === "suspended" ? " - tap for audio" : "";
@@ -1121,10 +1368,8 @@ async function connect() {
   connecting = true;
   try {
     settings = loadSettings();
-    settings.audio = !muteEl.checked;
-    saveSettings(settings);
     await audio.unlock();
-    audio.setMuted(muteEl.checked);
+    audio.setMuted(!settings.audio);
     audio.onStateChange = (s) => {
       if (s === "running" && statusEl.textContent?.includes("tap for audio")) {
         setStatus(statusEl.textContent.replace(" - tap for audio", ""));
@@ -1140,13 +1385,11 @@ async function connect() {
       name: settings.name,
       id: settings.id,
       fps: settings.fps,
-      audioWanted: settings.audio && !muteEl.checked ? 1 : 0,
+      audioWanted: settings.audio ? 1 : 0,
       bitrateKbps: settings.bitrateKbps,
       wallCol: settings.wallCol,
       wallRow: settings.wallRow
     });
-    btnConnect.hidden = true;
-    btnDisconnect.hidden = false;
     canvas.focus();
     if (isMock && !burnIn) mock.startServerMarkPoll();
   } catch (e) {
@@ -1164,41 +1407,50 @@ function disconnect() {
   audio.close();
   mock.showIdle();
   hud.hidden = true;
-  btnConnect.hidden = false;
-  btnDisconnect.hidden = true;
-  setStatus(isMock ? "Disconnected" : "Disconnected");
+  setStatus("Disconnected");
+  app.dataset.view = "connect";
+  connectView.reset();
 }
-pinOk.addEventListener("change", syncConnectEnabled);
-btnConnect.addEventListener("click", () => void connect());
-btnDisconnect.addEventListener("click", disconnect);
-btnFullscreen.addEventListener("click", () => toggleFullscreen(stage));
-fitSel.addEventListener("change", () => {
-  settings.fit = fitSel.value;
+var drawer = new SettingsDrawer((s) => {
+  settings = s;
+  theme = s.theme;
+  video.setAdjust(s.flip, s.brightness, s.contrast);
+  video.setFit(s.fit);
+  input?.setFit(s.fit);
+  mock.setFit(s.fit);
+  audio.setMuted(!s.audio);
+});
+function openDrawer() {
+  drawer.open();
+}
+function cycleFit() {
+  const order = ["contain", "cover", "stretch"];
+  settings.fit = order[(order.indexOf(settings.fit) + 1) % 3];
   saveSettings(settings);
-  input?.setFit(settings.fit);
   video.setFit(settings.fit);
+  input?.setFit(settings.fit);
   mock.setFit(settings.fit);
-});
-video.setFit(settings.fit);
-mock.setFit(settings.fit);
-muteEl.addEventListener("change", () => {
-  audio.setMuted(muteEl.checked);
-  settings.audio = !muteEl.checked;
-  saveSettings(settings);
-});
-function readWallCell(el) {
-  const n = Math.floor(Number(el.value));
-  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
-function saveWall() {
-  settings.wallCol = readWallCell(wallColEl);
-  settings.wallRow = readWallCell(wallRowEl);
-  wallColEl.value = String(settings.wallCol);
-  wallRowEl.value = String(settings.wallRow);
-  saveSettings(settings);
-}
-wallColEl.addEventListener("change", saveWall);
-wallRowEl.addEventListener("change", saveWall);
+var controls = new SessionControls({
+  onDisconnect: disconnect,
+  onFullscreen: () => toggleFullscreen(stage),
+  onMute: () => {
+    settings.audio = !settings.audio;
+    saveSettings(settings);
+    audio.setMuted(!settings.audio);
+  },
+  onHud: () => {
+    showHud = !showHud;
+    hud.hidden = !showHud;
+  },
+  onSettings: () => openDrawer(),
+  onFit: () => cycleFit()
+});
+btnTheme.addEventListener("click", () => {
+  theme = nextTheme(theme);
+  setTheme(theme);
+});
+btnSettings.addEventListener("click", () => drawer.open());
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {
     if (!(e.target instanceof HTMLInputElement)) {
@@ -1234,6 +1486,5 @@ dbg.__droppixDebug = () => ({
   connected: transport !== null
 });
 dbg.__droppixSuspendAudio = () => audio.suspendForTest();
-syncConnectEnabled();
 void loadConfig();
 //# sourceMappingURL=main.js.map

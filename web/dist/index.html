@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#12121a" />
+  <meta name="theme-color" content="#14181d" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -14,40 +14,176 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div id="app">
-    <header id="toolbar">
-      <div class="brand">droppix</div>
-      <div id="pin-row" class="row">
-        <span>PIN <strong id="pin-code">------</strong></span>
-        <label class="check"><input type="checkbox" id="pin-ok" /> PIN matches PC</label>
-      </div>
-      <div class="row actions">
-        <button id="btn-connect" type="button" disabled>Connect</button>
-        <button id="btn-disconnect" type="button" hidden>Disconnect</button>
-        <button id="btn-fullscreen" type="button">Fullscreen</button>
-        <select id="fit-mode" aria-label="Fit mode">
-          <option value="contain">Contain</option>
-          <option value="cover">Cover</option>
-          <option value="stretch">Stretch</option>
-        </select>
-        <label class="check"><input type="checkbox" id="mute" /> Mute</label>
-        <label class="wall" title="Wall grid cell — position this screen at column,row of the extended desktop (0,0 = default, right of the main monitor)">Wall
-          <input type="number" id="wall-col" min="0" max="15" step="1" value="0" aria-label="Wall column" />
-          <span>,</span>
-          <input type="number" id="wall-row" min="0" max="15" step="1" value="0" aria-label="Wall row" />
-        </label>
-        <button id="btn-install" type="button" hidden>Install</button>
-      </div>
-      <div id="mock-badge" class="mock-badge" hidden>MOCK</div>
-      <div id="status" class="status">Idle</div>
+  <div id="app" data-view="connect">
+    <header id="topbar">
+      <div class="brand">droppi<span>x</span></div>
+      <span id="mock-badge" class="mock-badge" hidden>MOCK</span>
+      <button id="btn-install" type="button" hidden>Install</button>
+      <button id="btn-settings" type="button" aria-label="Open settings">&#9881;</button>
+      <button id="btn-theme" type="button" aria-label="Toggle theme">&#9680;</button>
     </header>
+
+    <!-- CONNECT VIEW -->
+    <section id="connect">
+      <div class="card">
+        <h1>Enter your PC's code</h1>
+        <p class="lede">Open droppix on your computer and type the 6-digit code it shows.</p>
+        <div id="pin" class="code">
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 1" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 2" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 3" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 4" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 5" />
+          <input inputmode="numeric" maxlength="1" aria-label="Pairing digit 6" />
+        </div>
+        <button id="btn-connect" class="btn-primary" type="button" disabled>Connect</button>
+        <div id="c-status" class="status">Type the code shown on your PC</div>
+      </div>
+    </section>
+
+    <!-- SESSION VIEW -->
     <main id="stage">
       <canvas id="mock-backdrop" hidden aria-hidden="true"></canvas>
       <canvas id="video" tabindex="0"></canvas>
       <div id="click-layer" hidden aria-hidden="true"></div>
       <pre id="mock-log" hidden></pre>
       <div id="hud" hidden></div>
+      <div id="status-pill" hidden></div>
+      <div id="controls" class="controls">
+        <button class="cbtn" type="button" data-act="fit" aria-label="Change fit mode">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <rect x="7.5" y="7.5" width="9" height="9" rx="1" />
+          </svg>
+        </button>
+        <button class="cbtn" type="button" data-act="mute" aria-label="Mute audio">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+          </svg>
+        </button>
+        <button class="cbtn" type="button" data-act="hud" aria-label="Toggle stats overlay">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+          </svg>
+        </button>
+        <button class="cbtn accent" type="button" data-act="settings" aria-label="Open settings">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        <button class="cbtn" type="button" data-act="fullscreen" aria-label="Toggle fullscreen">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+            <path d="M16 3h3a2 2 0 0 1 2 2v3" />
+            <path d="M8 21H5a2 2 0 0 1-2-2v-3" />
+            <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+          </svg>
+        </button>
+        <button class="cbtn warn" type="button" data-act="disconnect" aria-label="Disconnect">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+            <line x1="12" y1="2" x2="12" y2="12" />
+          </svg>
+        </button>
+      </div>
+      <div class="hinttap">Tap to show controls</div>
     </main>
+
+    <div id="scrim" hidden></div>
+    <aside id="drawer" hidden role="dialog" aria-label="Settings">
+      <div class="drawer-head">
+        <h2>Settings</h2>
+        <button id="drawer-close" class="icon-btn" type="button" aria-label="Close settings">&times;</button>
+      </div>
+      <div class="drawer-body">
+        <section class="d-section">
+          <h3>Stream</h3>
+          <div class="d-row">
+            <label for="set-quality">Quality</label>
+            <select id="set-quality">
+              <option value="4000">Low</option>
+              <option value="8000">Medium</option>
+              <option value="16000">High</option>
+            </select>
+          </div>
+          <div class="d-row">
+            <label for="set-fps">Frame rate</label>
+            <select id="set-fps">
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
+          <div class="d-row">
+            <label for="set-audio">Audio</label>
+            <label class="tgl">
+              <input type="checkbox" id="set-audio" />
+              <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Display</h3>
+          <div class="d-row">
+            <span class="d-label">Fit</span>
+            <div id="set-fit" class="seg" role="group" aria-label="Fit mode">
+              <button type="button" class="seg-btn" data-value="contain">Contain</button>
+              <button type="button" class="seg-btn" data-value="cover">Cover</button>
+              <button type="button" class="seg-btn" data-value="stretch">Stretch</button>
+            </div>
+          </div>
+          <div class="d-row">
+            <label for="set-flip">Flip horizontal</label>
+            <label class="tgl">
+              <input type="checkbox" id="set-flip" />
+              <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            </label>
+          </div>
+          <div class="d-row d-row-range">
+            <label for="set-brightness">Brightness</label>
+            <input type="range" id="set-brightness" min="0.2" max="2" step="0.05" />
+          </div>
+          <div class="d-row d-row-range">
+            <label for="set-contrast">Contrast</label>
+            <input type="range" id="set-contrast" min="0.2" max="2" step="0.05" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Wall</h3>
+          <div class="d-row">
+            <label for="set-wall-col">Column</label>
+            <input type="number" id="set-wall-col" min="0" step="1" inputmode="numeric" />
+          </div>
+          <div class="d-row">
+            <label for="set-wall-row">Row</label>
+            <input type="number" id="set-wall-row" min="0" step="1" inputmode="numeric" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Device</h3>
+          <div class="d-row">
+            <label for="set-name">Name</label>
+            <input type="text" id="set-name" autocomplete="off" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Appearance</h3>
+          <div class="d-row">
+            <span class="d-label">Theme</span>
+            <div id="set-theme" class="seg" role="group" aria-label="Theme">
+              <button type="button" class="seg-btn" data-value="dark">Dark</button>
+              <button type="button" class="seg-btn" data-value="light">Light</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
   </div>
   <script type="module" src="./main.js"></script>
 </body>

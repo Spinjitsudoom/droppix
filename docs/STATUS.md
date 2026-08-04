@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-08-03 on `master` (261/261 host tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle).
+**Last verified:** 2026-08-04 on `master` (261/261 host tests, 16/16 web tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle; web PWA client redesign shipped — PIN-entry connect screen, in-session auto-hiding control bar, settings drawer, dual dark/light theme with persisted toggle).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -15,7 +15,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open. X11 reverse-PRIME evdi (separate-GPU provider, e.g. Cinnamon/Xorg) fixed 2026-07-26: provider link + auto-enable now run concurrently with the mode-wait, not after |
-| Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir |
+| Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir; redesigned (2026-08-04) into a spacedesk-style shell: Android-style 6-digit PIN-entry connect screen (replacing the old "PIN matches PC" checkbox), an in-session auto-hiding player-style control bar, a settings drawer surfacing every client setting (quality, fps, audio, fit, flip, brightness, contrast, wall, device name), and a dark/light theme with a persisted toggle |
 | In-GUI Debug log console (F12) | **Shipped** — dockable panel capturing streamer + GUI logs |
 
 ## Feature matrix (code on master)
@@ -50,6 +50,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Persistent Server toggle (re-arm + restore) | Shipped | `host/gui/server_control.*`, `host/gui/main_window.*` |
 | Communication Interfaces panel (adapter list + LAN/USB toggles) | Shipped | `host/gui/lan_ifaces.*`, `host/gui/main_window.*` |
 | Host GUI redesign (sectioned `QStackedWidget`, Status hero, dual theme) | Shipped | `host/gui/pages/{status,connections,interfaces,settings,about}_page.*`, `host/gui/style.h`, `host/gui/theme{,_pref}.*`, `host/gui/main_window.*` |
+| Web PWA client redesign (PIN-entry connect screen, in-session control bar, settings drawer, dual theme) | Shipped | `web/src/{pin,theme,connect-view,session-controls,settings-drawer}.ts`, `web/public/{index.html,styles.css}` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)

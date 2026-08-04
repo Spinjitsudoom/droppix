@@ -16,6 +16,17 @@ function kinds(inputs) {
   return new Set(inputs.map((i) => i.kind));
 }
 
+/**
+ * The in-session control bar auto-hides (opacity:0, pointer-events:none)
+ * 2.5s after the last pointer activity over #stage (see session-controls.ts).
+ * A stray pointer move over the video re-arms it just before we click one of
+ * its buttons, so a slow poll earlier in the test can't leave it un-clickable.
+ */
+async function wakeControls(page, box) {
+  await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5);
+  await page.mouse.move(box.x + box.width * 0.5 + 3, box.y + box.height * 0.5 + 3);
+}
+
 test.describe("droppix web PWA vs mock host", () => {
   test("connect, stream, input, fit, mute", async ({ page, request }) => {
     const consoleErrors = [];
@@ -26,14 +37,14 @@ test.describe("droppix web PWA vs mock host", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await fetchInputs(request, { clear: true });
 
-    await expect(page.locator("#pin-code")).toHaveText("123456");
     await expect(page.locator("#mock-badge")).toBeVisible();
     // Disconnected/idle: no local mock wallpaper - black stage only.
     await expect(page.locator("#mock-backdrop")).toBeHidden();
 
-    // Mock auto-checks PIN and auto-Connects; wait for stream.
-    await expect(page.locator("#btn-disconnect")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#status")).toContainText(/Streaming \d+x\d+/, {
+    // Mock mode (config.json mock:true) skips the PIN-entry connect screen
+    // entirely and auto-connects (main.ts loadConfig); wait for the stream.
+    await expect(page.locator('[data-act="disconnect"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#status-pill")).toContainText(/Streaming \d+x\d+/, {
       timeout: 15_000,
     });
 
@@ -112,8 +123,11 @@ test.describe("droppix web PWA vs mock host", () => {
       )
       .toBe("running");
 
-    // Unmute (mock starts muted) and confirm PCM packets actually flow.
-    await page.locator("#mute").uncheck();
+    // Unmute (mock starts muted) and confirm PCM packets actually flow. Mute
+    // is now a control-bar toggle button (data-act="mute"), not a checkbox;
+    // wake the auto-hiding control bar first so the click actually lands.
+    await wakeControls(page, box);
+    await page.locator('[data-act="mute"]').click();
     await expect
       .poll(
         async () => page.evaluate(() => window.__droppixDebug?.()?.audio?.packets ?? 0),
@@ -136,23 +150,41 @@ test.describe("droppix web PWA vs mock host", () => {
       )
       .toBeGreaterThan(0);
 
+    // Fit and audio are no longer toolbar controls - both moved into the
+    // settings drawer, opened from the control bar's gear button (the
+    // topbar's #btn-settings is hidden while data-view="session").
+    await wakeControls(page, box);
+    await page.locator('[data-act="settings"]').click();
+    await expect(page.locator("#app")).toHaveClass(/drawer-open/);
+
     for (const mode of ["cover", "stretch", "contain"]) {
-      await page.locator("#fit-mode").selectOption(mode);
-      await expect(page.locator("#fit-mode")).toHaveValue(mode);
+      const seg = page.locator(`#set-fit .seg-btn[data-value="${mode}"]`);
+      await seg.click();
+      await expect(seg).toHaveAttribute("aria-pressed", "true");
     }
 
-    await page.locator("#mute").check();
-    await expect(page.locator("#mute")).toBeChecked();
-    await page.locator("#mute").uncheck();
+    // Drawer's Audio checkbox mirrors the control bar's mute toggle. It
+    // should read checked (audio enabled) after the unmute above.
+    await expect(page.locator("#set-audio")).toBeChecked();
+    await page.locator("#set-audio").uncheck();
+    await expect(page.locator("#set-audio")).not.toBeChecked();
+    await page.locator("#set-audio").check();
+    await expect(page.locator("#set-audio")).toBeChecked();
+
+    await page.locator("#drawer-close").click();
+    await expect(page.locator("#app")).not.toHaveClass(/drawer-open/);
 
     await page.screenshot({
       path: path.join(OUT, "streaming.png"),
       fullPage: true,
     });
 
-    await page.locator("#btn-disconnect").click();
+    // Screenshot + drawer close above may have idled the control bar out;
+    // wake it before the disconnect click.
+    await wakeControls(page, box);
+    await page.locator('[data-act="disconnect"]').click();
     await expect(page.locator("#btn-connect")).toBeVisible();
-    await expect(page.locator("#status")).toContainText(/Disconnected/i);
+    await expect(page.locator("#status-pill")).toContainText(/Disconnected/i);
 
     // Regression: no stale frames may linger - canvas must be fully black.
     await expect
@@ -197,8 +229,8 @@ test.describe("droppix web PWA vs mock host", () => {
 
   test("GEEKS server-side stats overlay + /debug/stats", async ({ page, request }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
-    await expect(page.locator("#btn-disconnect")).toBeVisible({ timeout: 10_000 });
-    await expect(page.locator("#status")).toContainText(/Streaming \d+x\d+/, { timeout: 15_000 });
+    await expect(page.locator('[data-act="disconnect"]')).toBeVisible({ timeout: 10_000 });
+    await expect(page.locator("#status-pill")).toContainText(/Streaming \d+x\d+/, { timeout: 15_000 });
 
     // Wait for real decoded pixels so a session + stats exist.
     await expect

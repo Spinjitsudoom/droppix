@@ -1,7 +1,7 @@
 # Web PWA client redesign (spacedesk language + PIN entry + settings drawer)
 
 **Date:** 2026-08-03
-**Status:** Design approved; implementation plan pending.
+**Status:** Shipped on master (2026-08-04).
 **Roadmap:** UI overhaul — the **web-client** half (host GUI shipped 2026-08-03, see `2026-08-03-host-gui-redesign-design.md`). Carries the same spacedesk visual language to `web/`.
 **Mockup:** approved interactive preview — artifact `5ffdf743-d81e-4a17-bf9e-d059677b0ed3` (connect screen with 6-digit PIN entry, in-session auto-hiding control bar, settings drawer, dark/light toggle).
 
