@@ -19,6 +19,7 @@
       <div class="brand">droppi<span>x</span></div>
       <span id="mock-badge" class="mock-badge" hidden>MOCK</span>
       <button id="btn-install" type="button" hidden>Install</button>
+      <button id="btn-settings" type="button" aria-label="Open settings">&#9881;</button>
       <button id="btn-theme" type="button" aria-label="Toggle theme">&#9680;</button>
     </header>
 
@@ -92,7 +93,97 @@
     </main>
 
     <div id="scrim" hidden></div>
-    <aside id="drawer" hidden></aside>
+    <aside id="drawer" hidden role="dialog" aria-label="Settings">
+      <div class="drawer-head">
+        <h2>Settings</h2>
+        <button id="drawer-close" class="icon-btn" type="button" aria-label="Close settings">&times;</button>
+      </div>
+      <div class="drawer-body">
+        <section class="d-section">
+          <h3>Stream</h3>
+          <div class="d-row">
+            <label for="set-quality">Quality</label>
+            <select id="set-quality">
+              <option value="4000">Low</option>
+              <option value="8000">Medium</option>
+              <option value="16000">High</option>
+            </select>
+          </div>
+          <div class="d-row">
+            <label for="set-fps">Frame rate</label>
+            <select id="set-fps">
+              <option value="30">30 fps</option>
+              <option value="60">60 fps</option>
+            </select>
+          </div>
+          <div class="d-row">
+            <label for="set-audio">Audio</label>
+            <label class="tgl">
+              <input type="checkbox" id="set-audio" />
+              <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            </label>
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Display</h3>
+          <div class="d-row">
+            <span class="d-label">Fit</span>
+            <div id="set-fit" class="seg" role="group" aria-label="Fit mode">
+              <button type="button" class="seg-btn" data-value="contain">Contain</button>
+              <button type="button" class="seg-btn" data-value="cover">Cover</button>
+              <button type="button" class="seg-btn" data-value="stretch">Stretch</button>
+            </div>
+          </div>
+          <div class="d-row">
+            <label for="set-flip">Flip horizontal</label>
+            <label class="tgl">
+              <input type="checkbox" id="set-flip" />
+              <span class="tgl-track"><span class="tgl-thumb"></span></span>
+            </label>
+          </div>
+          <div class="d-row d-row-range">
+            <label for="set-brightness">Brightness</label>
+            <input type="range" id="set-brightness" min="0.2" max="2" step="0.05" />
+          </div>
+          <div class="d-row d-row-range">
+            <label for="set-contrast">Contrast</label>
+            <input type="range" id="set-contrast" min="0.2" max="2" step="0.05" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Wall</h3>
+          <div class="d-row">
+            <label for="set-wall-col">Column</label>
+            <input type="number" id="set-wall-col" min="0" step="1" inputmode="numeric" />
+          </div>
+          <div class="d-row">
+            <label for="set-wall-row">Row</label>
+            <input type="number" id="set-wall-row" min="0" step="1" inputmode="numeric" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Device</h3>
+          <div class="d-row">
+            <label for="set-name">Name</label>
+            <input type="text" id="set-name" autocomplete="off" />
+          </div>
+        </section>
+
+        <section class="d-section">
+          <h3>Appearance</h3>
+          <div class="d-row">
+            <span class="d-label">Theme</span>
+            <div id="set-theme" class="seg" role="group" aria-label="Theme">
+              <button type="button" class="seg-btn" data-value="dark">Dark</button>
+              <button type="button" class="seg-btn" data-value="light">Light</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </aside>
   </div>
   <script type="module" src="./main.js"></script>
 </body>

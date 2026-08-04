@@ -9,6 +9,7 @@ import { initTheme, setTheme, nextTheme } from "./theme.ts";
 import { pinMatches } from "./pin.ts";
 import { ConnectView } from "./connect-view.ts";
 import { SessionControls } from "./session-controls.ts";
+import { SettingsDrawer } from "./settings-drawer.ts";
 import type { FitMode } from "./fit.ts";
 
 const canvas = document.getElementById("video") as HTMLCanvasElement;
@@ -16,6 +17,7 @@ const stage = document.getElementById("stage") as HTMLElement;
 const app = document.getElementById("app")!;
 const statusEl = document.getElementById("status-pill") as HTMLElement;
 const btnTheme = document.getElementById("btn-theme") as HTMLButtonElement;
+const btnSettings = document.getElementById("btn-settings") as HTMLButtonElement;
 const btnInstall = document.getElementById("btn-install") as HTMLButtonElement;
 const hud = document.getElementById("hud") as HTMLElement;
 const clickLayer = document.getElementById("click-layer") as HTMLElement;
@@ -228,10 +230,18 @@ function disconnect() {
   connectView.reset();
 }
 
-// Stub: the settings drawer itself is Task 5. The control bar's Settings
-// button already needs somewhere to call today.
+const drawer = new SettingsDrawer((s) => {
+  settings = s;
+  theme = s.theme;
+  video.setAdjust(s.flip, s.brightness, s.contrast);
+  video.setFit(s.fit);
+  input?.setFit(s.fit);
+  mock.setFit(s.fit);
+  audio.setMuted(!s.audio);
+});
+
 function openDrawer() {
-  /* wired in Task 5 */
+  drawer.open();
 }
 
 function cycleFit() {
@@ -263,6 +273,8 @@ btnTheme.addEventListener("click", () => {
   theme = nextTheme(theme);
   setTheme(theme);
 });
+
+btnSettings.addEventListener("click", () => drawer.open());
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {

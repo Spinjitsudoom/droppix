@@ -257,3 +257,108 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   .card { padding: 2.25rem 2rem; }
   .code input { width: 3rem; height: 3.6rem; font-size: 1.7rem; }
 }
+
+/* ---------- Settings drawer ---------- */
+#scrim {
+  position: fixed; inset: 0; z-index: 10;
+  background: rgba(0, 0, 0, 0.5);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+#app.drawer-open #scrim { opacity: 1; pointer-events: auto; }
+
+#drawer {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(22rem, 90vw);
+  display: flex; flex-direction: column;
+  background: var(--panel); border-left: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  z-index: 11;
+}
+#app.drawer-open #drawer { transform: none; }
+#app:not(.drawer-open) #drawer { pointer-events: none; }
+
+.drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+  flex: none;
+}
+.drawer-head h2 { margin: 0; font-size: 1.05rem; color: var(--text); }
+.icon-btn {
+  display: grid; place-items: center; width: 32px; height: 32px;
+  background: transparent; color: var(--muted); border: none; border-radius: 6px;
+  font-size: 1.3rem; line-height: 1; cursor: pointer;
+}
+.icon-btn:hover { background: var(--panel-2); color: var(--text); }
+
+.drawer-body { flex: 1; overflow-y: auto; padding: 0.25rem 1.25rem 1.5rem; }
+
+.d-section { padding: 0.9rem 0; border-bottom: 1px solid var(--border); }
+.d-section:last-child { border-bottom: none; }
+.d-section h3 {
+  margin: 0 0 0.6rem; font-size: 0.72rem; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+}
+
+.d-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.5rem 0;
+}
+.d-row label, .d-label { font-size: 0.9rem; color: var(--text); }
+.d-row select, .d-row input[type="text"], .d-row input[type="number"] {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border-strong); border-radius: 6px;
+  padding: 0.35rem 0.5rem; font-size: 0.9rem; min-width: 0;
+}
+.d-row input[type="number"] { width: 4.5rem; }
+.d-row input[type="text"] { width: 100%; max-width: 12rem; }
+.d-row-range { flex-direction: column; align-items: stretch; gap: 0.35rem; }
+.d-row-range input[type="range"] { width: 100%; accent-color: var(--accent); }
+
+/* Toggle switch */
+.tgl { position: relative; display: inline-block; width: 42px; height: 24px; flex: none; }
+.tgl input {
+  position: absolute; inset: 0; z-index: 1;
+  opacity: 0; margin: 0; cursor: pointer;
+}
+.tgl-track {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.15s ease;
+}
+.tgl-thumb {
+  position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+  border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease;
+}
+.tgl input:checked ~ .tgl-track { background: var(--accent); }
+.tgl input:checked ~ .tgl-track .tgl-thumb { transform: translateX(18px); }
+.tgl input:focus-visible ~ .tgl-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Segmented control */
+.seg {
+  display: flex; gap: 2px; padding: 2px;
+  background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: 8px;
+}
+.seg-btn {
+  flex: 1; padding: 0.35rem 0.6rem; font-size: 0.82rem; text-align: center;
+  background: transparent; color: var(--muted); border: none; border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.is-active { background: var(--accent); color: var(--accent-ink); }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (max-width: 560px) {
+  #drawer {
+    top: auto; left: 0; right: 0; bottom: 0; width: 100%;
+    max-height: 80vh;
+    border-left: none; border-top: 1px solid var(--border-strong);
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+  }
+}
