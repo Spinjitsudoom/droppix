@@ -16,9 +16,13 @@ function floatOr(v: string, fallback: number): number {
 
 /**
  * Side-drawer (bottom-sheet on narrow viewports) surfacing every
- * `ClientSettings` field. Seeded once from `loadSettings()` at construction;
- * every control change re-reads the whole control set, persists it, and
- * hands the result to the caller's `onChange` for live-apply.
+ * `ClientSettings` field. Re-seeded from `loadSettings()` on construction AND
+ * on every `open()` — `audio`/`fit` also have an independent write path (the
+ * control bar's Mute/Fit buttons, and mock mode's async auto-mute), so
+ * caching seeded values only at construction would let a stale cached value
+ * clobber a control-bar change on the next drawer edit. Every control change
+ * re-reads the whole control set, persists it, and hands the result to the
+ * caller's `onChange` for live-apply.
  */
 export class SettingsDrawer {
   private readonly app = document.getElementById("app")!;
@@ -42,20 +46,7 @@ export class SettingsDrawer {
   private theme: Theme = "dark";
 
   constructor(private readonly onChange: (s: ClientSettings) => void) {
-    const s = loadSettings();
-    this.quality.value = String(s.bitrateKbps);
-    this.fps.value = String(s.fps);
-    this.audio.checked = s.audio;
-    this.flip.checked = s.flip;
-    this.brightness.value = String(s.brightness);
-    this.contrast.value = String(s.contrast);
-    this.wallCol.value = String(s.wallCol);
-    this.wallRow.value = String(s.wallRow);
-    this.name.value = s.name;
-    this.fit = s.fit;
-    this.theme = s.theme;
-    this.setSeg(this.fitSeg, this.fit);
-    this.setSeg(this.themeSeg, this.theme);
+    this.seed();
 
     this.quality.addEventListener("change", () => this.commit());
     this.fps.addEventListener("change", () => this.commit());
@@ -82,6 +73,29 @@ export class SettingsDrawer {
     window.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.app.classList.contains("drawer-open")) this.close();
     });
+  }
+
+  /**
+   * Reads current persisted settings into every control (values, checkboxes,
+   * and segmented/`.seg` active states). Called at construction and again at
+   * the start of every `open()` so a control-bar change (mute/fit) made
+   * while the drawer was closed is reflected, not clobbered by a stale cache.
+   */
+  private seed(): void {
+    const s = loadSettings();
+    this.quality.value = String(s.bitrateKbps);
+    this.fps.value = String(s.fps);
+    this.audio.checked = s.audio;
+    this.flip.checked = s.flip;
+    this.brightness.value = String(s.brightness);
+    this.contrast.value = String(s.contrast);
+    this.wallCol.value = String(s.wallCol);
+    this.wallRow.value = String(s.wallRow);
+    this.name.value = s.name;
+    this.fit = s.fit;
+    this.theme = s.theme;
+    this.setSeg(this.fitSeg, this.fit);
+    this.setSeg(this.themeSeg, this.theme);
   }
 
   private setSeg(el: HTMLElement, value: string): void {
@@ -125,6 +139,7 @@ export class SettingsDrawer {
   }
 
   open(): void {
+    this.seed();
     this.scrim.hidden = false;
     this.drawer.hidden = false;
     this.app.classList.add("drawer-open");
