@@ -16,6 +16,7 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
+| G-2026-08-05-web-h264-codec-level | Web client black-screen: hardcoded WebCodecs `avc1.42E01F` mismatches host's higher H.264 profile/level — derive from SPS | client, encoder, wrong-answer, silent-failure | high | 2026-08-05 | [web-h264-codec-level.md](web-h264-codec-level.md) |
 | G-2026-08-03-qss-property-repolish | QSS `[prop="true"]` selectors don't re-apply after `setProperty()` alone — need `style()->unpolish/polish()` | gui, gotcha | medium | 2026-08-03 | [qss-property-repolish.md](qss-property-repolish.md) |
 | G-2026-08-02-web-dist-committed-sw-cache | web/dist is committed (rebuild off-mount) and sw.js caches the shell (bump CACHE) | client, packaging, gotcha, silent-failure | medium | 2026-08-02 | [web-dist-committed-sw-cache.md](web-dist-committed-sw-cache.md) |
 | L-2026-07-26-x11-evdi-prime-deadlock | evdi never gets a mode on X11 (Cinnamon/XFCE/etc) — ordering deadlock | host, evdi, desktop-backend, silent-failure | high | 2026-07-26 | [x11-evdi-prime-deadlock.md](x11-evdi-prime-deadlock.md) |

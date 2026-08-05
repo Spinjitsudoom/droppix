@@ -242,6 +242,25 @@ function normalizePointer(px, py, box, outsideOk) {
   return { x: Math.round(nx * 65535), y: Math.round(ny * 65535) };
 }
 
+// src/avc-codec.ts
+function avcCodecString(nal) {
+  const n = nal.length;
+  for (let i = 0; i + 3 < n; i++) {
+    if (nal[i] === 0 && nal[i + 1] === 0 && nal[i + 2] === 1) {
+      const header = i + 3;
+      if ((nal[header] & 31) === 7) {
+        if (header + 3 >= n) return null;
+        const profile = nal[header + 1];
+        const constraints = nal[header + 2];
+        const level = nal[header + 3];
+        const hex = (b) => b.toString(16).toUpperCase().padStart(2, "0");
+        return `avc1.${hex(profile)}${hex(constraints)}${hex(level)}`;
+      }
+    }
+  }
+  return null;
+}
+
 // src/decoder.ts
 var VideoPipeline = class {
   constructor(canvas2, opts, onInfo) {
@@ -315,8 +334,9 @@ var VideoPipeline = class {
     }
     if (!this.configured) {
       if (!keyframe) return;
+      const codec = avcCodecString(nal) ?? "avc1.42E01F";
       this.decoder.configure({
-        codec: "avc1.42E01F",
+        codec,
         optimizeForLatency: true
       });
       this.configured = true;

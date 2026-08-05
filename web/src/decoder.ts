@@ -1,4 +1,5 @@
 import { contentBox, type FitMode } from "./fit.ts";
+import { avcCodecString } from "./avc-codec.ts";
 
 /**
  * H.264 → canvas. Decoded frames are held and painted against a media clock
@@ -84,8 +85,12 @@ export class VideoPipeline {
     }
     if (!this.configured) {
       if (!keyframe) return;
+      // Declare the ACTUAL stream profile/level (from the in-band SPS), not a fixed
+      // guess — Chrome refuses to decode when the codec string understates the stream
+      // (e.g. a hardcoded Baseline-3.1 vs the host's High/L4.0 at 1080p => black screen).
+      const codec = avcCodecString(nal) ?? "avc1.42E01F";
       this.decoder.configure({
-        codec: "avc1.42E01F",
+        codec,
         optimizeForLatency: true,
       });
       this.configured = true;
