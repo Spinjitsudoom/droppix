@@ -6,7 +6,6 @@ import { loadSettings, saveSettings } from "./settings.ts";
 import { toggleFullscreen } from "./fullscreen.ts";
 import { MockOverlay } from "./mock-overlay.ts";
 import { initTheme, setTheme, nextTheme } from "./theme.ts";
-import { pinMatches } from "./pin.ts";
 import { ConnectView } from "./connect-view.ts";
 import { SessionControls } from "./session-controls.ts";
 import { SettingsDrawer } from "./settings-drawer.ts";
@@ -49,23 +48,20 @@ let lastBytesAt = performance.now();
 let kbps = 0;
 let isMock = false;
 let burnIn = false;
-// Served by config.json, matched locally against the typed code. Never rendered.
-let pairingCode = "------";
 
 function setStatus(s: string) {
   statusEl.textContent = s;
   statusEl.hidden = false;
 }
 
-const connectView = new ConnectView((code) => {
-  void tryConnect(code);
+// The web client is served BY the host over its own HTTPS, so there is no PIN to
+// enter — loading this page already means you reached the right PC. Connect goes
+// straight through; the host prompts to approve the device if it isn't known yet.
+const connectView = new ConnectView(() => {
+  void tryConnect();
 });
 
-async function tryConnect(code: string) {
-  if (!isMock && !pinMatches(code, pairingCode)) {
-    connectView.showError("That code doesn't match your PC — check the screen");
-    return;
-  }
+async function tryConnect() {
   app.dataset.view = "session";
   controls.show();
   await connect();
@@ -81,32 +77,29 @@ async function loadConfig() {
       e2eDesktop?: boolean;
       burnIn?: boolean;
     };
-    pairingCode = j.pairingCode ?? "------";
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
     mock.showIdle();
+    mockBadge.hidden = !isMock;
     if (isMock) {
-      mockBadge.hidden = false;
-      // Start muted: autoplay policy blocks sound until a gesture anyway,
-      // and unmuting is the gesture that resumes audio cleanly.
+      // Mock host has no audio gesture; start muted (autoplay policy).
       settings.audio = false;
       saveSettings(settings);
-      app.dataset.view = "session";
-      controls.show();
-      setStatus("Ready - Connect for server video + audio");
-      if (typeof VideoDecoder === "undefined") {
-        setStatus("WebCodecs VideoDecoder missing - use Chromium");
-      } else {
-        window.setTimeout(() => {
-          void connect();
-        }, 300);
-      }
-    } else {
-      mockBadge.hidden = true;
-      setStatus("Confirm PIN matches the PC, then Connect");
     }
+    if (typeof VideoDecoder === "undefined") {
+      const msg = "This browser can't decode video (no WebCodecs) — use Chromium/Chrome.";
+      setStatus(msg);
+      connectView.setStatus(msg);
+      return;
+    }
+    // Auto-connect on load: the page is host-served, so just connect and show video.
+    // No PIN. On a drop, onClose returns to the connect card (Connect button).
+    app.dataset.view = "session";
+    controls.show();
+    window.setTimeout(() => {
+      void connect();
+    }, 300);
   } catch (e) {
-    pairingCode = "------";
     // Most common failure: host not serving --web. This must land on the visible
     // connect card (#c-status) too — #status-pill is hidden while data-view="connect",
     // so writing it there alone leaves the real error invisible.

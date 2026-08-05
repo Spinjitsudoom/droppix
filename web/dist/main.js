@@ -1029,69 +1029,24 @@ function setTheme(t) {
   saveSettings(s);
 }
 
-// src/pin.ts
-function normalizePin(raw) {
-  return raw.replace(/\D/g, "").slice(0, 6);
-}
-function pinComplete(code) {
-  return /^\d{6}$/.test(code);
-}
-function pinMatches(entered, served) {
-  return normalizePin(entered) === normalizePin(served);
-}
-
 // src/connect-view.ts
 var ConnectView = class {
   constructor(onConnect) {
     this.onConnect = onConnect;
-    this.wrap = document.getElementById("pin");
-    this.inputs = [...this.wrap.querySelectorAll("input")];
     this.btn = document.getElementById("btn-connect");
     this.statusEl = document.getElementById("c-status");
-    this.inputs.forEach((inp, i) => {
-      inp.addEventListener("input", () => {
-        inp.value = normalizePin(inp.value).slice(0, 1);
-        inp.classList.toggle("filled", !!inp.value);
-        this.wrap.classList.remove("err");
-        if (inp.value && i < this.inputs.length - 1) this.inputs[i + 1].focus();
-        this.sync();
-      });
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Backspace" && !inp.value && i > 0) this.inputs[i - 1].focus();
-      });
-    });
-    this.btn.addEventListener("click", () => {
-      if (!this.btn.disabled) this.onConnect(this.value());
-    });
-    this.sync();
+    this.btn.disabled = false;
+    this.btn.addEventListener("click", () => this.onConnect());
   }
-  inputs;
   btn;
-  wrap;
   statusEl;
-  value() {
-    return normalizePin(this.inputs.map((i) => i.value).join(""));
-  }
-  sync() {
-    this.btn.disabled = !pinComplete(this.value());
-  }
-  showError(msg) {
-    this.wrap.classList.add("err");
-    this.statusEl.textContent = msg;
-  }
   setStatus(msg) {
     this.statusEl.textContent = msg;
   }
-  reset() {
-    this.inputs.forEach((i) => {
-      i.value = "";
-      i.classList.remove("filled");
-    });
-    this.wrap.classList.remove("err");
-    this.sync();
+  showError(msg) {
+    this.statusEl.textContent = msg;
   }
-  focus() {
-    this.inputs[0]?.focus();
+  reset() {
   }
 };
 
@@ -1285,19 +1240,14 @@ var lastBytesAt = performance.now();
 var kbps = 0;
 var isMock = false;
 var burnIn = false;
-var pairingCode = "------";
 function setStatus(s) {
   statusEl.textContent = s;
   statusEl.hidden = false;
 }
-var connectView = new ConnectView((code) => {
-  void tryConnect(code);
+var connectView = new ConnectView(() => {
+  void tryConnect();
 });
-async function tryConnect(code) {
-  if (!isMock && !pinMatches(code, pairingCode)) {
-    connectView.showError("That code doesn't match your PC \u2014 check the screen");
-    return;
-  }
+async function tryConnect() {
   app.dataset.view = "session";
   controls.show();
   await connect();
@@ -1307,30 +1257,26 @@ async function loadConfig() {
     const r = await fetch("./config.json", { cache: "no-store" });
     if (!r.ok) throw new Error(String(r.status));
     const j = await r.json();
-    pairingCode = j.pairingCode ?? "------";
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
     mock.showIdle();
+    mockBadge.hidden = !isMock;
     if (isMock) {
-      mockBadge.hidden = false;
       settings.audio = false;
       saveSettings(settings);
-      app.dataset.view = "session";
-      controls.show();
-      setStatus("Ready - Connect for server video + audio");
-      if (typeof VideoDecoder === "undefined") {
-        setStatus("WebCodecs VideoDecoder missing - use Chromium");
-      } else {
-        window.setTimeout(() => {
-          void connect();
-        }, 300);
-      }
-    } else {
-      mockBadge.hidden = true;
-      setStatus("Confirm PIN matches the PC, then Connect");
     }
+    if (typeof VideoDecoder === "undefined") {
+      const msg = "This browser can't decode video (no WebCodecs) \u2014 use Chromium/Chrome.";
+      setStatus(msg);
+      connectView.setStatus(msg);
+      return;
+    }
+    app.dataset.view = "session";
+    controls.show();
+    window.setTimeout(() => {
+      void connect();
+    }, 300);
   } catch (e) {
-    pairingCode = "------";
     const msg = `Can't reach the PC \u2014 is droppix serving with --web? (${e})`;
     setStatus(msg);
     connectView.setStatus(msg);

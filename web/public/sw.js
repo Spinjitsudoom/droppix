@@ -1,5 +1,5 @@
 /* droppix PWA service worker: cache shell icons/html; always revalidate JS/CSS. Never touch /ws */
-const CACHE = "droppix-shell-v5";
+const CACHE = "droppix-shell-v6";
 const PRECACHE = [
   "./",
   "./index.html",

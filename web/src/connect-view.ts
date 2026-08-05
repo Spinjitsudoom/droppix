@@ -1,36 +1,28 @@
-import { normalizePin, pinComplete } from "./pin.ts";
-
+/**
+ * The disconnected-state connect card: a single Connect button + a status line.
+ * No PIN — the web client is served BY the host over its own HTTPS, so loading
+ * this page already means you reached the right PC; the host's approve-device
+ * prompt is the actual pairing gate. The page auto-connects on load (see main.ts);
+ * this button is for reconnecting after a drop.
+ */
 export class ConnectView {
-  private inputs: HTMLInputElement[];
   private btn: HTMLButtonElement;
-  private wrap: HTMLElement;
   private statusEl: HTMLElement;
 
-  constructor(private onConnect: (code: string) => void) {
-    this.wrap = document.getElementById("pin")!;
-    this.inputs = [...this.wrap.querySelectorAll("input")] as HTMLInputElement[];
+  constructor(private onConnect: () => void) {
     this.btn = document.getElementById("btn-connect") as HTMLButtonElement;
     this.statusEl = document.getElementById("c-status")!;
-    this.inputs.forEach((inp, i) => {
-      inp.addEventListener("input", () => {
-        inp.value = normalizePin(inp.value).slice(0, 1);
-        inp.classList.toggle("filled", !!inp.value);
-        this.wrap.classList.remove("err");
-        if (inp.value && i < this.inputs.length - 1) this.inputs[i + 1]!.focus();
-        this.sync();
-      });
-      inp.addEventListener("keydown", (e) => {
-        if (e.key === "Backspace" && !inp.value && i > 0) this.inputs[i - 1]!.focus();
-      });
-    });
-    this.btn.addEventListener("click", () => { if (!this.btn.disabled) this.onConnect(this.value()); });
-    this.sync();
+    this.btn.disabled = false;
+    this.btn.addEventListener("click", () => this.onConnect());
   }
 
-  private value(): string { return normalizePin(this.inputs.map((i) => i.value).join("")); }
-  private sync(): void { this.btn.disabled = !pinComplete(this.value()); }
-  showError(msg: string): void { this.wrap.classList.add("err"); this.statusEl.textContent = msg; }
-  setStatus(msg: string): void { this.statusEl.textContent = msg; }
-  reset(): void { this.inputs.forEach((i) => { i.value = ""; i.classList.remove("filled"); }); this.wrap.classList.remove("err"); this.sync(); }
-  focus(): void { this.inputs[0]?.focus(); }
+  setStatus(msg: string): void {
+    this.statusEl.textContent = msg;
+  }
+  showError(msg: string): void {
+    this.statusEl.textContent = msg;
+  }
+  reset(): void {
+    /* nothing to reset without a PIN entry */
+  }
 }

@@ -2,6 +2,7 @@
 
 **Date:** 2026-08-03
 **Status:** Shipped on master (2026-08-04).
+**Update (2026-08-05):** the **6-digit PIN entry was removed** — it was a design mistake for a *host-served* client. The web page is served by the host over its own HTTPS (loading it already means you reached the right PC), and `config.json` hands the code to the browser anyway, so typing it back added only friction + a chicken-and-egg dead-end. The web client now **auto-connects on load** (video shows immediately when the server is up); the disconnected state is a plain **Connect** button; the host's approve-device prompt is the real gate. (`pin.ts` removed.) Also fixed: the decoder now derives its WebCodecs codec string from the stream's SPS instead of a hardcoded Baseline-3.1 (see lesson `web-h264-codec-level`).
 **Roadmap:** UI overhaul — the **web-client** half (host GUI shipped 2026-08-03, see `2026-08-03-host-gui-redesign-design.md`). Carries the same spacedesk visual language to `web/`.
 **Mockup:** approved interactive preview — artifact `5ffdf743-d81e-4a17-bf9e-d059677b0ed3` (connect screen with 6-digit PIN entry, in-session auto-hiding control bar, settings drawer, dark/light toggle).
 
