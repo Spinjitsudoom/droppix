@@ -194,7 +194,12 @@ function wireTransport() {
         lastBytesAt = now;
         if (showHud) {
           hud.hidden = false;
-          hud.textContent = `${video.currentFps} fps · ${kbps} kbps`;
+          // in/out fps + decode(d)/paint(p) backlog pinpoint the bottleneck on-device:
+          // in≈out low ⇒ decode-bound; in high & out low ⇒ paint-bound; d climbing ⇒ decode.
+          const { w, h } = video.size;
+          hud.textContent =
+            `${w}x${h} · in ${video.inFps}/out ${video.currentFps} fps` +
+            ` · d${video.decodeQueue} p${video.paintQueue} · ${kbps} kbps`;
         }
       }
     },

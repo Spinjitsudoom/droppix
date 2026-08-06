@@ -313,6 +313,11 @@ var VideoPipeline = class {
   received = 0;
   lastFpsAt = performance.now();
   fps = 0;
+  // Arrival-rate counter (frames submitted/sec), separate from painted fps so the HUD can
+  // show in-vs-out: in≈out but low ⇒ decode-bound; in high, out low ⇒ paint-bound.
+  recv = 0;
+  recvFps = 0;
+  recvAt = performance.now();
   fit = "contain";
   lastError = "";
   pending = [];
@@ -324,6 +329,18 @@ var VideoPipeline = class {
   }
   get currentFps() {
     return this.fps;
+  }
+  /** Frames arriving from the network per second (before decode/paint). */
+  get inFps() {
+    return this.recvFps;
+  }
+  /** Decode backlog (frames queued in the VideoDecoder). */
+  get decodeQueue() {
+    return this.decoder?.decodeQueueSize ?? 0;
+  }
+  /** Paint backlog (decoded frames waiting for their presentation slot). */
+  get paintQueue() {
+    return this.pending.length;
   }
   get hasPainted() {
     return this.painted > 0;
@@ -344,6 +361,13 @@ var VideoPipeline = class {
   submit(keyframe, nal, ptsUs) {
     this.closed = false;
     this.received++;
+    this.recv++;
+    const nowRecv = performance.now();
+    if (nowRecv - this.recvAt >= 1e3) {
+      this.recvFps = this.recv;
+      this.recv = 0;
+      this.recvAt = nowRecv;
+    }
     if (typeof VideoDecoder === "undefined") {
       this.lastError = "WebCodecs VideoDecoder missing - use Chromium";
       this.onInfo?.(this.lastError);
@@ -466,7 +490,9 @@ var VideoPipeline = class {
     ctx.beginPath();
     ctx.rect(box.x, box.y, box.w, box.h);
     ctx.clip();
-    ctx.filter = `brightness(${this.opts.brightness}) contrast(${this.opts.contrast})`;
+    if (this.opts.brightness !== 1 || this.opts.contrast !== 1) {
+      ctx.filter = `brightness(${this.opts.brightness}) contrast(${this.opts.contrast})`;
+    }
     if (this.opts.flip) {
       ctx.translate(box.x + box.w, box.y);
       ctx.scale(-1, 1);
@@ -1390,7 +1416,8 @@ function wireTransport() {
         lastBytesAt = now;
         if (showHud) {
           hud.hidden = false;
-          hud.textContent = `${video.currentFps} fps \xB7 ${kbps} kbps`;
+          const { w, h } = video.size;
+          hud.textContent = `${w}x${h} \xB7 in ${video.inFps}/out ${video.currentFps} fps \xB7 d${video.decodeQueue} p${video.paintQueue} \xB7 ${kbps} kbps`;
         }
       }
     },
