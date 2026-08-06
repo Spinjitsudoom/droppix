@@ -30,6 +30,7 @@ export class SettingsDrawer {
   private readonly drawer = document.getElementById("drawer")!;
   private readonly closeBtn = document.getElementById("drawer-close") as HTMLButtonElement;
 
+  private readonly renderer = document.getElementById("set-renderer") as HTMLSelectElement;
   private readonly resolution = document.getElementById("set-resolution") as HTMLSelectElement;
   private readonly quality = document.getElementById("set-quality") as HTMLSelectElement;
   private readonly fps = document.getElementById("set-fps") as HTMLSelectElement;
@@ -49,6 +50,7 @@ export class SettingsDrawer {
   constructor(private readonly onChange: (s: ClientSettings) => void) {
     this.seed();
 
+    this.renderer.addEventListener("change", () => this.commit());
     this.resolution.addEventListener("change", () => this.commit());
     this.quality.addEventListener("change", () => this.commit());
     this.fps.addEventListener("change", () => this.commit());
@@ -85,6 +87,7 @@ export class SettingsDrawer {
    */
   private seed(): void {
     const s = loadSettings();
+    this.renderer.value = s.renderer;
     this.resolution.value = s.resolution;
     this.quality.value = String(s.bitrateKbps);
     this.fps.value = String(s.fps);
@@ -125,6 +128,7 @@ export class SettingsDrawer {
     const prev = loadSettings();
     const s: ClientSettings = {
       ...prev,
+      renderer: this.renderer.value || prev.renderer,
       resolution: this.resolution.value || prev.resolution,
       bitrateKbps: parseInt(this.quality.value, 10) || prev.bitrateKbps,
       fps: parseInt(this.fps.value, 10) || prev.fps,

@@ -16,6 +16,7 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
+| G-2026-08-06-web-mse-render | Low-end web clients choke on WebCodecs→Canvas 2D (per-frame copy, filter path); an MSE `<video>` path (client-side fMP4 mux) uses native hardware decode + compositor | client, performance, gotcha | medium | 2026-08-06 | [web-mse-render.md](web-mse-render.md) |
 | G-2026-08-06-build-time-version | Embed `git describe` at build time behind a one-TU accessor (write-if-changed) so the version tracks the checkout without recompiling the GUI | gui, packaging, gotcha | low | 2026-08-06 | [build-time-version.md](build-time-version.md) |
 | G-2026-08-05-web-h264-codec-level | Web client black-screen: hardcoded WebCodecs `avc1.42E01F` mismatches host's higher H.264 profile/level — derive from SPS | client, encoder, wrong-answer, silent-failure | high | 2026-08-05 | [web-h264-codec-level.md](web-h264-codec-level.md) |
 | G-2026-08-03-qss-property-repolish | QSS `[prop="true"]` selectors don't re-apply after `setProperty()` alone — need `style()->unpolish/polish()` | gui, gotcha | medium | 2026-08-03 | [qss-property-repolish.md](qss-property-repolish.md) |

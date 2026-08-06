@@ -87,8 +87,10 @@ export class MockOverlay {
     if (!ctx) return;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, c.width || 1, c.height || 1);
+    // Clear to TRANSPARENT, not black: the canvas's CSS background (#000) still shows
+    // black in canvas mode, but in MSE mode the canvas is a transparent input overlay
+    // over the <video>, so an opaque black fill here would hide the stream.
+    ctx.clearRect(0, 0, c.width || 1, c.height || 1);
     ctx.restore();
   }
 

@@ -1,5 +1,7 @@
 import { Transport } from "./transport.ts";
 import { VideoPipeline } from "./decoder.ts";
+import { MseVideoPipeline } from "./mse-decoder.ts";
+import type { VideoRenderer } from "./video-renderer.ts";
 import { AudioPlayer } from "./audio.ts";
 import { InputBinder } from "./input.ts";
 import { loadSettings, saveSettings, resolveResolution } from "./settings.ts";
@@ -12,6 +14,7 @@ import { SettingsDrawer } from "./settings-drawer.ts";
 import type { FitMode } from "./fit.ts";
 
 const canvas = document.getElementById("video") as HTMLCanvasElement;
+const videoEl = document.getElementById("video-el") as HTMLVideoElement;
 const stage = document.getElementById("stage") as HTMLElement;
 const app = document.getElementById("app")!;
 const statusEl = document.getElementById("status-pill") as HTMLElement;
@@ -28,11 +31,26 @@ let settings = loadSettings();
 let theme = initTheme();
 
 const mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
-const video = new VideoPipeline(canvas, {
-  flip: settings.flip,
-  brightness: settings.brightness,
-  contrast: settings.contrast,
-});
+
+let mseVideo: MseVideoPipeline | null = null;
+// Pick the render path from settings: "mse" → native <video> (hardware decode + compositor),
+// otherwise WebCodecs → Canvas 2D. Rebuilt at each connect so a change applies on reconnect.
+function makeVideo(): VideoRenderer {
+  const useMse =
+    settings.renderer === "mse" &&
+    typeof MediaSource !== "undefined" &&
+    typeof MediaSource.isTypeSupported === "function";
+  app.classList.toggle("render-mse", useMse);
+  videoEl.hidden = !useMse;
+  const adj = { flip: settings.flip, brightness: settings.brightness, contrast: settings.contrast };
+  if (useMse) {
+    mseVideo = new MseVideoPipeline(videoEl, adj, setStatus);
+    return mseVideo;
+  }
+  mseVideo = null;
+  return new VideoPipeline(canvas, adj, setStatus);
+}
+let video: VideoRenderer = makeVideo();
 const audio = new AudioPlayer();
 // Paint video against the audio wire media clock (stream PTS), not wall time.
 video.setClock(() => audio.mediaPtsUs);
@@ -180,6 +198,7 @@ function wireTransport() {
       // until the first click/keypress (AudioPlayer resumes it then).
       const audioHint = audio.contextState === "suspended" ? " - tap for audio" : "";
       setStatus(`Streaming ${w}x${h}${audioHint}`);
+      mseVideo?.setDisplaySize(w, h);
       input?.setVideoSize(w, h);
       mock.setVideoSize(w, h);
       video.setAdjust(settings.flip, settings.brightness, settings.contrast);
@@ -222,6 +241,12 @@ async function connect() {
   connecting = true;
   try {
     settings = loadSettings();
+    // Rebuild the renderer for the current setting; start each session on a clean pipeline.
+    video.close();
+    video = makeVideo();
+    video.setClock(() => audio.mediaPtsUs);
+    video.setFit(settings.fit);
+    video.setAdjust(settings.flip, settings.brightness, settings.contrast);
     // Never let audio init block the stream - it must not throw or hang here.
     await audio.unlock();
     audio.setMuted(!settings.audio);

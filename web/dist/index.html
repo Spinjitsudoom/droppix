@@ -36,6 +36,9 @@
     <!-- SESSION VIEW -->
     <main id="stage">
       <canvas id="mock-backdrop" hidden aria-hidden="true"></canvas>
+      <!-- MSE render target: sits behind #video (the canvas), which stays on top as a
+           transparent input surface when the Native-video renderer is active. -->
+      <video id="video-el" muted playsinline aria-hidden="true"></video>
       <canvas id="video" tabindex="0"></canvas>
       <div id="click-layer" hidden aria-hidden="true"></div>
       <pre id="mock-log" hidden></pre>
@@ -93,6 +96,13 @@
       <div class="drawer-body">
         <section class="d-section">
           <h3>Stream</h3>
+          <div class="d-row">
+            <label for="set-renderer">Renderer</label>
+            <select id="set-renderer">
+              <option value="canvas">WebCodecs (canvas)</option>
+              <option value="mse">Native video (MSE)</option>
+            </select>
+          </div>
           <div class="d-row">
             <label for="set-resolution">Resolution</label>
             <select id="set-resolution">

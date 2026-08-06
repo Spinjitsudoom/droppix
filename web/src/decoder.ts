@@ -1,12 +1,13 @@
 import { contentBox, type FitMode } from "./fit.ts";
 import { avcCodecString } from "./avc-codec.ts";
+import type { VideoRenderer } from "./video-renderer.ts";
 
 /**
  * H.264 → canvas. Decoded frames are held and painted against a media clock
  * (audio wire PTS) so lipsync follows stream timestamps; drops are skips in
  * that timeline, not something we invent delays for.
  */
-export class VideoPipeline {
+export class VideoPipeline implements VideoRenderer {
   private decoder: VideoDecoder | null = null;
   private configured = false;
   private closed = false;

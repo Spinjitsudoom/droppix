@@ -267,12 +267,12 @@ function contentBox(cw, ch, vw, vh, mode) {
   const h = vh * scale;
   return { x: (cw - w) / 2, y: (ch - h) / 2, w, h };
 }
-function normalizePointer(px, py, box, outsideOk) {
-  const lx = px - box.x;
-  const ly = py - box.y;
-  if (!outsideOk && (lx < 0 || ly < 0 || lx > box.w || ly > box.h)) return null;
-  const nx = Math.max(0, Math.min(1, box.w > 0 ? lx / box.w : 0));
-  const ny = Math.max(0, Math.min(1, box.h > 0 ? ly / box.h : 0));
+function normalizePointer(px, py, box2, outsideOk) {
+  const lx = px - box2.x;
+  const ly = py - box2.y;
+  if (!outsideOk && (lx < 0 || ly < 0 || lx > box2.w || ly > box2.h)) return null;
+  const nx = Math.max(0, Math.min(1, box2.w > 0 ? lx / box2.w : 0));
+  const ny = Math.max(0, Math.min(1, box2.h > 0 ? ly / box2.h : 0));
   return { x: Math.round(nx * 65535), y: Math.round(ny * 65535) };
 }
 
@@ -483,22 +483,22 @@ var VideoPipeline = class {
       this.canvas.width = pw;
       this.canvas.height = ph;
     }
-    const box = contentBox(pw, ph, this.vw, this.vh, this.fit);
+    const box2 = contentBox(pw, ph, this.vw, this.vh, this.fit);
     ctx.save();
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, pw, ph);
     ctx.beginPath();
-    ctx.rect(box.x, box.y, box.w, box.h);
+    ctx.rect(box2.x, box2.y, box2.w, box2.h);
     ctx.clip();
     if (this.opts.brightness !== 1 || this.opts.contrast !== 1) {
       ctx.filter = `brightness(${this.opts.brightness}) contrast(${this.opts.contrast})`;
     }
     if (this.opts.flip) {
-      ctx.translate(box.x + box.w, box.y);
+      ctx.translate(box2.x + box2.w, box2.y);
       ctx.scale(-1, 1);
-      ctx.drawImage(frame, 0, 0, box.w, box.h);
+      ctx.drawImage(frame, 0, 0, box2.w, box2.h);
     } else {
-      ctx.drawImage(frame, box.x, box.y, box.w, box.h);
+      ctx.drawImage(frame, box2.x, box2.y, box2.w, box2.h);
     }
     ctx.restore();
     frame.close();
@@ -535,6 +535,645 @@ var VideoPipeline = class {
       ctx.fillRect(0, 0, this.canvas.width || 1, this.canvas.height || 1);
       ctx.restore();
     }
+  }
+};
+
+// src/fmp4.ts
+var TIMESCALE = 1e6;
+function u16(v) {
+  return [v >>> 8 & 255, v & 255];
+}
+function u32(v) {
+  return [v >>> 24 & 255, v >>> 16 & 255, v >>> 8 & 255, v & 255];
+}
+function u64(v) {
+  const hi = Math.floor(v / 4294967296);
+  const lo = v >>> 0;
+  return [...u32(hi), ...u32(lo)];
+}
+function s4(s) {
+  return [s.charCodeAt(0), s.charCodeAt(1), s.charCodeAt(2), s.charCodeAt(3)];
+}
+function concat(parts) {
+  let n = 0;
+  for (const p of parts) n += p.length;
+  const out = new Uint8Array(n);
+  let o = 0;
+  for (const p of parts) {
+    out.set(p, o);
+    o += p.length;
+  }
+  return out;
+}
+function box(type, payload) {
+  const size = 8 + payload.length;
+  return concat([new Uint8Array([...u32(size), ...s4(type)]), payload]);
+}
+function fbox(type, version, flags, payload) {
+  const head = new Uint8Array([version & 255, flags >>> 16 & 255, flags >>> 8 & 255, flags & 255]);
+  return box(type, concat([head, payload]));
+}
+function bytes(a) {
+  return new Uint8Array(a);
+}
+function parseAnnexB(buf) {
+  const units = [];
+  const n = buf.length;
+  let i = 0;
+  const isStart = (p) => p + 2 < n && buf[p] === 0 && buf[p + 1] === 0 && buf[p + 2] === 1;
+  while (i + 2 < n && !isStart(i)) i++;
+  while (i + 2 < n) {
+    const start = i + 3;
+    let j = start;
+    while (j + 2 < n && !(buf[j] === 0 && buf[j + 1] === 0 && buf[j + 2] === 1)) j++;
+    let end = j + 2 < n ? j : n;
+    if (end > start && end < n && buf[end - 1] === 0) end--;
+    if (end > start) units.push(buf.subarray(start, end));
+    i = j;
+  }
+  return units;
+}
+var nalType = (u) => u.length ? u[0] & 31 : 0;
+function extractParamSets(units) {
+  let sps;
+  let pps;
+  for (const u of units) {
+    const t = nalType(u);
+    if (t === 7 && !sps) sps = u;
+    else if (t === 8 && !pps) pps = u;
+  }
+  return { sps, pps };
+}
+function annexBToAvcc(units) {
+  const parts = [];
+  for (const u of units) {
+    const t = nalType(u);
+    if (t === 7 || t === 8 || t === 9) continue;
+    parts.push(bytes(u32(u.length)));
+    parts.push(u);
+  }
+  return concat(parts);
+}
+function avcC(sps, pps) {
+  const payload = bytes([
+    1,
+    // configurationVersion
+    sps[1],
+    // AVCProfileIndication
+    sps[2],
+    // profile_compatibility
+    sps[3],
+    // AVCLevelIndication
+    255,
+    // 6 bits reserved + lengthSizeMinusOne = 3 (4-byte NAL length)
+    225,
+    // 3 bits reserved + numOfSequenceParameterSets = 1
+    ...u16(sps.length),
+    ...sps,
+    1,
+    // numOfPictureParameterSets
+    ...u16(pps.length),
+    ...pps
+  ]);
+  return box("avcC", payload);
+}
+function avc1(sps, pps, width, height) {
+  const payload = concat([
+    bytes([
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // reserved (6)
+      ...u16(1),
+      // data_reference_index
+      0,
+      0,
+      // pre_defined
+      0,
+      0,
+      // reserved
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      // pre_defined (3 x u32)
+      ...u16(width),
+      ...u16(height),
+      0,
+      72,
+      0,
+      0,
+      // horizresolution 72dpi
+      0,
+      72,
+      0,
+      0,
+      // vertresolution 72dpi
+      0,
+      0,
+      0,
+      0,
+      // reserved
+      ...u16(1),
+      // frame_count
+      // compressorname: 32 bytes, length-prefixed pascal string (all zero here)
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      24,
+      // depth
+      255,
+      255
+      // pre_defined = -1
+    ]),
+    avcC(sps, pps)
+  ]);
+  return box("avc1", payload);
+}
+function moov(sps, pps, width, height) {
+  const mvhd = fbox("mvhd", 0, 0, bytes([
+    ...u32(0),
+    ...u32(0),
+    // creation, modification time
+    ...u32(TIMESCALE),
+    ...u32(0),
+    // duration (fragmented => 0)
+    0,
+    1,
+    0,
+    0,
+    // rate 1.0
+    1,
+    0,
+    // volume 1.0
+    0,
+    0,
+    // reserved
+    ...u32(0),
+    ...u32(0),
+    // reserved
+    // unity matrix
+    ...u32(65536),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(65536),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(1073741824),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    // pre_defined
+    ...u32(2)
+    // next_track_ID
+  ]));
+  const tkhd = fbox("tkhd", 0, 7, bytes([
+    ...u32(0),
+    ...u32(0),
+    // times
+    ...u32(1),
+    // track_ID
+    ...u32(0),
+    // reserved
+    ...u32(0),
+    // duration
+    ...u32(0),
+    ...u32(0),
+    // reserved
+    0,
+    0,
+    // layer
+    0,
+    0,
+    // alternate_group
+    0,
+    0,
+    // volume (0 for video)
+    0,
+    0,
+    // reserved
+    ...u32(65536),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(65536),
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    ...u32(1073741824),
+    ...u32(width << 16),
+    // width 16.16
+    ...u32(height << 16)
+    // height 16.16
+  ]));
+  const mdhd = fbox("mdhd", 0, 0, bytes([
+    ...u32(0),
+    ...u32(0),
+    ...u32(TIMESCALE),
+    ...u32(0),
+    // duration
+    85,
+    196,
+    // language 'und'
+    0,
+    0
+    // pre_defined
+  ]));
+  const hdlr = fbox("hdlr", 0, 0, bytes([
+    ...u32(0),
+    // pre_defined
+    ...s4("vide"),
+    // handler_type
+    ...u32(0),
+    ...u32(0),
+    ...u32(0),
+    // reserved
+    ...s4("drop"),
+    112,
+    105,
+    120,
+    0
+    // "droppix\0" name
+  ]));
+  const vmhd = fbox("vmhd", 0, 1, bytes([0, 0, 0, 0, 0, 0, 0, 0]));
+  const dref = fbox("dref", 0, 0, concat([bytes(u32(1)), fbox("url ", 0, 1, new Uint8Array())]));
+  const dinf = box("dinf", dref);
+  const stsd = fbox("stsd", 0, 0, concat([bytes(u32(1)), avc1(sps, pps, width, height)]));
+  const stts = fbox("stts", 0, 0, bytes(u32(0)));
+  const stsc = fbox("stsc", 0, 0, bytes(u32(0)));
+  const stsz = fbox("stsz", 0, 0, bytes([...u32(0), ...u32(0)]));
+  const stco = fbox("stco", 0, 0, bytes(u32(0)));
+  const stbl = box("stbl", concat([stsd, stts, stsc, stsz, stco]));
+  const minf = box("minf", concat([vmhd, dinf, stbl]));
+  const mdia = box("mdia", concat([mdhd, hdlr, minf]));
+  const trak = box("trak", concat([tkhd, mdia]));
+  const trex = fbox("trex", 0, 0, bytes([
+    ...u32(1),
+    // track_ID
+    ...u32(1),
+    // default_sample_description_index
+    ...u32(0),
+    // default_sample_duration
+    ...u32(0),
+    // default_sample_size
+    ...u32(0)
+    // default_sample_flags
+  ]));
+  const mvex = box("mvex", trex);
+  return box("moov", concat([mvhd, trak, mvex]));
+}
+function buildInit(sps, pps, width, height) {
+  const ftyp = box("ftyp", bytes([
+    ...s4("isom"),
+    ...u32(1),
+    // minor_version
+    ...s4("isom"),
+    ...s4("iso5"),
+    ...s4("avc1"),
+    ...s4("mp41")
+  ]));
+  return concat([ftyp, moov(sps, pps, width, height)]);
+}
+var KEY_FLAGS = 33554432;
+var NONKEY_FLAGS = 16842752;
+function buildSegment(opts) {
+  const { sample, baseMediaDecodeTime, duration, keyframe, sequenceNumber } = opts;
+  const mfhd = fbox("mfhd", 0, 0, bytes(u32(sequenceNumber)));
+  const tfhd = fbox("tfhd", 0, 131072, bytes(u32(1)));
+  const tfdt = fbox("tfdt", 1, 0, bytes(u64(baseMediaDecodeTime)));
+  const trunFlags = 1 | 4 | 256 | 512;
+  const trunPayloadNoOffset = concat([
+    bytes(u32(1)),
+    // sample_count
+    bytes(u32(0)),
+    // data_offset placeholder
+    bytes(u32(keyframe ? KEY_FLAGS : NONKEY_FLAGS)),
+    // first_sample_flags
+    bytes(u32(duration)),
+    bytes(u32(sample.length))
+  ]);
+  const trun = fbox("trun", 0, trunFlags, trunPayloadNoOffset);
+  const traf = box("traf", concat([tfhd, tfdt, trun]));
+  const moof = box("moof", concat([mfhd, traf]));
+  const dataOffset = moof.length + 8;
+  const trunStart = moof.length - trun.length;
+  const dataOffsetPos = trunStart + 16;
+  moof[dataOffsetPos] = dataOffset >>> 24 & 255;
+  moof[dataOffsetPos + 1] = dataOffset >>> 16 & 255;
+  moof[dataOffsetPos + 2] = dataOffset >>> 8 & 255;
+  moof[dataOffsetPos + 3] = dataOffset & 255;
+  const mdat = box("mdat", sample);
+  return concat([moof, mdat]);
+}
+
+// src/mse-decoder.ts
+var MseVideoPipeline = class {
+  constructor(video2, opts, onInfo) {
+    this.video = video2;
+    this.opts = opts;
+    this.onInfo = onInfo;
+    this.video.muted = true;
+    this.video.playsInline = true;
+    this.applyAdjust();
+  }
+  ms = null;
+  sb = null;
+  codec = "";
+  sps;
+  pps;
+  started = false;
+  seq = 1;
+  firstPtsUs = null;
+  prev = null;
+  queue = [];
+  busy = false;
+  closed = false;
+  lastError = "";
+  displayW = 1280;
+  displayH = 720;
+  // instrumentation (windowed rates + cumulative counts for the debug hook)
+  totalRecv = 0;
+  recvWin = 0;
+  recvFps = 0;
+  recvAt = performance.now();
+  appended = 0;
+  lastRendered = 0;
+  outFps = 0;
+  get size() {
+    return { w: this.video.videoWidth || this.displayW, h: this.video.videoHeight || this.displayH };
+  }
+  get currentFps() {
+    return this.outFps;
+  }
+  get inFps() {
+    return this.recvFps;
+  }
+  get decodeQueue() {
+    return this.queue.length;
+  }
+  get paintQueue() {
+    try {
+      const b = this.video.buffered;
+      if (b.length) return Math.round((b.end(b.length - 1) - this.video.currentTime) * 100) / 100;
+    } catch {
+    }
+    return 0;
+  }
+  get stats() {
+    const q = this.video.getVideoPlaybackQuality?.();
+    return {
+      received: this.totalRecv,
+      painted: q ? q.totalVideoFrames : this.appended,
+      fps: this.outFps,
+      lastError: this.lastError
+    };
+  }
+  get hasPainted() {
+    return (this.video.getVideoPlaybackQuality?.()?.totalVideoFrames ?? this.appended) > 0;
+  }
+  /** Negotiated stream size (from CONFIG) used for the init segment's track header. */
+  setDisplaySize(w, h) {
+    if (w > 0 && h > 0) {
+      this.displayW = w;
+      this.displayH = h;
+    }
+  }
+  setFit(mode) {
+    this.video.style.objectFit = mode === "stretch" ? "fill" : mode === "cover" ? "cover" : "contain";
+  }
+  setAdjust(flip, brightness, contrast) {
+    this.opts = { flip, brightness, contrast };
+    this.applyAdjust();
+  }
+  applyAdjust() {
+    const f = this.opts;
+    this.video.style.transform = f.flip ? "scaleX(-1)" : "";
+    this.video.style.filter = f.brightness !== 1 || f.contrast !== 1 ? `brightness(${f.brightness}) contrast(${f.contrast})` : "";
+  }
+  setClock() {
+  }
+  submit(keyframe, nal, ptsUs) {
+    if (this.closed) this.closed = false;
+    this.totalRecv++;
+    this.recvWin++;
+    const now = performance.now();
+    if (now - this.recvAt >= 1e3) {
+      this.recvFps = this.recvWin;
+      this.recvWin = 0;
+      this.recvAt = now;
+      const q = this.video.getVideoPlaybackQuality?.();
+      if (q) {
+        this.outFps = q.totalVideoFrames - this.lastRendered;
+        this.lastRendered = q.totalVideoFrames;
+      } else {
+        this.outFps = this.recvFps;
+      }
+    }
+    const units = parseAnnexB(nal);
+    if (!this.sps || !this.pps) {
+      const ps = extractParamSets(units);
+      if (ps.sps) this.sps = ps.sps;
+      if (ps.pps) this.pps = ps.pps;
+    }
+    if (!this.started) {
+      if (!keyframe || !this.sps || !this.pps) return;
+      this.codec = avcCodecString(nal) ?? "avc1.42E01F";
+      this.start();
+    }
+    const pts = Number(ptsUs);
+    if (this.firstPtsUs == null) this.firstPtsUs = pts;
+    const sample = annexBToAvcc(units);
+    if (sample.length === 0) return;
+    const cur = { sample, ptsUs: pts, keyframe };
+    if (this.prev) {
+      const dur = Math.max(1, cur.ptsUs - this.prev.ptsUs);
+      this.emit(this.prev, dur);
+    }
+    this.prev = cur;
+  }
+  emit(frame, duration) {
+    const base = frame.ptsUs - (this.firstPtsUs ?? frame.ptsUs);
+    const seg = buildSegment({
+      sample: frame.sample,
+      baseMediaDecodeTime: base,
+      duration,
+      keyframe: frame.keyframe,
+      sequenceNumber: this.seq++
+    });
+    this.appended++;
+    this.enqueue(seg);
+  }
+  start() {
+    this.started = true;
+    try {
+      const ms = new MediaSource();
+      this.ms = ms;
+      this.video.src = URL.createObjectURL(ms);
+      ms.addEventListener(
+        "sourceopen",
+        () => {
+          try {
+            const mime = `video/mp4; codecs="${this.codec}"`;
+            if (!("MediaSource" in window) || !MediaSource.isTypeSupported(mime)) {
+              this.fail(`unsupported codec ${mime}`);
+              return;
+            }
+            const sb = ms.addSourceBuffer(mime);
+            sb.mode = "segments";
+            this.sb = sb;
+            sb.addEventListener("updateend", () => {
+              this.busy = false;
+              this.flush();
+            });
+            sb.addEventListener("error", () => this.fail("SourceBuffer error"));
+            this.queue.unshift(buildInit(this.sps, this.pps, this.displayW, this.displayH));
+            this.flush();
+          } catch (e) {
+            this.fail(String(e?.message || e));
+          }
+        },
+        { once: true }
+      );
+      this.video.play?.().catch(() => {
+      });
+    } catch (e) {
+      this.fail(String(e?.message || e));
+    }
+  }
+  enqueue(buf) {
+    this.queue.push(buf);
+    this.flush();
+  }
+  flush() {
+    const sb = this.sb;
+    if (this.closed || !sb || this.busy || sb.updating) return;
+    const next = this.queue.shift();
+    if (!next) {
+      this.maybeTrim();
+      return;
+    }
+    this.busy = true;
+    try {
+      sb.appendBuffer(next);
+    } catch (e) {
+      this.busy = false;
+      if (e?.name === "QuotaExceededError") {
+        this.queue.unshift(next);
+        this.trimHard();
+      } else {
+        this.fail(String(e?.message || e));
+      }
+    }
+  }
+  /** Bound memory + latency: drop old buffered data and chase the live edge. */
+  maybeTrim() {
+    const v = this.video;
+    const sb = this.sb;
+    if (!sb || sb.updating) return;
+    try {
+      const b = v.buffered;
+      if (!b.length) return;
+      const end = b.end(b.length - 1);
+      const start = b.start(0);
+      if (v.currentTime < end - 0.6) v.currentTime = end - 0.1;
+      const cutoff = v.currentTime - 2;
+      if (cutoff > start + 0.5) {
+        this.busy = true;
+        sb.remove(start, cutoff);
+      }
+    } catch {
+    }
+  }
+  trimHard() {
+    const v = this.video;
+    const sb = this.sb;
+    if (!sb || sb.updating) return;
+    try {
+      const b = v.buffered;
+      if (!b.length) return;
+      const start = b.start(0);
+      const cutoff = Math.max(start + 0.1, v.currentTime - 0.5);
+      if (cutoff > start) {
+        this.busy = true;
+        sb.remove(start, cutoff);
+      }
+    } catch {
+    }
+  }
+  fail(msg) {
+    this.lastError = msg;
+    this.onInfo?.(`MSE: ${msg}`);
+  }
+  close() {
+    this.closed = true;
+    try {
+      if (this.ms && this.ms.readyState === "open") this.ms.endOfStream();
+    } catch {
+    }
+    try {
+      this.video.pause();
+      this.video.removeAttribute("src");
+      this.video.load();
+    } catch {
+    }
+    this.sb = null;
+    this.ms = null;
+    this.queue = [];
+    this.prev = null;
+    this.started = false;
+    this.busy = false;
+    this.sps = void 0;
+    this.pps = void 0;
+    this.firstPtsUs = null;
+    this.seq = 1;
+    this.appended = 0;
+    this.lastRendered = 0;
   }
 };
 
@@ -919,6 +1558,7 @@ function loadSettings() {
     fps: 30,
     bitrateKbps: 8e3,
     resolution: "1280x720",
+    renderer: "canvas",
     audio: true,
     fit: "contain",
     flip: false,
@@ -1033,8 +1673,7 @@ var MockOverlay = class {
     if (!ctx) return;
     ctx.save();
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, c.width || 1, c.height || 1);
+    ctx.clearRect(0, 0, c.width || 1, c.height || 1);
     ctx.restore();
   }
   async pullMarks() {
@@ -1061,10 +1700,10 @@ var MockOverlay = class {
   videoToCss(vx, vy) {
     const r = this.canvas.getBoundingClientRect();
     if (r.width < 1 || r.height < 1) return null;
-    const box = contentBox(r.width, r.height, this.videoW, this.videoH, this.fit);
+    const box2 = contentBox(r.width, r.height, this.videoW, this.videoH, this.fit);
     return {
-      x: box.x + vx / Math.max(1, this.videoW - 1) * box.w,
-      y: box.y + vy / Math.max(1, this.videoH - 1) * box.h
+      x: box2.x + vx / Math.max(1, this.videoW - 1) * box2.w,
+      y: box2.y + vy / Math.max(1, this.videoH - 1) * box2.h
     };
   }
   spawnMark(x, y, label) {
@@ -1167,6 +1806,7 @@ var SettingsDrawer = class {
   constructor(onChange) {
     this.onChange = onChange;
     this.seed();
+    this.renderer.addEventListener("change", () => this.commit());
     this.resolution.addEventListener("change", () => this.commit());
     this.quality.addEventListener("change", () => this.commit());
     this.fps.addEventListener("change", () => this.commit());
@@ -1196,6 +1836,7 @@ var SettingsDrawer = class {
   scrim = document.getElementById("scrim");
   drawer = document.getElementById("drawer");
   closeBtn = document.getElementById("drawer-close");
+  renderer = document.getElementById("set-renderer");
   resolution = document.getElementById("set-resolution");
   quality = document.getElementById("set-quality");
   fps = document.getElementById("set-fps");
@@ -1218,6 +1859,7 @@ var SettingsDrawer = class {
    */
   seed() {
     const s = loadSettings();
+    this.renderer.value = s.renderer;
     this.resolution.value = s.resolution;
     this.quality.value = String(s.bitrateKbps);
     this.fps.value = String(s.fps);
@@ -1254,6 +1896,7 @@ var SettingsDrawer = class {
     const prev = loadSettings();
     const s = {
       ...prev,
+      renderer: this.renderer.value || prev.renderer,
       resolution: this.resolution.value || prev.resolution,
       bitrateKbps: parseInt(this.quality.value, 10) || prev.bitrateKbps,
       fps: parseInt(this.fps.value, 10) || prev.fps,
@@ -1283,6 +1926,7 @@ var SettingsDrawer = class {
 
 // src/main.ts
 var canvas = document.getElementById("video");
+var videoEl = document.getElementById("video-el");
 var stage = document.getElementById("stage");
 var app = document.getElementById("app");
 var statusEl = document.getElementById("status-pill");
@@ -1297,11 +1941,20 @@ var mockBadge = document.getElementById("mock-badge");
 var settings = loadSettings();
 var theme = initTheme();
 var mock = new MockOverlay(stage, clickLayer, mockLog, mockBackdrop, canvas);
-var video = new VideoPipeline(canvas, {
-  flip: settings.flip,
-  brightness: settings.brightness,
-  contrast: settings.contrast
-});
+var mseVideo = null;
+function makeVideo() {
+  const useMse = settings.renderer === "mse" && typeof MediaSource !== "undefined" && typeof MediaSource.isTypeSupported === "function";
+  app.classList.toggle("render-mse", useMse);
+  videoEl.hidden = !useMse;
+  const adj = { flip: settings.flip, brightness: settings.brightness, contrast: settings.contrast };
+  if (useMse) {
+    mseVideo = new MseVideoPipeline(videoEl, adj, setStatus);
+    return mseVideo;
+  }
+  mseVideo = null;
+  return new VideoPipeline(canvas, adj, setStatus);
+}
+var video = makeVideo();
 var audio = new AudioPlayer();
 video.setClock(() => audio.mediaPtsUs);
 video.setFit(settings.fit);
@@ -1415,6 +2068,7 @@ function wireTransport() {
     onConfig: (w, h) => {
       const audioHint = audio.contextState === "suspended" ? " - tap for audio" : "";
       setStatus(`Streaming ${w}x${h}${audioHint}`);
+      mseVideo?.setDisplaySize(w, h);
       input?.setVideoSize(w, h);
       mock.setVideoSize(w, h);
       video.setAdjust(settings.flip, settings.brightness, settings.contrast);
@@ -1449,6 +2103,11 @@ async function connect() {
   connecting = true;
   try {
     settings = loadSettings();
+    video.close();
+    video = makeVideo();
+    video.setClock(() => audio.mediaPtsUs);
+    video.setFit(settings.fit);
+    video.setAdjust(settings.flip, settings.brightness, settings.contrast);
     await audio.unlock();
     audio.setMuted(!settings.audio);
     audio.onStateChange = (s) => {

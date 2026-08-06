@@ -8,6 +8,8 @@ export interface ClientSettings {
   bitrateKbps: number;
   /** "auto" (canvas × devicePixelRatio) or a fixed "WIDTHxHEIGHT" the host renders. */
   resolution: string;
+  /** Video render path: "canvas" (WebCodecs→Canvas 2D) or "mse" (native <video> via MSE). */
+  renderer: string;
   audio: boolean;
   fit: FitMode;
   flip: boolean;
@@ -33,6 +35,7 @@ export function loadSettings(): ClientSettings {
     fps: 30,
     bitrateKbps: 8000,
     resolution: "1280x720",
+    renderer: "canvas",
     audio: true,
     fit: "contain",
     flip: false,
