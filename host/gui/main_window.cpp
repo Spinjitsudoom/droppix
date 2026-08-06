@@ -13,6 +13,7 @@
 #include "pages/status_page.h"
 #include "style.h"
 #include "theme_pref.h"
+#include "version.h"
 #include <QApplication>
 #include <QTextStream>
 #include <QtWidgets>
@@ -178,7 +179,9 @@ MainWindow::MainWindow(QWidget* parent)
   streamBin_ = resolveStreamBin();
   cert_.regenerate();   // fresh cert => new pairing code every launch (per-restart rotation)
   stageCertsToHost();   // Flatpak: mirror cert/key to the host for the streamer (else no-op)
-  setWindowTitle("Droppix");
+  // Build version in the title bar so a running instance is always identifiable at a
+  // glance (git describe, e.g. "Droppix  v0.1.0-121-ge6bd3ca") even when the UI is unchanged.
+  setWindowTitle(QString("Droppix  %1").arg(droppix::app_version()));
   setWindowIcon(QIcon(":/icon.png"));
   settingsPage_ = new SettingsPage;   // Settings section (stack_ index 3)
 
@@ -827,11 +830,11 @@ void MainWindow::showAbout() {
   icon->setPixmap(QPixmap(":/icon.png").scaled(72, 72, Qt::KeepAspectRatio, Qt::SmoothTransformation));
   icon->setAlignment(Qt::AlignTop);
   auto* text = new QLabel(QString(
-      "<b style='font-size:16px'>Droppix</b>&nbsp; v0.1<br>"
+      "<b style='font-size:16px'>Droppix</b>&nbsp; %2<br>"
       "<span style='color:#9aa5b1'>extended display, touch, stylus &amp; audio over USB or WiFi</span><br><br>"
       "Source &amp; releases:<br><a href='%1'>%1</a><br><br>"
       "Built with Qt · evdi · x264 · PipeWire · MediaCodec<br>"
-      "Licensed under the <b>MIT License</b>.").arg(repo));
+      "Licensed under the <b>MIT License</b>.").arg(repo).arg(droppix::app_version()));
   text->setOpenExternalLinks(true);
   text->setTextInteractionFlags(Qt::TextBrowserInteraction);
   text->setWordWrap(true);

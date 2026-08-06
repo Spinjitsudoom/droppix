@@ -5,6 +5,25 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# --- Build-time version (git describe) ---
+# Regenerated on every build (write-if-changed) so the embedded string tracks the
+# current checkout. Only src/version.cpp includes the generated header, so a version
+# change relinks that one TU rather than recompiling the GUI.
+set(DROPPIX_VERSION_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
+set(DROPPIX_VERSION_HEADER ${DROPPIX_VERSION_DIR}/droppix_version.h)
+add_custom_target(droppix_version_gen
+  BYPRODUCTS ${DROPPIX_VERSION_HEADER}
+  COMMAND ${CMAKE_COMMAND}
+    -DSRC_DIR=${CMAKE_CURRENT_SOURCE_DIR}
+    -DOUT=${DROPPIX_VERSION_HEADER}
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateVersion.cmake
+  COMMENT "Resolving droppix version (git describe)")
+# Ensure the header exists before the first configure-time compile scan.
+if(NOT EXISTS ${DROPPIX_VERSION_HEADER})
+  file(MAKE_DIRECTORY ${DROPPIX_VERSION_DIR})
+  file(WRITE ${DROPPIX_VERSION_HEADER} "#pragma once\n#define DROPPIX_VERSION \"0.1.0\"\n")
+endif()
+
 # Locate the system libevdi runtime library (header is vendored).
 find_library(EVDI_LIB NAMES evdi PATHS /usr/lib64 /lib64 REQUIRED)
 message(STATUS "Using libevdi: ${EVDI_LIB}")
@@ -51,12 +70,15 @@ add_library(droppix_core
   src/ws_channel.cpp
   src/web_frontend.cpp
   src/web_root.cpp
+  src/version.cpp
 )
 target_include_directories(droppix_core PUBLIC
   src
   third_party/evdi
   third_party/stb
+  ${DROPPIX_VERSION_DIR}
 )
+add_dependencies(droppix_core droppix_version_gen)
 
 # Optional: build web/dist via npm when Node is available (packaging / local).
 find_program(DROPPIX_NPM npm)
@@ -86,7 +108,8 @@ if(Qt6_FOUND)
     gui/stats_parser.cpp
     gui/args_builder.cpp
   )
-  target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen gui/pages)
+  target_include_directories(droppix_gui PRIVATE gui src third_party/qrcodegen gui/pages ${DROPPIX_VERSION_DIR})
+  add_dependencies(droppix_gui droppix_version_gen)
   # Dev/local builds: bake the source tree's web/dist so the GUI can locate + stage the
   # PWA assets (packaged builds ship them under share/droppix/web and ignore this path).
   target_compile_definitions(droppix_gui PRIVATE
@@ -127,6 +150,7 @@ if(Qt6_FOUND)
     gui/pages/interfaces_page.cpp
     gui/pages/connections_page.cpp
     gui/pages/status_page.cpp
+    src/version.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
 else()
@@ -183,6 +207,7 @@ add_executable(droppix_tests
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp
+  tests/test_version.cpp
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp
   gui/args_builder.cpp
@@ -228,8 +253,10 @@ if(Qt6_FOUND)
     gui/tests/test_settings_page.cpp
     gui/pages/settings_page.cpp
     gui/autostart.cpp
+    src/version.cpp
   )
-  target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages)
+  target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages ${DROPPIX_VERSION_DIR})
+  add_dependencies(droppix_gui_tests droppix_version_gen)
   target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network Qt6::Test GTest::gtest_main)
   gtest_discover_tests(droppix_gui_tests)
 endif()

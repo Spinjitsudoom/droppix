@@ -2,6 +2,7 @@
 #include <QApplication>
 #include <QLabel>
 #include "pages/about_page.h"
+#include "version.h"
 
 namespace {
 // AboutPage is a real QWidget; Qt calls qFatal() if a QWidget is constructed
@@ -23,5 +24,8 @@ TEST(AboutPage, ShowsVersion) {
   droppix::AboutPage page;
   auto* v = page.findChild<QLabel*>("aboutVersion");
   ASSERT_NE(v, nullptr);
-  EXPECT_TRUE(v->text().contains("0.1.0"));
+  // Reflects the build version (git describe, or the static fallback) rather than a
+  // hardcoded literal, so it can't silently drift from the real build.
+  EXPECT_EQ(v->text(), QString("Version %1").arg(droppix::app_version()));
+  EXPECT_GT(v->text().length(), QStringLiteral("Version ").length());
 }

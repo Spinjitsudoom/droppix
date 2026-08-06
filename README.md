@@ -55,6 +55,8 @@ ctest --test-dir build --output-on-failure
 
 `droppix_stream` is the engine; `droppix_gui` supervises it. The evdi path needs root for uinput/virtual-display, so the GUI launches the engine via `pkexec`. Force an encoder with `--encoder nvenc|vaapi|software` (default `auto`).
 
+The GUI stamps its build version (`git describe`, e.g. `v0.1.0-121-ge6bd3ca`) into the **window title bar** and the About page, so you can tell exactly which build is running even when the UI is unchanged. It's resolved at build time (`host/cmake/GenerateVersion.cmake`) and falls back to a static version for git-less tarball builds.
+
 **Linux desktop client:**
 
 ```bash

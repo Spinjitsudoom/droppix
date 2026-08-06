@@ -1,5 +1,7 @@
 #include "about_page.h"
 
+#include "version.h"
+
 #include <QDesktopServices>
 #include <QFrame>
 #include <QGridLayout>
@@ -26,7 +28,7 @@ AboutPage::AboutPage(QWidget* parent) : QWidget(parent) {
   auto* caption = new QLabel("Spacedesk-style extended display for Linux", card);
   caption->setObjectName("caption");
 
-  auto* version = new QLabel("Version 0.1.0", card);
+  auto* version = new QLabel(QString("Version %1").arg(app_version()), card);
   version->setObjectName("aboutVersion");
 
   auto* facts = new QGridLayout;
