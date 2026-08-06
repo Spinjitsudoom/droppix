@@ -918,6 +918,7 @@ function loadSettings() {
     id: randomId(),
     fps: 30,
     bitrateKbps: 8e3,
+    resolution: "1280x720",
     audio: true,
     fit: "contain",
     flip: false,
@@ -940,6 +941,14 @@ function loadSettings() {
 }
 function saveSettings(s) {
   localStorage.setItem(KEY, JSON.stringify(s));
+}
+function resolveResolution(setting, auto) {
+  const m = /^(\d+)x(\d+)$/.exec(setting);
+  if (!m) return auto;
+  const w = parseInt(m[1], 10);
+  const h = parseInt(m[2], 10);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return auto;
+  return { w: w - w % 2, h: h - h % 2 };
 }
 
 // src/fullscreen.ts
@@ -1158,6 +1167,7 @@ var SettingsDrawer = class {
   constructor(onChange) {
     this.onChange = onChange;
     this.seed();
+    this.resolution.addEventListener("change", () => this.commit());
     this.quality.addEventListener("change", () => this.commit());
     this.fps.addEventListener("change", () => this.commit());
     this.audio.addEventListener("change", () => this.commit());
@@ -1186,6 +1196,7 @@ var SettingsDrawer = class {
   scrim = document.getElementById("scrim");
   drawer = document.getElementById("drawer");
   closeBtn = document.getElementById("drawer-close");
+  resolution = document.getElementById("set-resolution");
   quality = document.getElementById("set-quality");
   fps = document.getElementById("set-fps");
   audio = document.getElementById("set-audio");
@@ -1207,6 +1218,7 @@ var SettingsDrawer = class {
    */
   seed() {
     const s = loadSettings();
+    this.resolution.value = s.resolution;
     this.quality.value = String(s.bitrateKbps);
     this.fps.value = String(s.fps);
     this.audio.checked = s.audio;
@@ -1242,6 +1254,7 @@ var SettingsDrawer = class {
     const prev = loadSettings();
     const s = {
       ...prev,
+      resolution: this.resolution.value || prev.resolution,
       bitrateKbps: parseInt(this.quality.value, 10) || prev.bitrateKbps,
       fps: parseInt(this.fps.value, 10) || prev.fps,
       audio: this.audio.checked,
@@ -1444,8 +1457,11 @@ async function connect() {
       }
     };
     wireTransport();
-    const w = isMock ? 1280 : Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1)));
-    const h = isMock ? 720 : Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)));
+    const auto = {
+      w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
+      h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)))
+    };
+    const { w, h } = isMock ? { w: 1280, h: 720 } : resolveResolution(settings.resolution, auto);
     transport.connect({
       width: w,
       height: h,

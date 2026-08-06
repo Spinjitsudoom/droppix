@@ -2,7 +2,7 @@ import { Transport } from "./transport.ts";
 import { VideoPipeline } from "./decoder.ts";
 import { AudioPlayer } from "./audio.ts";
 import { InputBinder } from "./input.ts";
-import { loadSettings, saveSettings } from "./settings.ts";
+import { loadSettings, saveSettings, resolveResolution } from "./settings.ts";
 import { toggleFullscreen } from "./fullscreen.ts";
 import { MockOverlay } from "./mock-overlay.ts";
 import { initTheme, setTheme, nextTheme } from "./theme.ts";
@@ -231,12 +231,13 @@ async function connect() {
       }
     };
     wireTransport();
-    const w = isMock
-      ? 1280
-      : Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1)));
-    const h = isMock
-      ? 720
-      : Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)));
+    // "auto" tracks the canvas at physical-pixel resolution; a fixed setting (e.g. 1280x720)
+    // caps what the host renders, so weak clients don't have to decode/paint a huge frame.
+    const auto = {
+      w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
+      h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1))),
+    };
+    const { w, h } = isMock ? { w: 1280, h: 720 } : resolveResolution(settings.resolution, auto);
     transport!.connect({
       width: w,
       height: h,

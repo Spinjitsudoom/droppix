@@ -6,6 +6,8 @@ export interface ClientSettings {
   id: string;
   fps: number;
   bitrateKbps: number;
+  /** "auto" (canvas × devicePixelRatio) or a fixed "WIDTHxHEIGHT" the host renders. */
+  resolution: string;
   audio: boolean;
   fit: FitMode;
   flip: boolean;
@@ -30,6 +32,7 @@ export function loadSettings(): ClientSettings {
     id: randomId(),
     fps: 30,
     bitrateKbps: 8000,
+    resolution: "1280x720",
     audio: true,
     fit: "contain",
     flip: false,
@@ -53,4 +56,23 @@ export function loadSettings(): ClientSettings {
 
 export function saveSettings(s: ClientSettings): void {
   localStorage.setItem(KEY, JSON.stringify(s));
+}
+
+/**
+ * Resolve the HELLO width/height from the `resolution` setting. A fixed
+ * "WIDTHxHEIGHT" wins; "auto" (or anything unparseable) falls back to `auto`,
+ * which callers derive from the canvas × devicePixelRatio. Fixed dimensions are
+ * rounded down to even — H.264 requires even width/height, so an odd request
+ * would otherwise force encoder padding / a non-standard size.
+ */
+export function resolveResolution(
+  setting: string,
+  auto: { w: number; h: number },
+): { w: number; h: number } {
+  const m = /^(\d+)x(\d+)$/.exec(setting);
+  if (!m) return auto;
+  const w = parseInt(m[1]!, 10);
+  const h = parseInt(m[2]!, 10);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return auto;
+  return { w: w - (w % 2), h: h - (h % 2) };
 }
