@@ -105,6 +105,11 @@ export class InputBinder {
   }
 
   private onKey(e: KeyboardEvent, action: number) {
+    // Never hijack typing into a form field. This handler is bound to `window`, so with
+    // the pair-code PIN inputs focused it would otherwise preventDefault() each digit —
+    // swallowing it from the input and mis-forwarding it to the host as a keypress.
+    const t = e.target as HTMLElement | null;
+    if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
     if (e.key === "F" || e.key === "f") return; // fullscreen shortcut handled elsewhere
     const code = codeToEvdev(e.code);
     if (!code) return;

@@ -869,6 +869,8 @@ var InputBinder = class {
     this.send(MsgType.Scroll, encodeScroll(dx, dy, n.x, n.y));
   }
   onKey(e, action) {
+    const t = e.target;
+    if (t && (t.isContentEditable || t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
     if (e.key === "F" || e.key === "f") return;
     const code = codeToEvdev(e.code);
     if (!code) return;
