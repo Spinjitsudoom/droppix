@@ -48,15 +48,41 @@ let lastBytesAt = performance.now();
 let kbps = 0;
 let isMock = false;
 let burnIn = false;
+let pinRequired = false;
 
 function setStatus(s: string) {
   statusEl.textContent = s;
   statusEl.hidden = false;
 }
 
-// The web client is served BY the host over its own HTTPS, so there is no PIN to
-// enter — loading this page already means you reached the right PC. Connect goes
-// straight through; the host prompts to approve the device if it isn't known yet.
+// Pair overlay: the page connects live, then the host holds the stream until the user
+// types the code shown on the PC. The code is never given to the browser — the host
+// verifies it. Shown while awaiting the PIN; hidden once paired.
+const pairEl = document.getElementById("pair")!;
+const pairStatus = document.getElementById("pair-status")!;
+const pinInputs = [...document.querySelectorAll<HTMLInputElement>("#pin input")];
+function pinValue(): string {
+  return pinInputs.map((i) => i.value).join("");
+}
+function resetPin(): void {
+  pinInputs.forEach((i) => (i.value = ""));
+}
+pinInputs.forEach((inp, i) => {
+  inp.addEventListener("input", () => {
+    inp.value = inp.value.replace(/\D/g, "").slice(0, 1);
+    if (inp.value && i < pinInputs.length - 1) pinInputs[i + 1]!.focus();
+    if (pinValue().length === 6) {
+      transport?.submitPin(pinValue());
+      pairStatus.textContent = "Checking…";
+    }
+  });
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !inp.value && i > 0) pinInputs[i - 1]!.focus();
+  });
+});
+
+// Connect button (disconnected state): re-open the WSS. No PIN here — the PIN is the
+// post-connect pair overlay above, verified by the host.
 const connectView = new ConnectView(() => {
   void tryConnect();
 });
@@ -72,13 +98,14 @@ async function loadConfig() {
     const r = await fetch("./config.json", { cache: "no-store" });
     if (!r.ok) throw new Error(String(r.status));
     const j = (await r.json()) as {
-      pairingCode?: string;
+      pinRequired?: boolean;
       mock?: boolean;
       e2eDesktop?: boolean;
       burnIn?: boolean;
     };
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
+    pinRequired = !!j.pinRequired;
     mock.showIdle();
     mockBadge.hidden = !isMock;
     if (isMock) {
@@ -92,8 +119,10 @@ async function loadConfig() {
       connectView.setStatus(msg);
       return;
     }
-    // Auto-connect on load: the page is host-served, so just connect and show video.
-    // No PIN. On a drop, onClose returns to the connect card (Connect button).
+    // Auto-connect on load: the page is host-served, so open the socket right away.
+    // If the host requires a PIN (pinRequired), the transport shows the pair overlay
+    // on connect and holds until the code is entered; otherwise video starts directly.
+    // On a drop, onClose returns to the connect card (Connect button).
     app.dataset.view = "session";
     controls.show();
     window.setTimeout(() => {
@@ -115,11 +144,27 @@ function wireTransport() {
   transport?.close();
   transport = new Transport({
     onStatus: setStatus,
+    onAwaitingPin: () => {
+      pairEl.classList.add("show");
+      pairStatus.textContent = "Enter the code shown on your PC";
+      resetPin();
+      pinInputs[0]?.focus();
+    },
+    onPinRejected: (left) => {
+      resetPin();
+      pairStatus.textContent =
+        left > 0 ? `Wrong code — ${left} tr${left === 1 ? "y" : "ies"} left` : "Too many attempts";
+      if (left > 0) pinInputs[0]?.focus();
+    },
+    onPaired: () => {
+      pairEl.classList.remove("show");
+    },
     onClose: (r) => {
       setStatus(`Disconnected: ${r}`);
       transport = null;
       connecting = false;
       hud.hidden = true;
+      pairEl.classList.remove("show");
       // Stop decode + blank canvas so no stale frames linger after close.
       video.close();
       audio.close();
@@ -198,6 +243,7 @@ async function connect() {
       bitrateKbps: settings.bitrateKbps,
       wallCol: settings.wallCol,
       wallRow: settings.wallRow,
+      pinRequired,
     });
     canvas.focus();
     // burnIn: marks are drawn into the video server-side, so no client poll.

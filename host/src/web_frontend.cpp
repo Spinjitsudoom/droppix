@@ -1,6 +1,8 @@
 #include "web_frontend.h"
 #include "socket_channel.h"
 #include "ws_channel.h"
+#include "protocol.h"
+#include "web_pin.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -183,6 +185,39 @@ std::vector<unsigned char> load_cert_der_pem(const std::string& cert_path) {
   return der;
 }
 
+// Web-path PIN pairing: after the WSS upgrade and BEFORE handing the channel to the
+// streamer, hold the stream until the client submits the correct pairing code. The code
+// is never served to the browser (config.json only says pinRequired), so only someone
+// who can read it off the host screen can pass. Up to kWebPinMaxTries, then give up.
+// Returns true (proceed to stream) only on a correct code.
+static bool verify_web_pin(ByteChannel& ch, const std::string& expected,
+                           volatile std::sig_atomic_t& stop) {
+  MessageParser parser;
+  unsigned char buf[256];
+  int tries = 0;
+  while (!stop && tries < kWebPinMaxTries) {
+    ParsedMessage m;
+    if (parser.next(m)) {
+      if (static_cast<unsigned char>(m.type) != kMsgPair) continue;  // ignore other frames
+      const std::string pin(m.body.begin(), m.body.end());
+      const bool ok = pin_matches(pin, expected);
+      ++tries;
+      const unsigned char left = ok ? 0 : static_cast<unsigned char>(kWebPinMaxTries - tries);
+      const std::vector<unsigned char> body{static_cast<unsigned char>(ok ? 1 : 0), left};
+      const auto out = encode_message(static_cast<MsgType>(kMsgPairResult), body);
+      if (!ch.send_all(out.data(), out.size())) return false;
+      if (ok) return true;
+      if (tries >= kWebPinMaxTries) return false;
+      continue;
+    }
+    if (!ch.wait_readable(60000)) return false;  // up to 60s to enter/re-enter the code
+    const ssize_t n = ch.recv(buf, sizeof(buf));
+    if (n <= 0) return false;
+    parser.feed(buf, static_cast<size_t>(n));
+  }
+  return false;
+}
+
 bool WebFrontend::serve_until_stream(TransportServer& tx,
                                      const std::string& web_root,
                                      const std::string& pairing_code,
@@ -263,12 +298,24 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
       }
       out_channel = std::make_unique<WsChannel>(fd, ssl);
       out_peer = peer;
-      std::fprintf(stderr, "web: websocket client from %s\n", peer.c_str());
+      // Pop the pairing code up on the host (reuses the native "connecting" popup path),
+      // then hold the stream until the client submits the correct code.
+      std::fprintf(stderr, "client-connecting ip=%s\n", peer.c_str());
+      if (!verify_web_pin(*out_channel, pairing_code, stop)) {
+        std::fprintf(stderr, "web: pairing failed/abandoned for %s\n", peer.c_str());
+        out_channel.reset();  // closes fd + ssl
+        out_peer.clear();
+        continue;
+      }
+      std::fprintf(stderr, "web: paired, streaming to %s\n", peer.c_str());
       return true;
     }
 
     if (path == "/config.json") {
-      std::string body = std::string("{\"pairingCode\":\"") + pairing_code + "\"}\n";
+      // The pairing code is NEVER served to the browser — only that a PIN is required.
+      // The client submits it (read off the host screen) and the host verifies it.
+      (void)pairing_code;
+      std::string body = std::string("{\"pinRequired\":true}\n");
       http_respond(ssl, 200, "OK", "application/json", body, true);
       SSL_shutdown(ssl); SSL_free(ssl); ::close(fd);
       continue;

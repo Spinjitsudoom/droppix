@@ -35,6 +35,8 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 13 | MouseButton | client → host | Right/middle buttons |
 | 14 | Key | client → host | Keyboard |
 | 15 | Pen | client → host | Stylus pressure / eraser |
+| 20 | Pair | client → host | **WSS only** — 6 ASCII digits of the code shown on the PC |
+| 21 | PairResult | host → client | **WSS only** — `[ ok u8 ][ tries_left u8 ]` |
 
 ## HELLO v6 body
 
@@ -74,6 +76,16 @@ When `droppix_stream` is started with `--web --web-root <dir>` (TLS required), t
 | TCP / AOA | `[ u32 be length ][ type u8 ][ body… ]` |
 | WSS | one binary WebSocket frame = `[ type u8 ][ body… ]` (length = WS payload length) |
 
-After TLS, the streamer sniffs the first bytes: HTTP → static / WSS path; otherwise → native Android/Qt length-prefixed client. `/config.json` returns `{ "pairingCode": "NNNNNN" }` for the in-page PIN confirm UI.
+After TLS, the streamer sniffs the first bytes: HTTP → static / WSS path; otherwise → native Android/Qt length-prefixed client. `/config.json` returns `{ "pinRequired": true }` — the pairing code is **never** sent to the browser.
+
+### Web pair handshake (host-verified PIN)
+
+The page is host-served and loads/connects live, but the streamer **holds the video stream** until the browser proves it knows the code shown on the PC. On `/ws` open, before the streamer reads HELLO:
+
+1. Client → host `Pair` (type 20) with the 6 ASCII digits the user typed.
+2. Host compares (constant-time) against `derive_pairing_code(cert_der)` and replies `PairResult` (type 21) `[ ok ][ tries_left ]`.
+3. On `ok=1` the client sends HELLO and streaming begins; on `ok=0` the client re-prompts. After **5** wrong attempts (`kWebPinMaxTries`) the host drops the connection.
+
+The code is verified host-side only (`host/src/web_pin.h`, `verify_web_pin` in `web_frontend.cpp`); the browser never receives it. Native Android/Qt clients never send `Pair`/`PairResult` — those IDs are WSS-only.
 
 The web PWA client speaks **HELLO v6** (`web/src/protocol.ts` `kProtocolVersion = 6`): its `encodeHello` writes the same `wall_col`/`wall_row` u16 pair, byte-identical to the C++/Kotlin codecs, so the toolbar "Wall" col/row inputs place the browser screen in the grid exactly like the native clients.

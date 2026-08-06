@@ -15,7 +15,11 @@ var MsgType = {
   Scroll: 12,
   MouseButton: 13,
   Key: 14,
-  Pen: 15
+  Pen: 15,
+  // Web-path pairing (WSS only; not sent by native clients). Client -> host: Pair with
+  // the 6 ASCII digits. Host -> client: PairResult with [ok u8][triesLeft u8].
+  Pair: 20,
+  PairResult: 21
 };
 function putU16(v, out) {
   out.push(v >>> 8 & 255, v & 255);
@@ -121,8 +125,12 @@ var Transport = class {
   }
   ws = null;
   pingTimer = null;
+  hello = null;
+  paired = false;
   connect(hello) {
     this.close();
+    this.hello = hello;
+    this.paired = false;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/ws`;
     this.handlers.onStatus(`Connecting ${url}`);
@@ -131,30 +139,29 @@ var Transport = class {
     this.ws = ws;
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      const body = encodeHello(
-        kProtocolVersion,
-        hello.width,
-        hello.height,
-        hello.density,
-        hello.name,
-        hello.id,
-        hello.fps,
-        hello.audioWanted,
-        0,
-        hello.bitrateKbps,
-        hello.wallCol,
-        hello.wallRow
-      );
-      ws.send(frameMessage(MsgType.Hello, body));
-      this.handlers.onStatus("Connected - waiting for CONFIG");
-      this.pingTimer = window.setInterval(() => {
-        this.send(MsgType.Ping, new Uint8Array());
-      }, 2e3);
+      if (hello.pinRequired) {
+        this.handlers.onStatus("Connected \u2014 enter the code shown on your PC");
+        this.handlers.onAwaitingPin?.();
+      } else {
+        this.sendHello();
+      }
     };
     ws.onmessage = (ev) => {
       if (this.ws !== ws) return;
       const parsed = parseFrame(ev.data);
       if (!parsed) return;
+      if (!this.paired && parsed.type === MsgType.PairResult) {
+        const ok = parsed.body[0] === 1;
+        const triesLeft = parsed.body[1] ?? 0;
+        if (ok) {
+          this.paired = true;
+          this.sendHello();
+          this.handlers.onPaired?.();
+        } else {
+          this.handlers.onPinRejected?.(triesLeft);
+        }
+        return;
+      }
       switch (parsed.type) {
         case MsgType.Config: {
           const c = decodeConfig(parsed.body);
@@ -194,6 +201,33 @@ var Transport = class {
       this.clearPing();
       this.handlers.onClose("socket closed");
     };
+  }
+  /** Send the code the user typed (read off the host screen) for host verification. */
+  submitPin(code) {
+    this.send(MsgType.Pair, new TextEncoder().encode(code));
+  }
+  sendHello() {
+    const h = this.hello;
+    if (!h || !this.ws) return;
+    const body = encodeHello(
+      kProtocolVersion,
+      h.width,
+      h.height,
+      h.density,
+      h.name,
+      h.id,
+      h.fps,
+      h.audioWanted,
+      0,
+      h.bitrateKbps,
+      h.wallCol,
+      h.wallRow
+    );
+    this.ws.send(frameMessage(MsgType.Hello, body));
+    this.handlers.onStatus("Connected - waiting for CONFIG");
+    this.pingTimer = window.setInterval(() => {
+      this.send(MsgType.Ping, new Uint8Array());
+    }, 2e3);
   }
   send(type, body) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
@@ -1240,10 +1274,33 @@ var lastBytesAt = performance.now();
 var kbps = 0;
 var isMock = false;
 var burnIn = false;
+var pinRequired = false;
 function setStatus(s) {
   statusEl.textContent = s;
   statusEl.hidden = false;
 }
+var pairEl = document.getElementById("pair");
+var pairStatus = document.getElementById("pair-status");
+var pinInputs = [...document.querySelectorAll("#pin input")];
+function pinValue() {
+  return pinInputs.map((i) => i.value).join("");
+}
+function resetPin() {
+  pinInputs.forEach((i) => i.value = "");
+}
+pinInputs.forEach((inp, i) => {
+  inp.addEventListener("input", () => {
+    inp.value = inp.value.replace(/\D/g, "").slice(0, 1);
+    if (inp.value && i < pinInputs.length - 1) pinInputs[i + 1].focus();
+    if (pinValue().length === 6) {
+      transport?.submitPin(pinValue());
+      pairStatus.textContent = "Checking\u2026";
+    }
+  });
+  inp.addEventListener("keydown", (e) => {
+    if (e.key === "Backspace" && !inp.value && i > 0) pinInputs[i - 1].focus();
+  });
+});
 var connectView = new ConnectView(() => {
   void tryConnect();
 });
@@ -1259,6 +1316,7 @@ async function loadConfig() {
     const j = await r.json();
     isMock = !!j.mock;
     burnIn = !!j.burnIn;
+    pinRequired = !!j.pinRequired;
     mock.showIdle();
     mockBadge.hidden = !isMock;
     if (isMock) {
@@ -1286,11 +1344,26 @@ function wireTransport() {
   transport?.close();
   transport = new Transport({
     onStatus: setStatus,
+    onAwaitingPin: () => {
+      pairEl.classList.add("show");
+      pairStatus.textContent = "Enter the code shown on your PC";
+      resetPin();
+      pinInputs[0]?.focus();
+    },
+    onPinRejected: (left) => {
+      resetPin();
+      pairStatus.textContent = left > 0 ? `Wrong code \u2014 ${left} tr${left === 1 ? "y" : "ies"} left` : "Too many attempts";
+      if (left > 0) pinInputs[0]?.focus();
+    },
+    onPaired: () => {
+      pairEl.classList.remove("show");
+    },
     onClose: (r) => {
       setStatus(`Disconnected: ${r}`);
       transport = null;
       connecting = false;
       hud.hidden = true;
+      pairEl.classList.remove("show");
       video.close();
       audio.close();
       mock.showIdle();
@@ -1354,7 +1427,8 @@ async function connect() {
       audioWanted: settings.audio ? 1 : 0,
       bitrateKbps: settings.bitrateKbps,
       wallCol: settings.wallCol,
-      wallRow: settings.wallRow
+      wallRow: settings.wallRow,
+      pinRequired
     });
     canvas.focus();
     if (isMock && !burnIn) mock.startServerMarkPoll();

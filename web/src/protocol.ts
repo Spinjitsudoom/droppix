@@ -18,6 +18,10 @@ export const MsgType = {
   MouseButton: 13,
   Key: 14,
   Pen: 15,
+  // Web-path pairing (WSS only; not sent by native clients). Client -> host: Pair with
+  // the 6 ASCII digits. Host -> client: PairResult with [ok u8][triesLeft u8].
+  Pair: 20,
+  PairResult: 21,
 } as const;
 export type MsgType = (typeof MsgType)[keyof typeof MsgType];
 

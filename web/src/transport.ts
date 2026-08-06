@@ -16,27 +16,40 @@ export interface TransportHandlers {
   onOverlay: (show: boolean) => void;
   onClose: (reason: string) => void;
   onStatus: (msg: string) => void;
+  // Web-path PIN pairing: the socket is open but the host holds the stream until the
+  // client submits the code shown on the PC. onAwaitingPin fires when the prompt should
+  // show; onPinRejected reports remaining tries; onPaired fires when the code is accepted.
+  onAwaitingPin?: () => void;
+  onPinRejected?: (triesLeft: number) => void;
+  onPaired?: () => void;
 }
+
+type HelloArgs = {
+  width: number;
+  height: number;
+  density: number;
+  name: string;
+  id: string;
+  fps: number;
+  audioWanted: number;
+  bitrateKbps: number;
+  wallCol: number;
+  wallRow: number;
+  pinRequired: boolean;
+};
 
 export class Transport {
   private ws: WebSocket | null = null;
   private pingTimer: number | null = null;
+  private hello: HelloArgs | null = null;
+  private paired = false;
 
   constructor(private handlers: TransportHandlers) {}
 
-  connect(hello: {
-    width: number;
-    height: number;
-    density: number;
-    name: string;
-    id: string;
-    fps: number;
-    audioWanted: number;
-    bitrateKbps: number;
-    wallCol: number;
-    wallRow: number;
-  }): void {
+  connect(hello: HelloArgs): void {
     this.close();
+    this.hello = hello;
+    this.paired = false;
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${proto}//${location.host}/ws`;
     this.handlers.onStatus(`Connecting ${url}`);
@@ -46,25 +59,14 @@ export class Transport {
 
     ws.onopen = () => {
       if (this.ws !== ws) return;
-      const body = encodeHello(
-        kProtocolVersion,
-        hello.width,
-        hello.height,
-        hello.density,
-        hello.name,
-        hello.id,
-        hello.fps,
-        hello.audioWanted,
-        0,
-        hello.bitrateKbps,
-        hello.wallCol,
-        hello.wallRow,
-      );
-      ws.send(frameMessage(MsgType.Hello, body));
-      this.handlers.onStatus("Connected - waiting for CONFIG");
-      this.pingTimer = window.setInterval(() => {
-        this.send(MsgType.Ping, new Uint8Array());
-      }, 2000);
+      if (hello.pinRequired) {
+        // Hold HELLO until the user enters the code the host shows; sendHello() runs on
+        // an accepted PairResult. The page is "live" here — just waiting to be confirmed.
+        this.handlers.onStatus("Connected — enter the code shown on your PC");
+        this.handlers.onAwaitingPin?.();
+      } else {
+        this.sendHello();
+      }
     };
 
     ws.onmessage = (ev) => {
@@ -72,6 +74,18 @@ export class Transport {
       if (this.ws !== ws) return;
       const parsed = parseFrame(ev.data as ArrayBuffer);
       if (!parsed) return;
+      if (!this.paired && parsed.type === MsgType.PairResult) {
+        const ok = parsed.body[0] === 1;
+        const triesLeft = parsed.body[1] ?? 0;
+        if (ok) {
+          this.paired = true;
+          this.sendHello();
+          this.handlers.onPaired?.();
+        } else {
+          this.handlers.onPinRejected?.(triesLeft);
+        }
+        return;
+      }
       switch (parsed.type) {
         case MsgType.Config: {
           const c = decodeConfig(parsed.body);
@@ -114,6 +128,35 @@ export class Transport {
       this.clearPing();
       this.handlers.onClose("socket closed");
     };
+  }
+
+  /** Send the code the user typed (read off the host screen) for host verification. */
+  submitPin(code: string): void {
+    this.send(MsgType.Pair, new TextEncoder().encode(code));
+  }
+
+  private sendHello(): void {
+    const h = this.hello;
+    if (!h || !this.ws) return;
+    const body = encodeHello(
+      kProtocolVersion,
+      h.width,
+      h.height,
+      h.density,
+      h.name,
+      h.id,
+      h.fps,
+      h.audioWanted,
+      0,
+      h.bitrateKbps,
+      h.wallCol,
+      h.wallRow,
+    );
+    this.ws.send(frameMessage(MsgType.Hello, body));
+    this.handlers.onStatus("Connected - waiting for CONFIG");
+    this.pingTimer = window.setInterval(() => {
+      this.send(MsgType.Ping, new Uint8Array());
+    }, 2000);
   }
 
   send(type: MsgType, body: Uint8Array): void {

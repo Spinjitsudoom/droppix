@@ -45,6 +45,12 @@ test("protocol version is 6 (HELLO v6 wall)", () => {
   assert.equal(kProtocolVersion, 6);
 });
 
+test("web pairing MsgType values match the host (web_pin.h kMsgPair/kMsgPairResult)", () => {
+  // Must stay byte-identical to host/src/web_pin.h: kMsgPair=20, kMsgPairResult=21.
+  assert.equal(MsgType.Pair, 20);
+  assert.equal(MsgType.PairResult, 21);
+});
+
 test("HELLO v6 carries wall_col/wall_row after bitrate (col=2,row=1)", () => {
   // Byte-identical to the C++ (test_protocol) and Kotlin (encodeHelloV6Wall) vectors:
   // wall_col at bytes 26-27, wall_row at 28-29 (big-endian u16), strings start at 30.

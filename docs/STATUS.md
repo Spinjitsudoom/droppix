@@ -1,6 +1,6 @@
 # droppix — feature & docs status
 
-**Last verified:** 2026-08-05 on `master` (264/264 host tests, 16/16 web tests; host GUI redesign shipped — spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual dark/light theme with persisted toggle; web PWA client redesign shipped — PIN-entry connect screen, in-session auto-hiding control bar, settings drawer, dual dark/light theme with persisted toggle; live server refresh + prominent Copy-web-URL shipped).
+**Last verified:** 2026-08-06 on `master` (268/268 host tests, 20/20 web tests; host-verified web PIN pairing shipped — page loads/connects live, host **holds the stream** until the browser submits the code shown on the PC, verified host-side (`web_pin.h`, constant-time), 5-attempt limit then drop; code never sent to the browser. Earlier on master: host GUI redesign (spacedesk-style sectioned `QStackedWidget`, Status hero + live metrics, dual theme); web PWA client redesign (in-session control bar, settings drawer, dual theme); live server refresh + prominent Copy-web-URL).
 
 Living source of truth for "is this designed / planned / shipped?". Design specs under `superpowers/specs/` keep their historical detail; this file overrides stale **Status** lines until those headers catch up.
 
@@ -15,7 +15,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open. X11 reverse-PRIME evdi (separate-GPU provider, e.g. Cinnamon/Xorg) fixed 2026-07-26: provider link + auto-enable now run concurrently with the mode-wait, not after |
-| Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir; redesigned (2026-08-04) into a spacedesk-style shell: Android-style 6-digit PIN-entry connect screen (replacing the old "PIN matches PC" checkbox), an in-session auto-hiding player-style control bar, a settings drawer surfacing every client setting (quality, fps, audio, fit, flip, brightness, contrast, wall, device name), and a dark/light theme with a persisted toggle |
+| Web PWA client (host-served) | **Shipped** — browser-verified over HTTPS/WSS; local builds auto-stage `web/dist` to the runtime dir; redesigned (2026-08-04) into a spacedesk-style shell: connect card that auto-connects on load, a post-connect **host-verified 6-digit PIN overlay** (page connects live, stream held until the code shown on the PC is entered — see the pairing row below), an in-session auto-hiding player-style control bar, a settings drawer surfacing every client setting (quality, fps, audio, fit, flip, brightness, contrast, wall, device name), and a dark/light theme with a persisted toggle |
 | In-GUI Debug log console (F12) | **Shipped** — dockable panel capturing streamer + GUI logs |
 
 ## Feature matrix (code on master)
@@ -51,7 +51,8 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Communication Interfaces panel (adapter list + LAN/USB toggles) | Shipped | `host/gui/lan_ifaces.*`, `host/gui/main_window.*` |
 | Host GUI redesign (sectioned `QStackedWidget`, Status hero, dual theme) | Shipped | `host/gui/pages/{status,connections,interfaces,settings,about}_page.*`, `host/gui/style.h`, `host/gui/theme{,_pref}.*`, `host/gui/main_window.*` |
 | Live server refresh + prominent Copy web URL | Shipped | With the Server ON, changing any streamer setting (`SettingsPage::settingsChanged`) or Interfaces toggle restarts the listener (debounced 600 ms, race-safe one-shot restart) so it applies immediately; a "Copy web URL" button on Status + Interfaces surfaces `currentWebUrl()` whenever server + web client are on. `host/gui/pages/settings_page.*`, `host/gui/pages/status_page.*`, `host/gui/main_window.*` |
-| Web PWA client redesign (PIN-entry connect screen, in-session control bar, settings drawer, dual theme) | Shipped | `web/src/{pin,theme,connect-view,session-controls,settings-drawer}.ts`, `web/public/{index.html,styles.css}` |
+| Web PWA client redesign (auto-connect connect card, in-session control bar, settings drawer, dual theme) | Shipped | `web/src/{theme,connect-view,session-controls,settings-drawer}.ts`, `web/public/{index.html,styles.css}` |
+| Host-verified web PIN pairing (post-connect, stream held) | Shipped | Page connects live; host holds video until the browser submits the code shown on the PC. Verified host-side (constant-time), 5-attempt limit then drop; code never sent to the browser. `Pair`/`PairResult` are WSS-only wire types (20/21). `host/src/web_pin.h`, `host/src/web_frontend.cpp` (`verify_web_pin`), `host/tests/test_web_pin.cpp`, `web/src/{protocol,transport}.ts`, `web/src/main.ts`, `web/public/{index.html,styles.css}`; mock pair flow via `PAIR=1` in `tools/web-mock-host` |
 | Zero-copy GPU capture | Out of scope (for now) | evdi still delivers CPU BGRA frames |
 
 ## Spec index (status as of 2026-07-18)

@@ -33,6 +33,9 @@ const REPO_ROOT = path.resolve(TOOL_ROOT, "../..");
 
 const PORT = Number(process.env.PORT || 8443);
 const PAIRING = process.env.PAIRING_CODE || "123456";
+// Pair flow is opt-in for the mock (PAIR=1) so the default E2E path still auto-connects.
+// When on, config.json advertises pinRequired and the client must submit PAIRING first.
+const PIN_REQUIRED = process.env.PAIR === "1" || process.env.PIN_REQUIRED === "1";
 const WEB_ROOT =
   process.env.DROPPIX_WEB_ROOT || path.join(REPO_ROOT, "web", "dist");
 const CERT_DIR = path.join(TOOL_ROOT, "certs");
@@ -115,7 +118,7 @@ const server = https.createServer(
     if (url.pathname === "/config.json") {
       const body =
         JSON.stringify({
-          pairingCode: PAIRING,
+          pinRequired: PIN_REQUIRED,
           mock: true,
           e2eDesktop: true,
           burnIn: true,
@@ -260,6 +263,19 @@ wss.on("connection", (ws, req) => {
     const parsed = parseFrame(data);
     if (!parsed) return;
     const { type, body } = parsed;
+
+    // Pair handshake: browser sends the code shown on the "PC" (PAIRING_CODE, default
+    // 123456); we verify and reply PairResult [ok][triesLeft]. HELLO is only sent by the
+    // client after ok, so the stream stays held until the right code arrives. 5 tries.
+    if (type === MsgType.Pair) {
+      ws._pinTries = (ws._pinTries || 0) + 1;
+      const submitted = Buffer.from(body).toString("ascii");
+      const ok = submitted === PAIRING;
+      const left = ok ? 0 : Math.max(0, 5 - ws._pinTries);
+      ws.send(frame(MsgType.PairResult, Uint8Array.from([ok ? 1 : 0, left])));
+      if (!ok && left === 0) ws.close();
+      return;
+    }
 
     if (type === MsgType.Hello) {
       const hello = decodeHello(body);

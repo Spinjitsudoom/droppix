@@ -16,6 +16,8 @@ export const MsgType = {
   MouseButton: 13,
   Key: 14,
   Pen: 15,
+  Pair: 20,
+  PairResult: 21,
 };
 
 export const TYPE_NAME = Object.fromEntries(

@@ -112,6 +112,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   border-color: var(--bad);
   animation: code-shake 0.3s ease-in-out;
 }
+
+/* Pair overlay: shown over the (connected, held) session while awaiting the PIN. */
+#pair {
+  position: fixed; inset: 0; z-index: 20; display: none;
+  align-items: center; justify-content: center; padding: 1rem;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(6px);
+}
+#pair.show { display: flex; }
 @keyframes code-shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-6px); }
