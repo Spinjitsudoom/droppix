@@ -69,11 +69,10 @@ QPushButton#navButton { background: transparent; border: none; border-radius: 9p
 QPushButton#navButton:hover { background: %PANEL%; color: %TEXT%; }
 QPushButton#navButton[current="true"] { background: %ACCENT%; color: %ACCENTINK%; }
 
-QPushButton#startButton, QPushButton#serverSwitch {
-  background: %ACCENT%; border: none; border-radius: 8px; padding: 12px; color: %ACCENTINK%; font-size: 15px; font-weight: 700;
+ToggleSwitch#serverSwitch {
+  qproperty-trackOnColor: %ACCENT%; qproperty-trackOffColor: %IDLE%;
+  qproperty-knobOnColor: %ACCENTINK%; qproperty-knobOffColor: %TEXT%;
 }
-QPushButton#startButton:hover, QPushButton#serverSwitch[on="true"]:hover { background: %ACCENT2%; }
-QPushButton#startButton[running="true"], QPushButton#serverSwitch:!checked { background: %IDLE%; color: %TEXT%; }
 
 QPlainTextEdit { background: %BG%; border: 1px solid %BORDER%; border-radius: 8px; color: %TEXT%; padding: 6px; }
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }

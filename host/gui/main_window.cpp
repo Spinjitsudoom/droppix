@@ -11,6 +11,7 @@
 #include "pages/connections_page.h"
 #include "pages/settings_page.h"
 #include "pages/status_page.h"
+#include "toggle_switch.h"
 #include "style.h"
 #include "theme_pref.h"
 #include "version.h"
@@ -363,7 +364,7 @@ MainWindow::MainWindow(QWidget* parent)
   // `clicked`, not `toggled`: updateServerButton() drives the switch programmatically via
   // setChecked(), which emits toggled but NOT clicked — so wiring onServerToggled() to
   // `clicked` (a user gesture only) can never re-enter itself through that setChecked().
-  connect(statusPage_->serverSwitch(), &QPushButton::clicked, this,
+  connect(statusPage_->serverSwitch(), &QAbstractButton::clicked, this,
           [this](bool on){ onServerToggled(on); });
   connect(profSaveBtn_, &QPushButton::clicked, this, [this]{
     const QString n = profileBox_->currentText();
@@ -853,7 +854,7 @@ void MainWindow::updateServerButton() {
   auto* sw = statusPage_->serverSwitch();
   sw->setChecked(serverEnabled_);
   sw->setProperty("on", serverEnabled_);
-  sw->setText(serverEnabled_ ? "Server ON" : "Server OFF");
+  sw->setText(serverEnabled_ ? "Server ON" : "Server OFF");   // not painted; a11y name only
   sw->style()->unpolish(sw); sw->style()->polish(sw);   // re-apply [on="true"] QSS (see docs/lessons)
 }
 

@@ -150,6 +150,7 @@ if(Qt6_FOUND)
     gui/pages/interfaces_page.cpp
     gui/pages/connections_page.cpp
     gui/pages/status_page.cpp
+    gui/toggle_switch.cpp
     src/version.cpp
   )
   target_link_libraries(droppix_gui PRIVATE OpenSSL::SSL OpenSSL::Crypto)
@@ -252,6 +253,8 @@ if(Qt6_FOUND)
     gui/pages/about_page.cpp
     gui/tests/test_settings_page.cpp
     gui/pages/settings_page.cpp
+    gui/tests/test_toggle_switch.cpp
+    gui/toggle_switch.cpp
     gui/autostart.cpp
     src/version.cpp
   )

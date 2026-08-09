@@ -7,6 +7,8 @@ class QLabel;
 
 namespace droppix {
 
+class ToggleSwitch;
+
 // "Status" section (stack_ index 0): the redesigned landing page — a hero card
 // (beacon dot + state word + the server ON/OFF switch + a sub-line), a live
 // metrics row (active monitors / clients / interfaces up), the profile row,
@@ -26,11 +28,11 @@ class StatusPage : public QWidget {
              QLabel* dot, QLabel* stateText, QLabel* stats,
              QLabel* scanCaption, QLabel* scanQr, QPushButton* copyUrl, QWidget* parent = nullptr);
 
-  QPushButton* serverSwitch();                       // checkable QPushButton#serverSwitch
+  ToggleSwitch* serverSwitch();                       // checkable ToggleSwitch#serverSwitch
   void setMetrics(int monitors, int clients, int ifaces);   // updates the 3 metric numbers
 
  private:
-  QPushButton* serverSwitch_ = nullptr;
+  ToggleSwitch* serverSwitch_ = nullptr;
   QLabel* monitorsNum_ = nullptr;
   QLabel* clientsNum_ = nullptr;
   QLabel* ifacesNum_ = nullptr;

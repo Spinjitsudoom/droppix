@@ -1,4 +1,5 @@
 #include "status_page.h"
+#include "toggle_switch.h"
 
 #include <QComboBox>
 #include <QFrame>
@@ -37,16 +38,19 @@ StatusPage::StatusPage(QComboBox* profile, QPushButton* save, QPushButton* saveA
   hero->setObjectName("card");
   stateText->setObjectName("stateWord");   // was "statusText" (compact row); hero wants it large
 
-  serverSwitch_ = new QPushButton("Server OFF", hero);
+  serverSwitch_ = new ToggleSwitch(hero);
   serverSwitch_->setObjectName("serverSwitch");
-  serverSwitch_->setCheckable(true);
-  serverSwitch_->setCursor(Qt::PointingHandCursor);
+  serverSwitch_->setText("Server");   // not painted (see ToggleSwitch), kept for accessibility
+  auto* serverLabel = new QLabel("Server", hero);
+  serverLabel->setObjectName("caption");
 
   auto* heroTopRow = new QHBoxLayout;
   heroTopRow->addWidget(dot);
   heroTopRow->addSpacing(8);
   heroTopRow->addWidget(stateText);
   heroTopRow->addStretch();
+  heroTopRow->addWidget(serverLabel);
+  heroTopRow->addSpacing(8);
   heroTopRow->addWidget(serverSwitch_);
 
   auto* heroLayout = new QVBoxLayout;
@@ -85,7 +89,7 @@ StatusPage::StatusPage(QComboBox* profile, QPushButton* save, QPushButton* saveA
   root->addStretch();
 }
 
-QPushButton* StatusPage::serverSwitch() { return serverSwitch_; }
+ToggleSwitch* StatusPage::serverSwitch() { return serverSwitch_; }
 
 void StatusPage::setMetrics(int monitors, int clients, int ifaces) {
   monitorsNum_->setText(QString::number(monitors));
