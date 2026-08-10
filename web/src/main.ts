@@ -208,7 +208,10 @@ function wireTransport() {
       video.submit(key, nal, pts);
       const now = performance.now();
       if (now - lastBytesAt >= 1000) {
-        kbps = Math.round((bytesIn * 8) / 1000);
+        // Divide by the REAL window, not a fixed 1s: at low/bursty frame rates the
+        // window stretches well past 1s, and a fixed divisor inflated kbps several-fold
+        // (the misleading "22 Mbps" readings during the fps debugging).
+        kbps = Math.round((bytesIn * 8) / (now - lastBytesAt));
         bytesIn = 0;
         lastBytesAt = now;
         if (showHud) {

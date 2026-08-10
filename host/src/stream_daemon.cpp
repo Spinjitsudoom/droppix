@@ -296,9 +296,13 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
 
   auto t0 = std::chrono::steady_clock::now();
   int sent = 0;
-  StatAccumulator encode_ms, frame_kb;
+  // interval_ms = gap between frames the COMPOSITOR delivered (capture-bound when high);
+  // send_ms = time blocked pushing a frame into the socket (network-bound when high).
+  // Together they split "low fps" into its two possible causes, which plain fps can't.
+  StatAccumulator encode_ms, frame_kb, interval_ms, send_ms;
   int frames_since_report = 0;
   auto last_report = std::chrono::steady_clock::now();
+  auto last_frame_at = std::chrono::steady_clock::now();
   // With touch on, poll the loop tightly so incoming touch is handled promptly
   // instead of being gated by the up-to-1s damage-driven frame wait.
   const int frame_timeout = (cfg_.touch || do_audio) ? 8 : 1000;
@@ -314,18 +318,25 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     }
     Frame f = src_->next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
+    auto frame_at = std::chrono::steady_clock::now();
+    interval_ms.add(std::chrono::duration<double, std::milli>(frame_at - last_frame_at).count());
+    last_frame_at = frame_at;
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
-                         std::chrono::steady_clock::now() - t0).count();
+                         frame_at - t0).count();
     auto enc_t0 = std::chrono::steady_clock::now();
     auto packets = enc_.encode(f, pts_us);
     double enc_ms = std::chrono::duration<double, std::milli>(
                         std::chrono::steady_clock::now() - enc_t0).count();
     encode_ms.add(enc_ms);
+    auto send_t0 = std::chrono::steady_clock::now();
     for (auto& pkt : packets) {
       frame_kb.add(pkt.data.size() / 1024.0);
       if (!tx_.send_video(pkt.pts_us, pkt.keyframe, pkt.data)) break;
       ++sent;
     }
+    if (!packets.empty())
+      send_ms.add(std::chrono::duration<double, std::milli>(
+          std::chrono::steady_clock::now() - send_t0).count());
     ++frames_since_report;
 
     auto now = std::chrono::steady_clock::now();
@@ -334,14 +345,18 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       if (cfg_.stats_json) {
         std::fprintf(stderr, "%s\n", format_stats_json(
             encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
-            frame_kb.avg(), frame_kb.peak(), tx_.connected()).c_str());
+            frame_kb.avg(), frame_kb.peak(), tx_.connected(),
+            interval_ms.avg(), send_ms.avg(), send_ms.peak()).c_str());
       } else {
         std::fprintf(stderr,
-            "stats: encode avg %.1f ms peak %.1f ms | fps %.1f | frame avg %.1f KB peak %.1f KB\n",
+            "stats: encode avg %.1f ms peak %.1f ms | fps %.1f | frame avg %.1f KB peak %.1f KB"
+            " | interval avg %.0f ms | send avg %.1f ms peak %.1f ms\n",
             encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
-            frame_kb.avg(), frame_kb.peak());
+            frame_kb.avg(), frame_kb.peak(),
+            interval_ms.avg(), send_ms.avg(), send_ms.peak());
       }
-      encode_ms.reset(); frame_kb.reset(); frames_since_report = 0; last_report = now;
+      encode_ms.reset(); frame_kb.reset(); interval_ms.reset(); send_ms.reset();
+      frames_since_report = 0; last_report = now;
     }
 
     tx_.poll_control();

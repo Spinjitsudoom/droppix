@@ -81,7 +81,8 @@ export class VideoPipeline implements VideoRenderer {
     this.recv++;
     const nowRecv = performance.now();
     if (nowRecv - this.recvAt >= 1000) {
-      this.recvFps = this.recv;
+      // Scale by the real window: at low fps it stretches past 1s and a raw count lies.
+      this.recvFps = Math.round((this.recv * 1000) / (nowRecv - this.recvAt));
       this.recv = 0;
       this.recvAt = nowRecv;
     }
@@ -240,7 +241,7 @@ export class VideoPipeline implements VideoRenderer {
     this.painted++;
     const now = performance.now();
     if (now - this.lastFpsAt >= 1000) {
-      this.fps = this.frames;
+      this.fps = Math.round((this.frames * 1000) / (now - this.lastFpsAt));
       this.frames = 0;
       this.lastFpsAt = now;
     }

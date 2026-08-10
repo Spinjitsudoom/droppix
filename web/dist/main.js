@@ -364,7 +364,7 @@ var VideoPipeline = class {
     this.recv++;
     const nowRecv = performance.now();
     if (nowRecv - this.recvAt >= 1e3) {
-      this.recvFps = this.recv;
+      this.recvFps = Math.round(this.recv * 1e3 / (nowRecv - this.recvAt));
       this.recv = 0;
       this.recvAt = nowRecv;
     }
@@ -506,7 +506,7 @@ var VideoPipeline = class {
     this.painted++;
     const now = performance.now();
     if (now - this.lastFpsAt >= 1e3) {
-      this.fps = this.frames;
+      this.fps = Math.round(this.frames * 1e3 / (now - this.lastFpsAt));
       this.frames = 0;
       this.lastFpsAt = now;
     }
@@ -1004,12 +1004,13 @@ var MseVideoPipeline = class {
     this.recvWin++;
     const now = performance.now();
     if (now - this.recvAt >= 1e3) {
-      this.recvFps = this.recvWin;
+      const winS = (now - this.recvAt) / 1e3;
+      this.recvFps = Math.round(this.recvWin / winS);
       this.recvWin = 0;
       this.recvAt = now;
       const q = this.video.getVideoPlaybackQuality?.();
       if (q) {
-        this.outFps = q.totalVideoFrames - this.lastRendered;
+        this.outFps = Math.round((q.totalVideoFrames - this.lastRendered) / winS);
         this.lastRendered = q.totalVideoFrames;
       } else {
         this.outFps = this.recvFps;
@@ -2078,7 +2079,7 @@ function wireTransport() {
       video.submit(key, nal, pts);
       const now = performance.now();
       if (now - lastBytesAt >= 1e3) {
-        kbps = Math.round(bytesIn * 8 / 1e3);
+        kbps = Math.round(bytesIn * 8 / (now - lastBytesAt));
         bytesIn = 0;
         lastBytesAt = now;
         if (showHud) {
