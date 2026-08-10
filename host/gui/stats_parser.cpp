@@ -32,6 +32,10 @@ Stats parse_stats_json(const std::string& line) {
   if (!get_double(line, "frame_kb_peak", st.frame_kb_peak)) return st;
   if (!find_value(line, "client_connected", conn)) return st;
   st.client_connected = (conn == "true");
+  // Optional diagnostics (older streamers omit them): absence must not invalidate.
+  get_double(line, "interval_ms_avg", st.interval_ms_avg);
+  get_double(line, "send_ms_avg", st.send_ms_avg);
+  get_double(line, "send_ms_peak", st.send_ms_peak);
   st.valid = true;
   return st;
 }

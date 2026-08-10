@@ -23,5 +23,9 @@ class StreamController : public QObject {
   void onReadyRead();
   QProcess proc_;
   QByteArray buf_;
+  // Stats-json lines are consumed for statsReceived and never reach the log console;
+  // echo a compact human-readable summary there every few seconds so users can read
+  // (and paste) live fps/interval/send diagnostics from F12 without extra tooling.
+  qint64 lastStatsEchoMs_ = 0;
 };
 }  // namespace droppix

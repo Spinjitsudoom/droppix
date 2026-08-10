@@ -1,4 +1,5 @@
 #include "stream_controller.h"
+#include <QDateTime>
 #include <QStringList>
 
 namespace droppix {
@@ -74,8 +75,26 @@ void StreamController::onReadyRead() {
       continue;
     }
     Stats s = parse_stats_json(line.toStdString());
-    if (s.valid) emit statsReceived(s);
-    else emit logLine(line);
+    if (s.valid) {
+      emit statsReceived(s);
+      // Echo a readable summary into the log console every ~3s (raw stats-json never
+      // reaches it). interval vs send splits low fps into its cause: interval high =>
+      // compositor delivers few frames (capture-bound); send high => socket write
+      // blocks on the client's network (network-bound).
+      const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+      if (nowMs - lastStatsEchoMs_ >= 3000) {
+        lastStatsEchoMs_ = nowMs;
+        emit logLine(QString("stats: fps %1 | encode %2 ms | frame %3 KB | interval %4 ms | send %5 ms (peak %6)")
+                         .arg(s.fps, 0, 'f', 1)
+                         .arg(s.encode_ms_avg, 0, 'f', 1)
+                         .arg(s.frame_kb_avg, 0, 'f', 1)
+                         .arg(s.interval_ms_avg, 0, 'f', 0)
+                         .arg(s.send_ms_avg, 0, 'f', 1)
+                         .arg(s.send_ms_peak, 0, 'f', 1));
+      }
+    } else {
+      emit logLine(line);
+    }
   }
 }
 }  // namespace droppix
