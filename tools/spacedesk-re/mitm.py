@@ -85,7 +85,33 @@ class Framer:
                 print(hexdump(msg[HDR:], 192), flush=True)
 
 
-def udp_responder(stop):
+def fetch_real_discovery(host, timeout=3):
+    """Ask the real server for its discovery response so we can serve the authentic one.
+
+    The real reply is a 308-byte struct (machine name UTF-16LE @0, TCP port @260, then
+    capability fields) — not the bare magic string that merely happens to be enough to
+    coax a connection. Serving the genuine bytes keeps the viewer on its normal path.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(timeout)
+    try:
+        s.sendto(b"SPACEDESK-NET-CLIENT\x00", (host, PORT))
+        d, _ = s.recvfrom(65535)
+        return d
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
+def udp_responder(stop, real_host, logpath):
+    reply = fetch_real_discovery(real_host)
+    if reply:
+        name = reply[:64].decode("utf-16-le", "ignore").rstrip("\x00")
+        log(f"serving the REAL server's discovery response ({len(reply)}B, name={name!r})", logpath)
+    else:
+        reply = UDP_REPLY
+        log("real server did not answer discovery; falling back to the bare magic", logpath)
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -99,7 +125,7 @@ def udp_responder(stop):
         if d.startswith(b"SPACEDESK"):
             for dst in ((a[0], a[1]), (a[0], PORT), ("255.255.255.255", PORT)):
                 try:
-                    s.sendto(UDP_REPLY, dst)
+                    s.sendto(reply, dst)
                 except OSError:
                     pass
     s.close()
@@ -137,7 +163,7 @@ def main():
     sport = int(p or PORT)
 
     stop = threading.Event()
-    threading.Thread(target=udp_responder, args=(stop,), daemon=True).start()
+    threading.Thread(target=udp_responder, args=(stop, host, a.log), daemon=True).start()
 
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

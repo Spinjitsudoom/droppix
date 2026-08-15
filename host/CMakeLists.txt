@@ -70,6 +70,7 @@ add_library(droppix_core
   src/ws_channel.cpp
   src/web_frontend.cpp
   src/web_root.cpp
+  src/jpeg_stripe_encoder.cpp
   src/version.cpp
 )
 target_include_directories(droppix_core PUBLIC
@@ -210,6 +211,8 @@ add_executable(droppix_tests
   tests/test_web_pin.cpp
   tests/test_signal_setup.cpp
   tests/test_send_backlog.cpp
+  tests/test_spacedesk_protocol.cpp
+  tests/test_jpeg_stripe_encoder.cpp
   tests/test_version.cpp
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp
