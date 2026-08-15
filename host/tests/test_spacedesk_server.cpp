@@ -79,13 +79,18 @@ TEST(SpacedeskServer, StreamsJpegStripesToAViewer) {
   ASSERT_EQ(::send(fd, hello.data(), hello.size(), 0),
             static_cast<ssize_t>(hello.size()));
 
-  // First response must be the ack the real server sends before any frames.
+  // The viewer must receive the real server's full opening sequence before any frames:
+  // ack, two display messages, two heartbeats. With only the ack it sits connected with
+  // the display OFF, which is exactly the bug this asserts against.
   unsigned char hdr[kHeaderSize];
-  ASSERT_TRUE(read_exact(fd, hdr, kHeaderSize));
   Header h{};
-  ASSERT_TRUE(parse_header(hdr, kHeaderSize, h));
-  EXPECT_EQ(h.type, kMsgAck);
-  EXPECT_EQ(h.payload_len, 0u);
+  const uint32_t expect[] = {kMsgAck, kMsgDisplay, kMsgDisplay, kMsgHeartbeat, kMsgHeartbeat};
+  for (size_t i = 0; i < 5; ++i) {
+    ASSERT_TRUE(read_exact(fd, hdr, kHeaderSize)) << "opening message " << i;
+    ASSERT_TRUE(parse_header(hdr, kHeaderSize, h));
+    EXPECT_EQ(h.type, expect[i]) << "opening message " << i << " out of order";
+    EXPECT_EQ(h.payload_len, 0u);
+  }
 
   // Then a full set of stripes, each a real JPEG covering its slice of the display.
   uint32_t covered = 0;

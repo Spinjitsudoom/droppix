@@ -116,6 +116,35 @@ TEST(SpacedeskProtocol, StripesTileAHeightNotDivisibleByFour) {
   EXPECT_EQ(prev_end, h);
 }
 
+TEST(SpacedeskProtocol, SessionOpenMatchesTheRealServersSequence) {
+  // Captured from a live spacedesk server, in order: ack, two display messages, two
+  // heartbeats — and only then frames. A viewer that gets only the ack stays connected
+  // with its display OFF, so this order is load-bearing, not cosmetic.
+  auto seq = build_session_open();
+  ASSERT_EQ(seq.size(), 5u);
+  for (const auto& m : seq) {
+    ASSERT_EQ(m.size(), kHeaderSize);
+    EXPECT_EQ(get_u32(m.data() + 4), 0u) << "opening messages carry no payload";
+  }
+  EXPECT_EQ(get_u32(seq[0].data()), kMsgAck);
+  EXPECT_EQ(get_u32(seq[1].data()), kMsgDisplay);
+  EXPECT_EQ(get_u32(seq[1].data() + 8), 0u);
+  EXPECT_EQ(get_u32(seq[1].data() + 12), 1u);
+  EXPECT_EQ(get_u32(seq[2].data()), kMsgDisplay);
+  EXPECT_EQ(get_u32(seq[2].data() + 8), 1u);
+  EXPECT_EQ(get_u32(seq[2].data() + 12), 1u);
+  EXPECT_EQ(get_u32(seq[3].data()), kMsgHeartbeat);
+  EXPECT_EQ(get_u32(seq[4].data()), kMsgHeartbeat);
+}
+
+TEST(SpacedeskProtocol, HeartbeatMatchesTheRealServer) {
+  auto hb = build_heartbeat();
+  ASSERT_EQ(hb.size(), kHeaderSize);
+  EXPECT_EQ(get_u32(hb.data()), kMsgHeartbeat);
+  EXPECT_EQ(get_u32(hb.data() + 8), 15u);
+  EXPECT_EQ(get_u32(hb.data() + 12), 1u);
+}
+
 TEST(SpacedeskProtocol, ControlMessagesAreBareHeaders) {
   for (uint32_t t : {kMsgAck, kMsgHeartbeat, kMsgDisplay}) {
     auto m = build_control(t);

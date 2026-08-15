@@ -183,9 +183,12 @@ void SpacedeskServer::serve_client(int fd) {
   const int disp_h = static_cast<int>(hello.height);
   std::fprintf(stderr, "spacedesk: viewer screen %dx%d\n", w, disp_h);
 
-  // 2. Acknowledge, mirroring what the real server sends before any frames.
-  const auto ack = build_control(kMsgAck);
-  if (!send_all(fd, ack.data(), ack.size())) return;
+  // 2. Replay the real server's opening sequence: ack, two display messages, two
+  // heartbeats. The viewer stays connected with its display OFF until it gets these —
+  // sending the ack alone produces exactly that symptom.
+  for (const auto& m : build_session_open()) {
+    if (!send_all(fd, m.data(), m.size())) return;
+  }
 
   // 3. Build the display at the viewer's resolution, exactly as the native path does.
   auto src = make_source_ ? make_source_(w, disp_h) : nullptr;
@@ -204,7 +207,15 @@ void SpacedeskServer::serve_client(int fd) {
   }
 
   // 4. Stream stripes until the viewer goes away.
+  auto last_beat = std::chrono::steady_clock::now();
   while (!stopping_.load()) {
+    // The real server keeps the session alive with a heartbeat every ~10s.
+    const auto now_hb = std::chrono::steady_clock::now();
+    if (now_hb - last_beat > std::chrono::seconds(10)) {
+      last_beat = now_hb;
+      const auto hb = build_heartbeat();
+      if (!send_all(fd, hb.data(), hb.size())) return;
+    }
     Frame f = src->next(16);
     if (!f.valid) {
       // Nothing changed. Drain any viewer input so a closed socket is noticed promptly.

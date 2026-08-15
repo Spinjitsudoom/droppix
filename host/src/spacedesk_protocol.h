@@ -104,10 +104,35 @@ inline bool parse_client_hello(const unsigned char* p, size_t n, ClientHello& ou
 }
 
 // A header-only control message (ack / heartbeat / display).
-inline std::vector<unsigned char> build_control(uint32_t type) {
+//
+// `f8` and `f12` are the header words at @8 and @12. The real server sets them on its
+// display and heartbeat messages, and the viewer will sit connected with the display OFF
+// until it receives that sequence — the ack alone is not enough to start a session.
+inline std::vector<unsigned char> build_control(uint32_t type, uint32_t f8 = 0,
+                                                uint32_t f12 = 0) {
   std::vector<unsigned char> h(kHeaderSize, 0);
   put_u32(h.data(), type);
+  put_u32(h.data() + 8, f8);
+  put_u32(h.data() + 12, f12);
   return h;
+}
+
+// The exact opening sequence a real spacedesk server sends after the viewer's hello,
+// captured from a live session: ack, two display messages, then two heartbeats. Only
+// after these does it start sending frames.
+inline std::vector<std::vector<unsigned char>> build_session_open() {
+  return {
+      build_control(kMsgAck),
+      build_control(kMsgDisplay, 0, 1),
+      build_control(kMsgDisplay, 1, 1),
+      build_control(kMsgHeartbeat),
+      build_control(kMsgHeartbeat),
+  };
+}
+
+// The periodic keepalive the real server emits roughly every 10s mid-session.
+inline std::vector<unsigned char> build_heartbeat() {
+  return build_control(kMsgHeartbeat, 15, 1);
 }
 
 // One video stripe: header describing the rect, followed by its JPEG.
