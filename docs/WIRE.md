@@ -35,8 +35,22 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 13 | MouseButton | client → host | Right/middle buttons |
 | 14 | Key | client → host | Keyboard |
 | 15 | Pen | client → host | Stylus pressure / eraser |
+| 16 | KeyframeRequest | client → host | "my decoder lost sync — send an IDR now" (empty body) |
 | 20 | Pair | client → host | **WSS only** — 6 ASCII digits of the code shown on the PC |
 | 21 | PairResult | host → client | **WSS only** — `[ ok u8 ][ tries_left u8 ]` |
+
+### Keyframe recovery (type 16)
+
+Encoders emit a keyframe every `gop_size = fps * 2` frames (~2 s). A client that loses
+decoder sync discards frames until the next one, so without a way to ask it freezes for
+up to the remaining GOP.
+
+`KeyframeRequest` (empty body) makes the host force an IDR on the **next** encoded frame,
+cutting that to about one round trip. It is one-shot: the flag is consumed per request, so
+a client that keeps asking does not turn the stream all-intra.
+
+Back-compatible in both directions: older hosts ignore the unknown type (recovery falls
+back to the scheduled keyframe), and older clients simply never send it.
 
 ## HELLO v6 body
 

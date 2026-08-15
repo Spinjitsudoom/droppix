@@ -18,6 +18,9 @@ var MsgType = {
   Pen: 15,
   // Web-path pairing (WSS only; not sent by native clients). Client -> host: Pair with
   // the 6 ASCII digits. Host -> client: PairResult with [ok u8][triesLeft u8].
+  // client -> host: "my decoder lost sync, send an IDR now". Without it we discard
+  // every frame until the host's next scheduled keyframe — a freeze of up to 2s.
+  KeyframeRequest: 16,
   Pair: 20,
   PairResult: 21
 };
@@ -324,6 +327,7 @@ var VideoPipeline = class {
   raf = 0;
   /** Returns media PTS in microseconds, or null to paint ASAP. */
   getClock = null;
+  requestKeyframe = null;
   get size() {
     return { w: this.vw, h: this.vh };
   }
@@ -353,6 +357,10 @@ var VideoPipeline = class {
   }
   setAdjust(flip, brightness, contrast) {
     this.opts = { flip, brightness, contrast };
+  }
+  /** Ask the host for an immediate IDR (set by main.ts once the transport exists). */
+  setKeyframeRequester(fn) {
+    this.requestKeyframe = fn;
   }
   /** Master clock for presentation (typically audio wire PTS). */
   setClock(fn) {
@@ -405,7 +413,7 @@ var VideoPipeline = class {
       return;
     }
     if (this.decoder.decodeQueueSize > 20 && !keyframe) {
-      this.dropUntilKey = true;
+      this.startDropping();
       return;
     }
     const chunk = new EncodedVideoChunk({
@@ -419,8 +427,13 @@ var VideoPipeline = class {
       this.lastError = String(e?.message || e);
       this.onInfo?.(`decode: ${this.lastError}`);
       this.configured = false;
-      this.dropUntilKey = true;
+      this.startDropping();
     }
+  }
+  /** Enter drop-until-keyframe and ask the host to send one now (once per episode). */
+  startDropping() {
+    if (!this.dropUntilKey) this.requestKeyframe?.();
+    this.dropUntilKey = true;
   }
   onDecoded(frame) {
     if (this.closed) {
@@ -935,6 +948,7 @@ var MseVideoPipeline = class {
   busy = false;
   closed = false;
   lastError = "";
+  requestKeyframe = null;
   displayW = 1280;
   displayH = 720;
   // instrumentation (windowed rates + cumulative counts for the debug hook)
@@ -997,6 +1011,9 @@ var MseVideoPipeline = class {
     this.video.style.filter = f.brightness !== 1 || f.contrast !== 1 ? `brightness(${f.brightness}) contrast(${f.contrast})` : "";
   }
   setClock() {
+  }
+  setKeyframeRequester(fn) {
+    this.requestKeyframe = fn;
   }
   submit(keyframe, nal, ptsUs) {
     if (this.closed) this.closed = false;
@@ -1150,6 +1167,7 @@ var MseVideoPipeline = class {
   fail(msg) {
     this.lastError = msg;
     this.onInfo?.(`MSE: ${msg}`);
+    this.requestKeyframe?.();
   }
   close() {
     this.closed = true;
@@ -2112,6 +2130,7 @@ async function connect() {
     video.setClock(() => audio.mediaPtsUs);
     video.setFit(settings.fit);
     video.setAdjust(settings.flip, settings.brightness, settings.contrast);
+    video.setKeyframeRequester(() => transport?.send(MsgType.KeyframeRequest, new Uint8Array()));
     await audio.unlock();
     audio.setMuted(!settings.audio);
     audio.onStateChange = (s) => {

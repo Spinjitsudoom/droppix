@@ -20,6 +20,9 @@ export const MsgType = {
   Pen: 15,
   // Web-path pairing (WSS only; not sent by native clients). Client -> host: Pair with
   // the 6 ASCII digits. Host -> client: PairResult with [ok u8][triesLeft u8].
+  // client -> host: "my decoder lost sync, send an IDR now". Without it we discard
+  // every frame until the host's next scheduled keyframe — a freeze of up to 2s.
+  KeyframeRequest: 16,
   Pair: 20,
   PairResult: 21,
 } as const;

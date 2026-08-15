@@ -30,6 +30,7 @@ export class VideoPipeline implements VideoRenderer {
   private raf = 0;
   /** Returns media PTS in microseconds, or null to paint ASAP. */
   private getClock: (() => number | null) | null = null;
+  private requestKeyframe: (() => void) | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -68,6 +69,11 @@ export class VideoPipeline implements VideoRenderer {
 
   setAdjust(flip: boolean, brightness: number, contrast: number) {
     this.opts = { flip, brightness, contrast };
+  }
+
+  /** Ask the host for an immediate IDR (set by main.ts once the transport exists). */
+  setKeyframeRequester(fn: (() => void) | null) {
+    this.requestKeyframe = fn;
   }
 
   /** Master clock for presentation (typically audio wire PTS). */
@@ -129,7 +135,9 @@ export class VideoPipeline implements VideoRenderer {
     }
 
     if (this.decoder.decodeQueueSize > 20 && !keyframe) {
-      this.dropUntilKey = true;
+      // Backlogged: drop to the next keyframe, but ASK for one — otherwise we freeze
+      // until the host's scheduled IDR (up to 2s at the default GOP).
+      this.startDropping();
       return;
     }
 
@@ -144,8 +152,14 @@ export class VideoPipeline implements VideoRenderer {
       this.lastError = String((e as Error)?.message || e);
       this.onInfo?.(`decode: ${this.lastError}`);
       this.configured = false;
-      this.dropUntilKey = true;
+      this.startDropping();
     }
+  }
+
+  /** Enter drop-until-keyframe and ask the host to send one now (once per episode). */
+  private startDropping() {
+    if (!this.dropUntilKey) this.requestKeyframe?.();
+    this.dropUntilKey = true;
   }
 
   private onDecoded(frame: VideoFrame) {

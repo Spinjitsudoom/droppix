@@ -144,6 +144,10 @@ void TransportServer::poll_control() {
   while (parser_.next(m)) {
     if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
+    } else if (m.type == MsgType::KeyframeRequest) {
+      // The client's decoder lost sync. Latch it; the stream loop forces an IDR on the
+      // next frame rather than leaving the client frozen for the rest of the GOP.
+      keyframe_requested_ = true;
     } else if (m.type == MsgType::Touch && touch_handler_) {
       std::vector<TouchContact> contacts;
       if (decode_touch(m.body, contacts)) touch_handler_(contacts);

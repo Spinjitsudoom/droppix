@@ -16,6 +16,8 @@ export interface VideoRenderer {
   setAdjust(flip: boolean, brightness: number, contrast: number): void;
   /** Presentation clock (audio wire PTS) for the canvas path; ignored by MSE. */
   setClock(fn: (() => number | null) | null): void;
+  /** Ask the host for an immediate IDR when the decoder loses sync. */
+  setKeyframeRequester(fn: (() => void) | null): void;
   close(): void;
   readonly size: { w: number; h: number };
   readonly currentFps: number;

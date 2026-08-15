@@ -37,6 +37,9 @@ class TransportServer {
   // INVARIANT: if the handler captures an object by reference, the caller MUST clear it
   // (set_touch_handler(nullptr)) before that object is destroyed — TransportServer outlives
   // a single streaming session.
+  // Set by poll_control() when a client asks for an IDR; the daemon consumes it.
+  bool take_keyframe_request() { bool v = keyframe_requested_; keyframe_requested_ = false; return v; }
+
   void set_touch_handler(std::function<void(const std::vector<TouchContact>&)> h) {
     touch_handler_ = std::move(h);
   }
@@ -90,6 +93,7 @@ class TransportServer {
   bool tls_ = false;
   std::string cert_, key_;
   SSL_CTX* ctx_ = nullptr;
+  bool keyframe_requested_ = false;
   std::unique_ptr<ByteChannel> channel_;   // the live client connection (socket or AOA)
 };
 }  // namespace droppix

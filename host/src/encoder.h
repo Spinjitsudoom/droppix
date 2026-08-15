@@ -12,5 +12,10 @@ class Encoder {
   virtual std::vector<unsigned char> extradata() const = 0;
   virtual std::vector<EncodedPacket> encode(const Frame& frame, int64_t pts_us) = 0;
   virtual std::vector<EncodedPacket> flush() = 0;
+  // Make the NEXT encoded frame an IDR. Used to recover a client that lost sync
+  // immediately, instead of making it wait out the remaining GOP. Default: no-op,
+  // so an encoder that cannot force one still compiles and simply recovers on the
+  // regular keyframe interval.
+  virtual void request_keyframe() {}
 };
 }  // namespace droppix

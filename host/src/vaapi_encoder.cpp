@@ -130,6 +130,10 @@ std::vector<EncodedPacket> VaapiEncoder::encode(const Frame& frame, int64_t pts_
 
   int64_t idx = frame_index_++;
   vaapi_frame_->pts = idx;       // codec time_base (1/fps) tick
+  // A client that lost sync waits out the whole GOP otherwise (2s at the default
+  // gop_size); forcing an I-picture recovers it on the very next frame.
+  vaapi_frame_->pict_type = force_idr_ ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
+  force_idr_ = false;
   pts_map_[idx] = pts_us;        // remember the caller's microsecond timestamp
   if (avcodec_send_frame(ctx_, vaapi_frame_) < 0) return {};
   return drain();

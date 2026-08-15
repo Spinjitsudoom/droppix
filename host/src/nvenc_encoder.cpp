@@ -78,6 +78,10 @@ std::vector<EncodedPacket> NvencEncoder::encode(const Frame& frame, int64_t pts_
   AVFrame* nv12 = conv_.convert(frame);  // BGRA -> NV12
   int64_t idx = frame_index_++;
   nv12->pts = idx;              // codec time_base (1/fps) tick
+  // A client that lost sync waits out the whole GOP otherwise (2s at the default
+  // gop_size); forcing an I-picture recovers it on the very next frame.
+  nv12->pict_type = force_idr_ ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
+  force_idr_ = false;
   pts_map_[idx] = pts_us;       // remember the caller's microsecond timestamp
   if (avcodec_send_frame(ctx_, nv12) < 0) return {};
   return drain();

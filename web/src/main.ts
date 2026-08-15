@@ -1,4 +1,5 @@
 import { Transport } from "./transport.ts";
+import { MsgType } from "./protocol.ts";
 import { VideoPipeline } from "./decoder.ts";
 import { MseVideoPipeline } from "./mse-decoder.ts";
 import type { VideoRenderer } from "./video-renderer.ts";
@@ -250,6 +251,9 @@ async function connect() {
     video.setClock(() => audio.mediaPtsUs);
     video.setFit(settings.fit);
     video.setAdjust(settings.flip, settings.brightness, settings.contrast);
+    // Decoder desync recovery: ask the host for an IDR instead of freezing until its
+    // next scheduled keyframe (up to 2s at the default GOP).
+    video.setKeyframeRequester(() => transport?.send(MsgType.KeyframeRequest, new Uint8Array()));
     // Never let audio init block the stream - it must not throw or hang here.
     await audio.unlock();
     audio.setMuted(!settings.audio);

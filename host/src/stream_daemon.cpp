@@ -37,7 +37,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   uint16_t hwall_col, hwall_row;
   if (!tx_.read_hello(cver, cw, ch, density, hfps, haudio, hori, hbitrate, hwall_col, hwall_row,
                       cname, cid, 10000)) {
-    std::fprintf(stderr, "no HELLO\n"); return false; }
+    std::fprintf(stderr, "no HELLO\n"); tx_.close_all(); return false; }
   std::fprintf(stderr, "client HELLO v%u %ux%u fps=%u audio=%u orient=%u name=%s id=%s\n",
                cver, cw, ch, hfps, haudio, hori, cname.c_str(), cid.c_str());
   const SessionParams sp = select_session_params(cver, hfps, haudio, hori,
@@ -54,7 +54,8 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     bool allow = false;
     if (!cfg_.gate->wait(cid.empty() ? tx_.peer_ip() : cid, 60000, allow) || !allow) {
       std::fprintf(stderr, "connection from %s denied\n", tx_.peer_ip().c_str());
-      return false;   // closes the socket; reconnect loop continues
+      tx_.close_all();   // reconnect loop continues with a clean socket
+      return false;
     }
   }
 
@@ -103,12 +104,22 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   auto on_connected = [this]{ desktop_->link_providers(); };
   if (!src_ || !src_->start(w, h, on_connected)) {
     std::fprintf(stderr, "source start failed\n");
+    // Without this, a preconnected (web/AOA) channel is never accepted again by this
+    // process — WebFrontend::serve_until_stream only waits for a NEW /ws upgrade — so the
+    // client's socket sits open forever with no CONFIG ever sent: "connected" in the
+    // browser, silently dead server-side. The native TCP path self-heals via the next
+    // accept_client()'s close_all(), but closing here makes both paths behave the same.
+    tx_.close_all();
     return false;
   }
   std::fprintf(stderr, "source %dx%d\n", w, h);
 
-  if (!enc_.open(w, h, sp.fps, sp.bitrate)) { std::fprintf(stderr, "encoder open failed\n"); return false; }
-  if (!tx_.send_config(w, h, sp.fps, enc_.extradata())) return false;
+  if (!enc_.open(w, h, sp.fps, sp.bitrate)) {
+    std::fprintf(stderr, "encoder open failed\n");
+    tx_.close_all();
+    return false;
+  }
+  if (!tx_.send_config(w, h, sp.fps, enc_.extradata())) { tx_.close_all(); return false; }
   // Seed the app's overlay from the live host-side toggle if present (so a reconnect
   // keeps whatever the GUI last set), else the start-up flag. Tracked below so the
   // stream loop can push later host-side changes mid-session.
@@ -342,6 +353,12 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     last_frame_at = frame_at;
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
                          frame_at - t0).count();
+    // A client whose decoder lost sync asked for an IDR; honour it before encoding so it
+    // recovers on this frame instead of waiting out the rest of the GOP (~2s).
+    if (tx_.take_keyframe_request()) {
+      enc_.request_keyframe();
+      std::fprintf(stderr, "client requested a keyframe; forcing IDR\n");
+    }
     auto enc_t0 = std::chrono::steady_clock::now();
     auto packets = enc_.encode(f, pts_us);
     double enc_ms = std::chrono::duration<double, std::milli>(

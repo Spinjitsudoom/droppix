@@ -35,6 +35,7 @@ export class MseVideoPipeline implements VideoRenderer {
   private busy = false;
   private closed = false;
   private lastError = "";
+  private requestKeyframe: (() => void) | null = null;
   private displayW = 1280;
   private displayH = 720;
 
@@ -115,6 +116,9 @@ export class MseVideoPipeline implements VideoRenderer {
   }
   setClock() {
     /* MSE self-paces on the <video> element's own clock. */
+  }
+  setKeyframeRequester(fn: (() => void) | null) {
+    this.requestKeyframe = fn;
   }
 
   submit(keyframe: boolean, nal: Uint8Array, ptsUs: bigint): void {
@@ -284,6 +288,9 @@ export class MseVideoPipeline implements VideoRenderer {
   private fail(msg: string): void {
     this.lastError = msg;
     this.onInfo?.(`MSE: ${msg}`);
+    // A fresh IDR is what lets the SourceBuffer resync; without asking we would wait for
+    // the host's scheduled keyframe.
+    this.requestKeyframe?.();
   }
 
   close(): void {

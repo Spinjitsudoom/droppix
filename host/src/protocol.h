@@ -7,7 +7,10 @@ namespace droppix {
 
 enum class MsgType : uint8_t {
   Hello = 1, Config = 2, Video = 3, Ping = 4, Pong = 5, Bye = 6, Input = 7,
-  Orientation = 8, Audio = 9, Overlay = 10, Touch = 11, Scroll = 12, MouseButton = 13, Key = 14, Pen = 15
+  Orientation = 8, Audio = 9, Overlay = 10, Touch = 11, Scroll = 12, MouseButton = 13, Key = 14, Pen = 15,
+  // client -> host: "my decoder lost sync, send an IDR now". Without it a client that
+  // drops to the next keyframe freezes for up to gop_size/fps seconds (2s by default).
+  KeyframeRequest = 16
 };
 
 // One finger in a multi-touch report. id is the app's pointer id (stable across a
