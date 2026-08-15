@@ -17,6 +17,7 @@
 #include "web_frontend.h"
 #include "pairing_code.h"
 #include "signal_setup.h"
+#include "spacedesk_server.h"
 
 static volatile std::sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
@@ -55,6 +56,11 @@ int main(int argc, char** argv) {
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
   int orientation = 0;                                   // --orientation 0/90/180/270
   droppix::EncoderPref encoder_pref = droppix::EncoderPref::Auto;
+  // spacedesk-viewer compatibility server: ON by default, no UI, opt out with
+  // --no-spacedesk or DROPPIX_SPACEDESK=0. NOTE: the spacedesk protocol carries no
+  // authentication whatsoever, so this exposes the display to anyone on the network
+  // who speaks it — unlike droppix's own transport (TLS + PIN + approval).
+  bool spacedesk_compat = true;
 
   for (int i = 1; i < argc; ++i) {
     std::string a = argv[i];
@@ -85,6 +91,7 @@ int main(int argc, char** argv) {
     else if (a == "--overlay") overlay = true;
     else if (a == "--usb-aoa") usb_aoa = sval();
     else if (a == "--encoder") encoder_pref = droppix::parse_encoder_pref(sval());
+    else if (a == "--no-spacedesk") spacedesk_compat = false;
     else { std::fprintf(stderr, "unknown arg: %s\n", a.c_str()); return 2; }
   }
 
@@ -186,6 +193,26 @@ int main(int argc, char** argv) {
     return std::make_unique<droppix::EvdiFrameSource>(w, h, mode_hz,
                                                       static_cast<uint32_t>(port));
   };
+
+  // spacedesk compatibility server: its own listener + display, independent of the
+  // droppix session below, so both can serve a client at once.
+  std::unique_ptr<droppix::SpacedeskServer> sd;
+  if (const char* e = std::getenv("DROPPIX_SPACEDESK"); e && std::string(e) == "0")
+    spacedesk_compat = false;
+  if (spacedesk_compat && usb_aoa.empty()) {
+    char host[256] = {0};
+    if (gethostname(host, sizeof(host) - 1) != 0) std::snprintf(host, sizeof(host), "droppix");
+    sd = std::make_unique<droppix::SpacedeskServer>(
+        [&](int w, int h) -> std::unique_ptr<droppix::FrameSource> {
+          if (test_pattern) return std::make_unique<droppix::TestPatternSource>(w, h, fps);
+          // A distinct EDID serial from the droppix session's, or KWin dedupes the two
+          // virtual monitors into one.
+          return std::make_unique<droppix::EvdiFrameSource>(
+              w, h, refresh, static_cast<uint32_t>(port) ^ 0x5344u);
+        },
+        host);
+    sd->start();   // logs and stays off if the port is already taken
+  }
 
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
   while (!g_stop) {

@@ -71,7 +71,9 @@ add_library(droppix_core
   src/web_frontend.cpp
   src/web_root.cpp
   src/jpeg_stripe_encoder.cpp
+  src/spacedesk_server.cpp
   src/jpeg_stripe_encoder.cpp
+  src/spacedesk_server.cpp
   src/version.cpp
 )
 target_include_directories(droppix_core PUBLIC
@@ -215,6 +217,7 @@ add_executable(droppix_tests
   tests/test_spacedesk_protocol.cpp
   tests/test_jpeg_stripe_encoder.cpp
   tests/test_keyframe_request.cpp
+  tests/test_spacedesk_server.cpp
   tests/test_spacedesk_protocol.cpp
   tests/test_jpeg_stripe_encoder.cpp
   tests/test_version.cpp
