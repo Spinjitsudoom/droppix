@@ -152,6 +152,41 @@ TEST(SpacedeskServer, AnswersTheViewerDiscoveryBroadcast) {
   srv.stop();
 }
 
+TEST(SpacedeskServer, AnnouncesItselfWithoutBeingAsked) {
+  // A viewer whose probe (or our reply) was lost would otherwise show "no primary
+  // machine" forever. The server also announces unsolicited, on every up LAN interface,
+  // so discovery recovers on its own.
+  SpacedeskServer srv(pattern_factory(), "droppix-announce");
+  const uint16_t port = kTestPort + 5;
+  srv.set_port(port);
+
+  int fd = ::socket(AF_INET, SOCK_DGRAM, 0);
+  ASSERT_GE(fd, 0);
+  int yes = 1;
+  setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+#ifdef SO_REUSEPORT
+  setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
+#endif
+  sockaddr_in a{};
+  a.sin_family = AF_INET;
+  a.sin_addr.s_addr = INADDR_ANY;
+  a.sin_port = htons(port);
+  ASSERT_EQ(::bind(fd, reinterpret_cast<sockaddr*>(&a), sizeof(a)), 0);
+  timeval tv{6, 0};
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+  ASSERT_TRUE(srv.start());
+  // No probe is sent: anything that arrives is unsolicited.
+  unsigned char buf[1024];
+  ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
+  srv.stop();
+  ::close(fd);
+
+  ASSERT_EQ(n, static_cast<ssize_t>(kDiscoveryResponseSize))
+      << "expected an unsolicited discovery announcement within 6s";
+  EXPECT_EQ(get_u32(buf + 260), static_cast<uint32_t>(port));
+}
+
 TEST(SpacedeskServer, StartFailsCleanlyWhenThePortIsTaken) {
   SpacedeskServer a(pattern_factory(), "first");
   a.set_port(kTestPort + 2);

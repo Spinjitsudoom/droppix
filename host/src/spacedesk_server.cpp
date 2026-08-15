@@ -8,9 +8,12 @@
 #include <netinet/tcp.h>
 #include <poll.h>
 #include <sys/socket.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <vector>
 
 #include "jpeg_stripe_encoder.h"
 #include "spacedesk_protocol.h"
@@ -43,6 +46,27 @@ bool recv_exact(int fd, unsigned char* p, size_t n, int timeout_ms) {
     got += static_cast<size_t>(r);
   }
   return true;
+}
+
+// Subnet broadcast address of every up, non-loopback IPv4 interface.
+//
+// Sending to 255.255.255.255 picks a single interface by route, which on a host with
+// docker/virtual bridges is frequently the wrong one — the viewer on the real LAN then
+// never sees the announcement. Per-interface subnet broadcasts route correctly on each.
+std::vector<in_addr_t> broadcast_targets() {
+  std::vector<in_addr_t> out;
+  ifaddrs* ifa = nullptr;
+  if (getifaddrs(&ifa) != 0) return out;
+  for (ifaddrs* p = ifa; p; p = p->ifa_next) {
+    if (!p->ifa_addr || p->ifa_addr->sa_family != AF_INET) continue;
+    if (!(p->ifa_flags & IFF_UP) || (p->ifa_flags & IFF_LOOPBACK)) continue;
+    if (!(p->ifa_flags & IFF_BROADCAST) || !p->ifa_netmask) continue;
+    const auto addr = reinterpret_cast<sockaddr_in*>(p->ifa_addr)->sin_addr.s_addr;
+    const auto mask = reinterpret_cast<sockaddr_in*>(p->ifa_netmask)->sin_addr.s_addr;
+    out.push_back((addr & mask) | ~mask);
+  }
+  freeifaddrs(ifa);
+  return out;
 }
 
 }  // namespace
@@ -106,9 +130,29 @@ void SpacedeskServer::stop() {
   if (discovery_thread_.joinable()) discovery_thread_.join();
 }
 
+void SpacedeskServer::announce(const std::vector<unsigned char>& reply) {
+  for (in_addr_t b : broadcast_targets()) {
+    sockaddr_in to{};
+    to.sin_family = AF_INET;
+    to.sin_port = htons(port_);
+    to.sin_addr.s_addr = b;
+    ::sendto(udp_fd_, reply.data(), reply.size(), 0,
+             reinterpret_cast<sockaddr*>(&to), sizeof(to));
+  }
+}
+
 void SpacedeskServer::discovery_loop() {
   const auto reply = spacedesk::build_discovery_response(machine_name_, port_);
+  auto last_announce = std::chrono::steady_clock::now();
   while (!stopping_.load()) {
+    // Announce unsolicited every 2s: a viewer whose probe or our reply was lost (or that
+    // listens passively) still finds us, instead of the user seeing "no primary machine"
+    // with no way to tell why.
+    const auto now_a = std::chrono::steady_clock::now();
+    if (now_a - last_announce > std::chrono::seconds(2)) {
+      last_announce = now_a;
+      announce(reply);
+    }
     pollfd pfd{udp_fd_, POLLIN, 0};
     if (::poll(&pfd, 1, 500) <= 0) continue;
     unsigned char buf[512];
@@ -131,14 +175,16 @@ void SpacedeskServer::discovery_loop() {
       std::fprintf(stderr, "spacedesk: answering discovery from %s (%llu probes so far)\n",
                    ip, static_cast<unsigned long long>(discovery_seen_));
     }
-    // The viewer broadcasts from an ephemeral port but listens on the well-known one;
-    // answer both so it sees us regardless.
+    // Answer the asking client directly — both its ephemeral source port and the
+    // well-known one it listens on — then broadcast, which is what demonstrably makes a
+    // real viewer list the server.
     ::sendto(udp_fd_, reply.data(), reply.size(), 0,
              reinterpret_cast<sockaddr*>(&from), flen);
     sockaddr_in wk = from;
     wk.sin_port = htons(port_);
     ::sendto(udp_fd_, reply.data(), reply.size(), 0,
              reinterpret_cast<sockaddr*>(&wk), sizeof(wk));
+    announce(reply);
   }
 }
 

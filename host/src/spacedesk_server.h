@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "frame_source.h"
 
@@ -55,7 +56,11 @@ class SpacedeskServer {
  private:
   void run();                       // accept loop
   void serve_client(int fd);        // one viewer session
-  void discovery_loop();            // UDP responder
+  void discovery_loop();            // UDP responder + periodic announcement
+  // Broadcast the discovery response on every up LAN interface. Takes no socket types so
+  // this header stays free of <netinet/in.h> (and of the namespace trap where
+  // `struct sockaddr_in` here would declare a NEW droppix::sockaddr_in).
+  void announce(const std::vector<unsigned char>& reply);
 
   SourceFactory make_source_;
   std::string machine_name_;
