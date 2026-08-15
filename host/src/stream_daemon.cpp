@@ -94,7 +94,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       std::fprintf(stderr, "mirror: no primary/enabled output found; keeping tablet dims %dx%d\n", w, h);
     }
   }
-  src_ = make_source_(w, h);
+  src_ = make_source_(w, h, sp.fps);
   // X11 (reverse-PRIME evdi) must link + bare-enable the new output before the compositor
   // will ever assign it a mode; Wayland backends' link_providers() is a no-op. Passed as a
   // callback so the evdi source can run it concurrently with its mode-wait (see

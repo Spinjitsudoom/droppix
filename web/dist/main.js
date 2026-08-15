@@ -1556,7 +1556,10 @@ function loadSettings() {
   const defaults = {
     name: "Web PWA",
     id: randomId(),
-    fps: 30,
+    // 60 by default: the host's virtual monitor also defaults to 60 Hz, and the client's
+    // request drives both the encoder AND (now) the monitor's mode. Weak links degrade
+    // gracefully via the host's send-backlog pacing rather than by capping everyone at 30.
+    fps: 60,
     bitrateKbps: 8e3,
     resolution: "1280x720",
     renderer: "canvas",

@@ -33,10 +33,15 @@ struct StreamConfig {
 
 class StreamDaemon {
  public:
-  // make_source(w, h) builds the frame source at the requested dimensions — called AFTER
-  // the client's HELLO so an evdi monitor is sized to the tablet's native resolution. The
-  // factory may substitute defaults when w/h are 0 (client didn't report).
-  StreamDaemon(std::function<std::unique_ptr<FrameSource>(int, int)> make_source,
+  // make_source(w, h, fps) builds the frame source at the requested dimensions — called
+  // AFTER the client's HELLO so an evdi monitor is sized to the tablet's native resolution.
+  // The factory may substitute defaults when w/h are 0 (client didn't report).
+  //
+  // `fps` is the NEGOTIATED frame rate (the client's HELLO wins over the host default), so
+  // an evdi source can advertise a mode fast enough to deliver it. Without it the virtual
+  // monitor's refresh came only from --refresh: a client asking 60 fps against a 30 Hz mode
+  // was silently capped at 30, with nothing in the logs to say why.
+  StreamDaemon(std::function<std::unique_ptr<FrameSource>(int, int, int)> make_source,
                Encoder& enc, TransportServer& tx, StreamConfig cfg)
       : make_source_(std::move(make_source)), enc_(enc), tx_(tx), cfg_(cfg) {}
   // Waits for a client + HELLO, builds the source at the reported size, opens the encoder,
@@ -45,7 +50,7 @@ class StreamDaemon {
   bool run_until(const volatile std::sig_atomic_t& stop, int max_frames);
 
  private:
-  std::function<std::unique_ptr<FrameSource>(int, int)> make_source_;
+  std::function<std::unique_ptr<FrameSource>(int, int, int)> make_source_;
   std::unique_ptr<FrameSource> src_;
   Encoder& enc_;
   TransportServer& tx_;

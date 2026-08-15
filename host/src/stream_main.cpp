@@ -164,14 +164,21 @@ int main(int argc, char** argv) {
   // The daemon builds the source AFTER the tablet's HELLO, sized to the tablet's native
   // resolution (or --width/--height when the client reports 0). On a portrait<->landscape
   // rotation the daemon ends the session; the reconnect's HELLO gives the swapped dims.
-  auto make_source = [&](int w, int h) -> std::unique_ptr<droppix::FrameSource> {
+  auto make_source = [&](int w, int h, int session_fps) -> std::unique_ptr<droppix::FrameSource> {
     if (w <= 0) w = width;
     if (h <= 0) h = height;
     if (test_pattern) return std::make_unique<droppix::TestPatternSource>(w, h, fps);
+    // The virtual monitor must be able to DELIVER the negotiated frame rate: capture is
+    // damage-driven, so the compositor never repaints faster than the advertised mode.
+    // A 30 Hz mode therefore caps a 60 fps client at 30 no matter what it asked for.
+    const int mode_hz = session_fps > refresh ? session_fps : refresh;
+    if (mode_hz != refresh)
+      std::fprintf(stderr, "mode: raising refresh %d -> %d Hz to serve %d fps\n",
+                   refresh, mode_hz, session_fps);
     // Use the session's port as the EDID serial so each concurrent droppix monitor has a
     // distinct EDID identity (identical serials make KWin dedupe them: only one output
     // appears in Display settings, the rest stay frozen). Ports are unique per session.
-    return std::make_unique<droppix::EvdiFrameSource>(w, h, refresh,
+    return std::make_unique<droppix::EvdiFrameSource>(w, h, mode_hz,
                                                       static_cast<uint32_t>(port));
   };
 
