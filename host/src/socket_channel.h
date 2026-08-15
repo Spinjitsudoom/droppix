@@ -1,6 +1,7 @@
 #pragma once
 #include <openssl/ssl.h>
 #include "byte_channel.h"
+#include "socket_pending.h"
 
 namespace droppix {
 
@@ -15,6 +16,7 @@ class SocketChannel : public ByteChannel {
   bool send_all(const unsigned char* p, size_t n) override;
   bool wait_readable(int timeout_ms) override;
   bool connected() const override { return fd_ >= 0; }
+  size_t pending_bytes() const override { return socket_pending_bytes(fd_); }
   void close() override;
 
  private:

@@ -64,6 +64,9 @@ class TransportServer {
     pen_handler_ = std::move(h);
   }
   bool connected() const { return channel_ && channel_->connected(); }
+  // Unacknowledged bytes queued to the client; see ByteChannel::pending_bytes. Used to
+  // pace capture against a slow link (a blocking send can't reveal that on its own).
+  size_t pending_bytes() const { return channel_ ? channel_->pending_bytes() : 0; }
   std::string peer_ip() const { return peer_ip_; }
   void close_all();
   // Enables TLS for all subsequent accepted clients. Call BEFORE accept_client.

@@ -25,21 +25,25 @@ bool WsChannel::ssl_write_all(const unsigned char* p, size_t n) {
 }
 
 bool WsChannel::send_ws_binary(const unsigned char* payload, size_t n) {
-  std::vector<unsigned char> hdr;
-  hdr.push_back(0x82);
+  // Header and payload go out as ONE write. Writing the 2-10 byte header separately made
+  // it its own TLS record and (with TCP_NODELAY) its own tiny TCP segment ahead of every
+  // frame — pure overhead, and an extra packet to lose on a weak link.
+  frame_buf_.clear();
+  frame_buf_.reserve(n + 10);
+  frame_buf_.push_back(0x82);
   if (n < 126) {
-    hdr.push_back(static_cast<unsigned char>(n));
+    frame_buf_.push_back(static_cast<unsigned char>(n));
   } else if (n <= 0xffff) {
-    hdr.push_back(126);
-    hdr.push_back(static_cast<unsigned char>((n >> 8) & 0xff));
-    hdr.push_back(static_cast<unsigned char>(n & 0xff));
+    frame_buf_.push_back(126);
+    frame_buf_.push_back(static_cast<unsigned char>((n >> 8) & 0xff));
+    frame_buf_.push_back(static_cast<unsigned char>(n & 0xff));
   } else {
-    hdr.push_back(127);
+    frame_buf_.push_back(127);
     for (int i = 7; i >= 0; --i)
-      hdr.push_back(static_cast<unsigned char>((static_cast<uint64_t>(n) >> (8 * i)) & 0xff));
+      frame_buf_.push_back(static_cast<unsigned char>((static_cast<uint64_t>(n) >> (8 * i)) & 0xff));
   }
-  if (!ssl_write_all(hdr.data(), hdr.size())) return false;
-  return n == 0 || ssl_write_all(payload, n);
+  frame_buf_.insert(frame_buf_.end(), payload, payload + n);
+  return ssl_write_all(frame_buf_.data(), frame_buf_.size());
 }
 
 bool WsChannel::send_all(const unsigned char* p, size_t n) {

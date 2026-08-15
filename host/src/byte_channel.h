@@ -17,6 +17,17 @@ struct ByteChannel {
   virtual bool wait_readable(int timeout_ms) = 0;
   virtual bool connected() const = 0;
   virtual void close() = 0;
+  // Bytes handed to the kernel but not yet acknowledged by the peer (SIOCOUTQ).
+  //
+  // This is the ONLY reliable "is the client keeping up?" signal on a blocking socket:
+  // send_all() returns instantly while the kernel buffer has room, so a client on a link
+  // slower than the encoder never shows up as a slow write — the excess silently piles
+  // into buffers, latency grows without bound, and the stream degrades while the host
+  // still measures a healthy send time. A growing backlog here is what exposes that.
+  //
+  // Returns 0 when unsupported (non-socket transports), which reads as "no backlog" and
+  // leaves callers on their normal path.
+  virtual size_t pending_bytes() const { return 0; }
 };
 
 }  // namespace droppix

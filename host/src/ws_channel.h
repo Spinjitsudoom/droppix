@@ -5,6 +5,7 @@
 #include <vector>
 #include <openssl/ssl.h>
 #include "byte_channel.h"
+#include "socket_pending.h"
 
 namespace droppix {
 
@@ -21,6 +22,7 @@ class WsChannel : public ByteChannel {
   bool send_all(const unsigned char* p, size_t n) override;
   bool wait_readable(int timeout_ms) override;
   bool connected() const override { return fd_ >= 0 && !closed_; }
+  size_t pending_bytes() const override { return socket_pending_bytes(fd_); }
   void close() override;
 
  private:
@@ -35,6 +37,9 @@ class WsChannel : public ByteChannel {
 
   // Outbound: accumulate until a full length-prefixed message is present.
   std::vector<unsigned char> out_acc_;
+  // Scratch for building [ws header][payload] as a single write; reused so a 30fps
+  // stream doesn't reallocate per frame. Guarded by mu_ like out_acc_.
+  std::vector<unsigned char> frame_buf_;
 
   // Inbound: length-prefixed bytes ready for TransportServer.
   std::vector<unsigned char> inbuf_;

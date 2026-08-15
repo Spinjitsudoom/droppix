@@ -1,6 +1,7 @@
 #include "stream_daemon.h"
 #include "stat_accumulator.h"
 #include "stats_json.h"
+#include "send_backlog.h"
 #include "input_injector.h"
 #include "monitor_geometry.h"
 #include "orientation.h"
@@ -299,10 +300,15 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // interval_ms = gap between frames the COMPOSITOR delivered (capture-bound when high);
   // send_ms = time blocked pushing a frame into the socket (network-bound when high).
   // Together they split "low fps" into its two possible causes, which plain fps can't.
-  StatAccumulator encode_ms, frame_kb, interval_ms, send_ms;
+  StatAccumulator encode_ms, frame_kb, interval_ms, send_ms, backlog_bytes;
   int frames_since_report = 0;
   auto last_report = std::chrono::steady_clock::now();
   auto last_frame_at = std::chrono::steady_clock::now();
+  // Link pacing (see send_backlog.h): skip captures while the client's send queue is
+  // backed up, so latency stays bounded instead of the stream degrading invisibly.
+  const size_t backlog_limit = backlog_limit_bytes(sp.bitrate);
+  bool dropping_for_backlog = false;
+  int frames_dropped_backlog = 0;
   // With touch on, poll the loop tightly so incoming touch is handled promptly
   // instead of being gated by the up-to-1s damage-driven frame wait.
   const int frame_timeout = (cfg_.touch || do_audio) ? 8 : 1000;
@@ -318,6 +324,19 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     }
     Frame f = src_->next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
+    // Pace against the client's link. If unacknowledged bytes are piling up we are
+    // producing faster than the link drains; encoding more only inflates latency (the
+    // send itself stays fast — the kernel buffers it). Drop the capture BEFORE the
+    // encoder sees it: the reference chain stays intact, so the picture degrades in
+    // frame rate only, never into corruption.
+    const size_t pending = tx_.pending_bytes();
+    backlog_bytes.add(static_cast<double>(pending));
+    dropping_for_backlog = should_skip_frame(pending, backlog_limit, dropping_for_backlog);
+    if (dropping_for_backlog) {
+      ++frames_dropped_backlog;
+      tx_.poll_control();
+      continue;
+    }
     auto frame_at = std::chrono::steady_clock::now();
     interval_ms.add(std::chrono::duration<double, std::milli>(frame_at - last_frame_at).count());
     last_frame_at = frame_at;
@@ -342,20 +361,26 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     auto now = std::chrono::steady_clock::now();
     double elapsed_s = std::chrono::duration<double>(now - last_report).count();
     if (elapsed_s >= 1.0) {
+      const double backlog_kb = backlog_bytes.avg() / 1024.0;
+      const double dropped_per_s = frames_dropped_backlog / elapsed_s;
       if (cfg_.stats_json) {
         std::fprintf(stderr, "%s\n", format_stats_json(
             encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
             frame_kb.avg(), frame_kb.peak(), tx_.connected(),
-            interval_ms.avg(), send_ms.avg(), send_ms.peak()).c_str());
+            interval_ms.avg(), send_ms.avg(), send_ms.peak(),
+            backlog_kb, dropped_per_s).c_str());
       } else {
         std::fprintf(stderr,
             "stats: encode avg %.1f ms peak %.1f ms | fps %.1f | frame avg %.1f KB peak %.1f KB"
-            " | interval avg %.0f ms | send avg %.1f ms peak %.1f ms\n",
+            " | interval avg %.0f ms | send avg %.1f ms peak %.1f ms"
+            " | backlog avg %.0f KB | link-dropped %.1f/s\n",
             encode_ms.avg(), encode_ms.peak(), frames_since_report / elapsed_s,
             frame_kb.avg(), frame_kb.peak(),
-            interval_ms.avg(), send_ms.avg(), send_ms.peak());
+            interval_ms.avg(), send_ms.avg(), send_ms.peak(),
+            backlog_kb, dropped_per_s);
       }
       encode_ms.reset(); frame_kb.reset(); interval_ms.reset(); send_ms.reset();
+      backlog_bytes.reset(); frames_dropped_backlog = 0;
       frames_since_report = 0; last_report = now;
     }
 

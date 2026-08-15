@@ -10,5 +10,6 @@ std::string format_stats_json(double encode_ms_avg, double encode_ms_peak,
                               double fps, double frame_kb_avg,
                               double frame_kb_peak, bool client_connected,
                               double interval_ms_avg = 0.0,
-                              double send_ms_avg = 0.0, double send_ms_peak = 0.0);
+                              double send_ms_avg = 0.0, double send_ms_peak = 0.0,
+                              double backlog_kb_avg = 0.0, double link_dropped_per_s = 0.0);
 }  // namespace droppix
