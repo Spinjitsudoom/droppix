@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <chrono>
+
 #include "jpeg_stripe_encoder.h"
 #include "spacedesk_protocol.h"
 
@@ -116,6 +118,19 @@ void SpacedeskServer::discovery_loop() {
                            reinterpret_cast<sockaddr*>(&from), &flen);
     if (n <= 0) continue;
     if (!spacedesk::is_discovery_request(buf, static_cast<size_t>(n))) continue;
+    // Log that a viewer is probing us, throttled: the app broadcasts ~33x/second, so an
+    // unthrottled line would drown the log. Without this the responder is invisible and
+    // "the client can't see me" is undiagnosable — you cannot tell a broken reply from a
+    // phone that never reached the network.
+    ++discovery_seen_;
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_discovery_log_ > std::chrono::seconds(5)) {
+      last_discovery_log_ = now;
+      char ip[INET_ADDRSTRLEN] = {0};
+      inet_ntop(AF_INET, &from.sin_addr, ip, sizeof(ip));
+      std::fprintf(stderr, "spacedesk: answering discovery from %s (%llu probes so far)\n",
+                   ip, static_cast<unsigned long long>(discovery_seen_));
+    }
     // The viewer broadcasts from an ephemeral port but listens on the well-known one;
     // answer both so it sees us regardless.
     ::sendto(udp_fd_, reply.data(), reply.size(), 0,

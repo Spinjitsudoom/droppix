@@ -1,5 +1,6 @@
 #pragma once
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <functional>
@@ -44,6 +45,8 @@ class SpacedeskServer {
 
   // Diagnostics for the GUI/log.
   uint64_t frames_sent() const { return frames_sent_.load(); }
+  // Discovery probes answered — proves a viewer is reaching us at all.
+  uint64_t discovery_seen() const { return discovery_seen_; }
   bool client_connected() const { return client_connected_.load(); }
 
   // Bound port (kPort unless overridden for tests).
@@ -67,6 +70,8 @@ class SpacedeskServer {
   std::atomic<bool> stopping_{false};
   std::atomic<uint64_t> frames_sent_{0};
   std::atomic<bool> client_connected_{false};
+  uint64_t discovery_seen_ = 0;                     // discovery thread only
+  std::chrono::steady_clock::time_point last_discovery_log_{};
 };
 
 }  // namespace droppix
