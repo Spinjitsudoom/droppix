@@ -208,6 +208,7 @@ add_executable(droppix_tests
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp
+  tests/test_signal_setup.cpp
   tests/test_version.cpp
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp

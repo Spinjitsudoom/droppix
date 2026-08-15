@@ -16,6 +16,7 @@
 #include "encoder_factory.h"
 #include "web_frontend.h"
 #include "pairing_code.h"
+#include "signal_setup.h"
 
 static volatile std::sig_atomic_t g_stop = 0;
 static void on_sigint(int) { g_stop = 1; }
@@ -37,6 +38,7 @@ static std::atomic<int> g_overlay{0};
 int main(int argc, char** argv) {
   std::signal(SIGINT, on_sigint);
   std::signal(SIGTERM, on_sigint);          // GUI terminate() -> clean shutdown
+  droppix::ignore_sigpipe();                 // a client vanishing must not kill the server
   prctl(PR_SET_PDEATHSIG, SIGTERM);          // die if our parent (e.g. pkexec) is killed
   int port = 27000, fps = 30, bitrate = 8000, frames = 0;
   int width = 1920, height = 1080, refresh = 60;
