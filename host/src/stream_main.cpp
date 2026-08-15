@@ -171,7 +171,12 @@ int main(int argc, char** argv) {
     // The virtual monitor must be able to DELIVER the negotiated frame rate: capture is
     // damage-driven, so the compositor never repaints faster than the advertised mode.
     // A 30 Hz mode therefore caps a 60 fps client at 30 no matter what it asked for.
-    const int mode_hz = session_fps > refresh ? session_fps : refresh;
+    // HELLO's fps is client-supplied and unbounded, and it now feeds the mode timing —
+    // cvt_rb_timing divides by it, so an absurd value yields a nonsense pixel clock (or
+    // negative blanking above ~2 kHz). Clamp to something a real monitor could advertise.
+    constexpr int kMaxModeHz = 120;
+    int mode_hz = session_fps > refresh ? session_fps : refresh;
+    if (mode_hz > kMaxModeHz) mode_hz = kMaxModeHz;
     if (mode_hz != refresh)
       std::fprintf(stderr, "mode: raising refresh %d -> %d Hz to serve %d fps\n",
                    refresh, mode_hz, session_fps);
