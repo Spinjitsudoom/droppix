@@ -67,6 +67,14 @@ Payload is UTF-16LE: `{9f09a77b-5128-4240-acb7-c95efab243ff}\0M2004J19C` — a s
 GUID followed by the model string (`M2004J19C` is the Redmi 9). 2340x1080 matches that
 device's panel, confirming the width/height reading.
 
+## Implemented in droppix
+
+`host/src/spacedesk_{protocol.h,server.{h,cpp}}` + `jpeg_stripe_encoder.{h,cpp}`: droppix
+answers discovery and streams the display to a real spacedesk viewer as JPEG stripes,
+enabled by default (`--no-spacedesk` / `DROPPIX_SPACEDESK=0` to disable). The session-open
+sequence matters: the viewer stays connected with its display OFF unless it receives
+ack + two type-3 display messages + two heartbeats before any frame.
+
 ## What is NOT known
 
 - **The server's reply.** Untested; 18 candidates were prepared (enumerating the type
@@ -77,7 +85,16 @@ device's panel, confirming the width/height reading.
   compresses with its own scheme, and synthesising a proprietary codec's bitstream
   blind — with no feedback beyond "did the client render something" — is close to
   infeasible. A negotiable raw RGB mode would be the viable path.
-- **Input** (touch/mouse back-channel), and any version or licence gating.
+- **Input** (touch/mouse/keyboard, client -> server) — never captured. It only appears
+  when a real viewer drives a real server, so watching a server send cannot reveal it.
+- **Audio**, either direction — no audio-bearing message has ever been observed.
+- **Orientation** changes.
+- Any version or licence gating.
+
+`tools/spacedesk-re/capture_all.py` relays a genuine session and flags every message type
+outside the known set, prompting through touch / drag / pinch / rotate / audio / keyboard
+in turn. One run with the phone driving a real server should decode all of the above —
+that is the gate on full two-way compatibility.
 
 ## Iteration cost (the practical blocker)
 
