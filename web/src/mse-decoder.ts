@@ -9,6 +9,11 @@ import {
 } from "./fmp4.ts";
 import type { VideoRenderer } from "./video-renderer.ts";
 
+/** Drift past this (seconds) and we seek back toward live. */
+const kLiveChaseSec = 0.2;
+/** Where to land when chasing: close to live, with enough margin to absorb jitter. */
+const kLiveTargetSec = 0.08;
+
 /**
  * H.264 → fragmented-MP4 → <video> via Media Source Extensions.
  *
@@ -256,7 +261,10 @@ export class MseVideoPipeline implements VideoRenderer {
       if (!b.length) return;
       const end = b.end(b.length - 1);
       const start = b.start(0);
-      if (v.currentTime < end - 0.6) v.currentTime = end - 0.1; // stay near live
+      // Chase the live edge tightly. The old thresholds let playback drift 600ms behind
+      // before correcting, so latency oscillated between 100ms and 600ms — felt directly
+      // as pointer lag on a desktop. Keep a small margin so normal jitter cannot underrun.
+      if (v.currentTime < end - kLiveChaseSec) v.currentTime = end - kLiveTargetSec;
       const cutoff = v.currentTime - 2;
       if (cutoff > start + 0.5) {
         this.busy = true; // remove is async; block appends until its updateend

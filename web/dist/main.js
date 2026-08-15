@@ -298,6 +298,21 @@ function avcCodecString(nal) {
   return null;
 }
 
+// src/paint-policy.ts
+var kMaxPendingFrames = 3;
+var kMaxVideoLeadUs = 25e3;
+function choosePaintIndex(timestamps, clock, maxLeadUs = kMaxVideoLeadUs) {
+  if (timestamps.length === 0) return -1;
+  if (clock == null) return timestamps.length - 1;
+  let due = -1;
+  for (let i = 0; i < timestamps.length; i++) {
+    if (timestamps[i] <= clock) due = i;
+  }
+  if (due >= 0) return due;
+  const lead = timestamps[0] - clock;
+  return lead > maxLeadUs ? timestamps.length - 1 : -1;
+}
+
 // src/decoder.ts
 var VideoPipeline = class {
   constructor(canvas2, opts, onInfo) {
@@ -441,7 +456,7 @@ var VideoPipeline = class {
       return;
     }
     this.pending.push(frame);
-    while (this.pending.length > 12) {
+    while (this.pending.length > kMaxPendingFrames) {
       this.pending.shift().close();
     }
     this.schedulePaint();
@@ -456,16 +471,10 @@ var VideoPipeline = class {
   paintDue() {
     if (this.closed) return;
     const clock = this.getClock?.() ?? null;
-    if (clock == null) {
-      while (this.pending.length > 1) this.pending.shift().close();
-      const f2 = this.pending.shift();
-      if (f2) this.draw(f2);
-      return;
-    }
-    let best = -1;
-    for (let i = 0; i < this.pending.length; i++) {
-      if (this.pending[i].timestamp <= clock) best = i;
-    }
+    const best = choosePaintIndex(
+      this.pending.map((f2) => f2.timestamp),
+      clock
+    );
     if (best < 0) {
       this.schedulePaint();
       return;
@@ -926,6 +935,8 @@ function buildSegment(opts) {
 }
 
 // src/mse-decoder.ts
+var kLiveChaseSec = 0.2;
+var kLiveTargetSec = 0.08;
 var MseVideoPipeline = class {
   constructor(video2, opts, onInfo) {
     this.video = video2;
@@ -1139,7 +1150,7 @@ var MseVideoPipeline = class {
       if (!b.length) return;
       const end = b.end(b.length - 1);
       const start = b.start(0);
-      if (v.currentTime < end - 0.6) v.currentTime = end - 0.1;
+      if (v.currentTime < end - kLiveChaseSec) v.currentTime = end - kLiveTargetSec;
       const cutoff = v.currentTime - 2;
       if (cutoff > start + 0.5) {
         this.busy = true;

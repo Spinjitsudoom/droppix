@@ -1,6 +1,7 @@
 import { contentBox, type FitMode } from "./fit.ts";
 import { avcCodecString } from "./avc-codec.ts";
 import type { VideoRenderer } from "./video-renderer.ts";
+import { choosePaintIndex, kMaxPendingFrames } from "./paint-policy.ts";
 
 /**
  * H.264 → canvas. Decoded frames are held and painted against a media clock
@@ -168,7 +169,9 @@ export class VideoPipeline implements VideoRenderer {
       return;
     }
     this.pending.push(frame);
-    while (this.pending.length > 12) {
+    // A live desktop wants the CURRENT screen, not a backlog: a deep queue is pure
+    // latency (12 frames was ~200ms at 60fps).
+    while (this.pending.length > kMaxPendingFrames) {
       this.pending.shift()!.close();
     }
     this.schedulePaint();
@@ -185,21 +188,14 @@ export class VideoPipeline implements VideoRenderer {
   private paintDue() {
     if (this.closed) return;
     const clock = this.getClock?.() ?? null;
-    if (clock == null) {
-      // No audio clock: paint latest, drop the rest.
-      while (this.pending.length > 1) this.pending.shift()!.close();
-      const f = this.pending.shift();
-      if (f) this.draw(f);
-      return;
-    }
-    // Paint the newest frame whose PTS <= media clock; drop older ones.
-    let best = -1;
-    for (let i = 0; i < this.pending.length; i++) {
-      if (this.pending[i]!.timestamp <= clock) best = i;
-    }
+    // Latency-bounded A/V sync: follow the audio clock while that is cheap, but never let
+    // a lagging or deeply-buffered audio path delay the desktop (see paint-policy.ts).
+    const best = choosePaintIndex(
+      this.pending.map((f) => f.timestamp),
+      clock,
+    );
     if (best < 0) {
-      // Video ahead of audio — wait.
-      this.schedulePaint();
+      this.schedulePaint();   // wait for audio to catch up
       return;
     }
     for (let i = 0; i < best; i++) this.pending.shift()!.close();
