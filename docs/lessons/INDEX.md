@@ -16,6 +16,7 @@
 
 | ID | Title | Tags | Severity | Date | File |
 |---|---|---|---|---|---|
+| G-2026-08-15-static-screen-low-fps | "Low fps" on a static screen is correct (evdi capture is damage-driven); the constant ~1.5 Mbps baseline is uncompressed PCM audio, not video — always measure with motion | host, evdi, audio, performance, gotcha | medium | 2026-08-15 | [static-screen-looks-like-low-fps.md](static-screen-looks-like-low-fps.md) |
 | L-2026-08-15-slow-link-bufferbloat | Fixed-bitrate encoding on a slow client link degrades invisibly: the kernel buffers the excess, so sends stay fast while latency grows and fps collapses — pace capture on SIOCOUTQ backlog | host, transport, performance, silent-failure | high | 2026-08-15 | [slow-link-bufferbloat.md](slow-link-bufferbloat.md) |
 | L-2026-08-15-web-client-sigpipe-death | A web client disconnecting killed the whole streamer — unhandled SIGPIPE on SSL_write (exit 141, no log line) | host, transport, tls, silent-failure | critical | 2026-08-15 | [web-client-sigpipe-death.md](web-client-sigpipe-death.md) |
 | G-2026-08-06-web-mse-render | Low-end web clients choke on WebCodecs→Canvas 2D (per-frame copy, filter path); an MSE `<video>` path (client-side fMP4 mux) uses native hardware decode + compositor | client, performance, gotcha | medium | 2026-08-06 | [web-mse-render.md](web-mse-render.md) |
