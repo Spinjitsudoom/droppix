@@ -72,8 +72,10 @@ add_library(droppix_core
   src/web_root.cpp
   src/jpeg_stripe_encoder.cpp
   src/spacedesk_server.cpp
+  src/spacedesk_client.cpp
   src/jpeg_stripe_encoder.cpp
   src/spacedesk_server.cpp
+  src/spacedesk_client.cpp
   src/version.cpp
 )
 target_include_directories(droppix_core PUBLIC
@@ -101,6 +103,11 @@ target_link_libraries(droppix_spike PRIVATE droppix_core)
 
 add_executable(droppix_stream src/stream_main.cpp)
 target_link_libraries(droppix_stream PRIVATE droppix_core)
+
+# Acceptance check for the spacedesk CLIENT direction: connects droppix's own client
+# code to a real spacedesk server and reports what it decodes.
+add_executable(spacedesk_probe tools/spacedesk_probe_main.cpp)
+target_link_libraries(spacedesk_probe PRIVATE droppix_core)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
@@ -218,6 +225,7 @@ add_executable(droppix_tests
   tests/test_jpeg_stripe_encoder.cpp
   tests/test_keyframe_request.cpp
   tests/test_spacedesk_server.cpp
+  tests/test_spacedesk_client.cpp
   tests/test_spacedesk_protocol.cpp
   tests/test_jpeg_stripe_encoder.cpp
   tests/test_version.cpp
