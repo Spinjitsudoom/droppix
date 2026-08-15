@@ -1,7 +1,9 @@
 # spacedesk VIEWER protocol — reverse-engineering notes
 
-**Status:** Partial. Discovery and message framing decoded and reproduced; the server's
-reply and the entire video path are unknown. **No implementation in droppix yet.**
+**Status:** Partial — one direction shipped. Discovery, framing, the session-open
+sequence and **video** are decoded and implemented: droppix serves a real spacedesk
+viewer (`host/src/spacedesk_server.*`). Input, audio and orientation are still unknown,
+and they gate full two-way compatibility.
 
 Goal: let the proprietary spacedesk VIEWER app connect to droppix as if droppix were a
 spacedesk server. Interoperability work — we control the server end, the user owns the
@@ -24,15 +26,18 @@ UDP <client>:<ephemeral> -> 255.255.255.255:28252     21 bytes
 "SPACEDESK-NET-CLIENT\0"
 ```
 
-The reply that makes the viewer list a server and open TCP :28252:
+The **real** reply is a 308-byte struct, since verified byte-identical against a live
+spacedesk server:
 
-```
-"SPACEDESK-NET-SERVER"        <- 20 bytes, NO trailing NUL
-```
+| offset | field |
+|---|---|
+| `@0` | machine name, UTF-16LE, in a 260-byte fixed buffer |
+| `@260` | TCP port to connect to (28252) |
+| `@264` / `@272` / `@276` / `@280` | 8 / 4 / 8 / 43 — version+capability constants |
 
-The NUL matters: `SPACEDESK-NET-SERVER\0` produced **zero** connections across ~88,000
-replies; the same string without it produced connections. Reply to the datagram's source
-address (broadcasting it as well is harmless).
+(A bare `SPACEDESK-NET-SERVER` string — no trailing NUL — is *enough to coax a
+connection*, and was the first thing found, but it leaves the viewer on a degraded path.
+Send the real struct.)
 
 ## Message framing — SOLVED
 
@@ -77,14 +82,6 @@ ack + two type-3 display messages + two heartbeats before any frame.
 
 ## What is NOT known
 
-- **The server's reply.** Untested; 18 candidates were prepared (enumerating the type
-  field with the server's geometry in the client's own header shape) but could not be run
-  — see the iteration cost below.
-- **Display/format negotiation.** Unknown whether a raw/uncompressed pixel format can be
-  negotiated. This decides whether a droppix implementation is feasible at all: spacedesk
-  compresses with its own scheme, and synthesising a proprietary codec's bitstream
-  blind — with no feedback beyond "did the client render something" — is close to
-  infeasible. A negotiable raw RGB mode would be the viable path.
 - **Input** (touch/mouse/keyboard, client -> server) — never captured. It only appears
   when a real viewer drives a real server, so watching a server send cannot reveal it.
 - **Audio**, either direction — no audio-bearing message has ever been observed.
@@ -96,17 +93,34 @@ outside the known set, prompting through touch / drag / pinch / rotate / audio /
 in turn. One run with the phone driving a real server should decode all of the above —
 that is the gate on full two-way compatibility.
 
-## Iteration cost (the practical blocker)
+## Video — SOLVED
 
-The viewer **does not retry on its own**: with discovery answered continuously for 90 s
-it opened **zero** connections. Connections only appeared when the user tapped the server
-entry. So every protocol guess costs one manual tap on the phone, and the search space
-(server reply shape, then format negotiation, then framing) is far larger than a
-tap-per-experiment loop can cover comfortably.
+Server message **type 2** carries a plain **baseline JFIF image** — not a proprietary
+codec, which is what made a droppix implementation possible at all. The display is split
+into **4 horizontal stripes** (2340x1080 -> 4 x 2340x270), one JPEG each:
 
-Any serious continuation should first look for a cheaper feedback loop — e.g. running the
-real spacedesk Windows server in a VM and capturing a genuine session, which yields the
-server side directly instead of guessing at it.
+| offset | field |
+|---|---|
+| `@8` / `@12` | full display width / height |
+| `@16` | stride (width * 4, i.e. 32bpp source) |
+| `@28` / `@36` | stripe y start / y end |
+| `@32` | stripe x end (= full width) |
+| `@68` | payload length (repeated from `@4`) |
+
+Session open, in order — the viewer sits connected with its display **OFF** until it has
+all of these: `type 4` ack, `type 3` display `{@8=0,@12=1}`, `type 3` display
+`{@8=1,@12=1}`, then two `type 1` heartbeats. A `type 1` heartbeat `{@8=15,@12=1}` follows
+roughly every 10s.
+
+## How this was decoded (the method that worked)
+
+Guessing cost one phone tap per experiment: the viewer never reconnects on its own (zero
+connections in 90s of answered discovery). The unlock was to stop guessing — run the real
+spacedesk server in a Windows VM and **replay the viewer's captured hello at it**
+(`tools/spacedesk-re/replay.py`), which yields the server side directly, unlimited
+iterations, no phone in the loop. Input and audio cannot be learned this way, since they
+flow the other direction; those need `capture_all.py` with a viewer driving a real
+server.
 
 ## Tools
 
