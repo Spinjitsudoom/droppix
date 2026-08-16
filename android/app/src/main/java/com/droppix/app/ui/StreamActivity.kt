@@ -58,7 +58,25 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     // rotates the display naturally. We detect the physical orientation and report it; on
     // a portrait<->landscape change the host restreams at swapped dims and we reconnect,
     // so the SurfaceView then matches the new (portrait/landscape) CONFIG size.
-    private val orientationMapper = OrientationMapper()
+    // Built lazily so the display is available: a phone is portrait-natural, a tablet
+    // landscape-natural, and the sensor angle means opposite things on the two.
+    private val orientationMapper by lazy { OrientationMapper(naturalIsPortrait = naturalIsPortrait()) }
+
+    /**
+     * Is this device's NATURAL orientation (rotation 0) portrait?
+     *
+     * Compare the current shape against the current rotation: at ROTATION_0/180 the device
+     * is in its natural shape, at 90/270 it is turned a quarter from it.
+     */
+    private fun naturalIsPortrait(): Boolean {
+        val m = android.util.DisplayMetrics()
+        @Suppress("DEPRECATION") val display = windowManager.defaultDisplay
+        @Suppress("DEPRECATION") display.getRealMetrics(m)
+        val tallNow = m.heightPixels >= m.widthPixels
+        @Suppress("DEPRECATION") val rot = display.rotation
+        val quarterTurned = rot == android.view.Surface.ROTATION_90 || rot == android.view.Surface.ROTATION_270
+        return if (quarterTurned) !tallNow else tallNow
+    }
     private var orientationListener: OrientationEventListener? = null
 
     private val stats = StatsSink()

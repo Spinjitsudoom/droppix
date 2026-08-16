@@ -18,13 +18,28 @@ import kotlin.math.abs
 class OrientationMapper(
     private val deadZoneDeg: Int = 12,
     private val settleMs: Long = 250,
+    /**
+     * True when the device's NATURAL orientation (sensor angle 0) is portrait, as on a
+     * phone; false for a landscape-natural tablet.
+     *
+     * OrientationEventListener reports rotation away from natural, so angle 0 means
+     * "portrait" on a phone and "landscape" on a tablet. Without this the same angle maps
+     * to the same wire code on both, and every orientation comes out inverted on one of
+     * them — a phone held in portrait made the host render landscape, and vice versa.
+     */
+    private val naturalIsPortrait: Boolean = false,
 ) {
     @Volatile private var currentQuarter = 0   // last emitted quarter (0..3)
     private var candidateQuarter = 0
     private var candidateSinceMs = 0L
 
     /** ORIENTATION code for the current settled orientation (0/1/2/3). */
-    fun currentCode(): Int = QUARTER_TO_CODE[currentQuarter]
+    fun currentCode(): Int = codeFor(currentQuarter)
+
+    // A portrait-natural device is one quarter-turn "ahead": its angle 0 is already the
+    // portrait shape the host must render.
+    private fun codeFor(quarter: Int): Int =
+        QUARTER_TO_CODE[(quarter + if (naturalIsPortrait) 1 else 0) % 4]
 
     /**
      * Feed one sensor sample. [angleDeg] is 0..359, or <0 for ORIENTATION_UNKNOWN
@@ -46,7 +61,7 @@ class OrientationMapper(
         }
         if (nowMs - candidateSinceMs < settleMs) return null  // not held long enough yet
         currentQuarter = quarter
-        return QUARTER_TO_CODE[quarter]
+        return codeFor(quarter)
     }
 
     companion object {
