@@ -75,8 +75,14 @@ distrobox enter "$DISTROBOX" -- bash -lc "
 "
 
 # --- host-served web PWA (static assets for --web-root) ---
+# Refreshing web/dist is a nicety, not a requirement: web/dist is committed exactly so a
+# packager needs no Node. Never let this abort the build (set -e is on) — `npm ci` cannot
+# even succeed when the repo sits on a CIFS mount, which does not support the symlinks npm
+# creates in node_modules/.bin (ENOTSUP), and that failure used to kill the whole AppImage.
 if command -v npm >/dev/null 2>&1; then
-  (cd "$REPO/web" && npm ci && npm run build)
+  if ! (cd "$REPO/web" && npm ci && npm run build); then
+    echo "warning: web rebuild failed; packaging the committed web/dist instead" >&2
+  fi
 fi
 if [ -f "$REPO/web/dist/index.html" ]; then
   mkdir -p "$APPDIR/usr/share/droppix/web"
