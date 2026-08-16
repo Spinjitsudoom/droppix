@@ -2,6 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- mDNS/NSD discovery: many Wi-Fi drivers (MediaTek among them) drop multicast to
+         save power unless an app holds a MulticastLock, which needs this permission.
+         Without it discovery silently finds nothing. -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application

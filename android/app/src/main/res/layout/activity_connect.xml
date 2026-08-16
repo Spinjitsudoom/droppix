@@ -80,23 +80,38 @@
         android:textColor="#1b1f24"
         android:layout_marginBottom="12dp" />
 
-    <Button
-        android:id="@+id/scan_qr_btn"
+    <!-- Icon actions, side by side: full-width buttons holding a single glyph looked odd.
+         contentDescription carries the meaning for TalkBack, since the glyph alone does not. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Scan QR to Pair"
-        android:backgroundTint="#2a2f36"
-        android:textColor="#14b8a6"
-        android:layout_marginBottom="12dp" />
+        android:orientation="horizontal"
+        android:layout_marginBottom="12dp">
 
-    <Button
-        android:id="@+id/usb_btn"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Connect via USB (adb)"
-        android:backgroundTint="#2a2f36"
-        android:textColor="#14b8a6"
-        android:layout_marginBottom="12dp" />
+        <Button
+            android:id="@+id/scan_qr_btn"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:text="\u25A6"
+            android:textSize="24sp"
+            android:contentDescription="Scan QR to pair"
+            android:backgroundTint="#2a2f36"
+            android:textColor="#14b8a6" />
+
+        <Button
+            android:id="@+id/usb_btn"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:text="\u26A1"
+            android:textSize="24sp"
+            android:contentDescription="Connect via USB"
+            android:backgroundTint="#2a2f36"
+            android:textColor="#14b8a6" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/status"
