@@ -390,9 +390,10 @@ MainWindow::MainWindow(QWidget* parent)
   connect(&browser_, &MdnsBrowser::devicesChanged, this, &MainWindow::onDevicesChanged);
   connect(&tetherScanner_, &TetherScanner::clientsChanged, this, &MainWindow::onTetherClientsChanged);
   connect(&aoaScanner_, &AoaScanner::clientsChanged, this, &MainWindow::onAoaClientsChanged);
-  connect(&adbReverse_, &AdbReverse::message, this, [this](const QString& t) {
+  connect(&adbTransport_, &AdbTransport::message, this, [this](const QString& t) {
     logEvent({}, "usb", LogLevel::Info, t);
   });
+  connect(&adbTransport_, &AdbTransport::clientsChanged, this, &MainWindow::onAdbClientsChanged);
   connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::onConnectToSelectedDevice);
   connect(devicesList_, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem*){ onConnectToSelectedDevice(); });
@@ -409,7 +410,7 @@ MainWindow::MainWindow(QWidget* parent)
   if (usbEnabled_) {
     tetherScanner_.start();   // always available (no external tool); keeps the devices list live
     aoaScanner_.start();      // poll USB for AOA-capable tablets while idle
-    adbReverse_.start(collectSettings().port);   // client's USB button dials 127.0.0.1:<port>
+    adbTransport_.start(collectSettings().port);   // client's USB button dials 127.0.0.1:<port>
   }
 
   refreshProfiles();
@@ -594,6 +595,12 @@ void MainWindow::onAoaClientsChanged(const QList<AoaClient>& clients) {
 // over the net/WAKE path) or "usb-aoa" (streams over the cable, no WAKE). Roles:
 // UserRole = transport; UserRole+1 = ident (net address, or AOA serial);
 // UserRole+2 = net wake port (0 for AOA); UserRole+3 = id (device id, or AOA serial).
+void MainWindow::onAdbClientsChanged(const QList<AdbClient>& clients) {
+  adbClients_ = clients;
+  rebuildClientList();
+  autoConnectTimer_.start();
+}
+
 void MainWindow::rebuildClientList() {
   const QString prevSelected = devicesList_->currentItem()
       ? devicesList_->currentItem()->text() : QString();
@@ -627,6 +634,19 @@ void MainWindow::rebuildClientList() {
     item->setData(Qt::UserRole + 1, a.serial);        // ident = serial
     item->setData(Qt::UserRole + 2, (uint)0);         // no wake port
     item->setData(Qt::UserRole + 3, a.serial);        // id = serial (known-store key)
+    devicesList_->addItem(item);
+    if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
+  }
+  // adb-attached tablets. Labelled "(adb)" because the same phone can also show up as an
+  // AOA row: they are different transports to the same hardware, and two bare "— USB" rows
+  // would be indistinguishable.
+  for (const auto& a : adbClients_) {
+    if (sessions_.has("usb-adb:" + a.serial)) continue;   // already streaming this tablet
+    auto* item = new QListWidgetItem(QString("%1 — USB (adb)").arg(a.model));
+    item->setData(Qt::UserRole, "usb-adb");
+    item->setData(Qt::UserRole + 1, a.serial);   // ident = serial
+    item->setData(Qt::UserRole + 2, (uint)0);    // no wake port; we launch the app directly
+    item->setData(Qt::UserRole + 3, a.serial);
     devicesList_->addItem(item);
     if (item->text() == prevSelected) devicesList_->setCurrentItem(item);
   }
@@ -668,6 +688,12 @@ bool MainWindow::connectDevice(const QString& key, const QString& label, const Q
   std::function<void()> direct;
   if (transport == "usb-aoa") {
     direct = []{};   // accessory auto-launches the app; nothing to send
+  } else if (transport == "usb-adb") {
+    // No WAKE datagram: there is no IP path to the tablet. Instead tunnel this session's
+    // port and launch the client on it over adb, so picking the device here is the entire
+    // interaction — the tablet is never touched.
+    const QString serial = ident;
+    direct = [this, serial, port]{ adbTransport_.usbConnect(serial, port); };
   } else {
     const QString addr = ident;
     direct = [this, addr, wakePort, port]{
@@ -909,7 +935,7 @@ void MainWindow::stopServerSession() {
 void MainWindow::scheduleServerRefresh() {
   // The port is one of the settings an edit can change, and a tunnel to the old port would
   // leave the client's USB button dialling nothing. start() is idempotent unless it moved.
-  if (usbEnabled_) adbReverse_.start(collectSettings().port);
+  if (usbEnabled_) adbTransport_.start(collectSettings().port);
   serverRefreshTimer_.start();   // (re)start the debounce; coalesces rapid edits
 }
 
@@ -1105,11 +1131,11 @@ void MainWindow::onUsbToggled(bool on) {
   if (on) {
     tetherScanner_.start();
     aoaScanner_.start();
-    adbReverse_.start(collectSettings().port);
+    adbTransport_.start(collectSettings().port);
   } else {
     tetherScanner_.stop();   // stops the 2s USB poll — the idle-resource win
     aoaScanner_.stop();
-    adbReverse_.stop();
+    adbTransport_.stop();
     tetherClients_.clear();
     aoaClients_.clear();
     rebuildClientList();
@@ -1341,7 +1367,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   browser_.stop();
   tetherScanner_.stop();
   aoaScanner_.stop();
-  adbReverse_.stop();
+  adbTransport_.stop();
   QMainWindow::closeEvent(event);
 }
 }  // namespace droppix

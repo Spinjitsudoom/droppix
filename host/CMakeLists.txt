@@ -129,7 +129,7 @@ if(Qt6_FOUND)
     gui/mdns_advertiser.cpp
     gui/mdns_browser.cpp
     gui/tether_scanner.cpp
-    gui/adb_reverse.cpp
+    gui/adb_transport.cpp
     gui/approved_store.cpp
     gui/cert_manager.cpp
     gui/audio_sink.cpp
@@ -254,8 +254,8 @@ if(Qt6_FOUND)
     gui/auto_connect.cpp
     gui/tests/test_aoa_known_store.cpp
     gui/aoa_known_store.cpp
-    gui/tests/test_adb_reverse.cpp
-    gui/adb_reverse.cpp
+    gui/tests/test_adb_transport.cpp
+    gui/adb_transport.cpp
     gui/tests/test_log_classify.cpp
     gui/log_classify.cpp
     gui/tests/test_log_buffer.cpp

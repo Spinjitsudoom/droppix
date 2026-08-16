@@ -10,6 +10,7 @@ Start here:
 | [../README.md](../README.md) | Build, requirements, layout |
 | [../scratchpad.md](../scratchpad.md) | Session memory for agents |
 | [lessons/INDEX.md](lessons/INDEX.md) | Indexed lessons / constraints |
+| [archive/](archive/) | Point-in-time snapshots. **Not living** — the docs above win on any disagreement |
 | [../CLAUDE.md](../CLAUDE.md) | Agent entry (Claude Code) |
 | [../AGENTS.md](../AGENTS.md) | Short agent entrypoint |
 | [../.claude/rules/](../.claude/rules/) | **Canonical** project rules (docs + tooling sync) |

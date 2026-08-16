@@ -14,7 +14,7 @@
 #include "mdns_browser.h"
 #include "tether_scanner.h"
 #include "aoa_scanner.h"
-#include "adb_reverse.h"
+#include "adb_transport.h"
 #include "aoa_known_store.h"
 #include "approved_store.h"
 #include "cert_manager.h"
@@ -81,6 +81,7 @@ class MainWindow : public QMainWindow {
   void onDevicesChanged(const QList<MdnsDevice>& devices);
   void onTetherClientsChanged(const QList<TetherClient>& clients);
   void onAoaClientsChanged(const QList<AoaClient>& clients);
+  void onAdbClientsChanged(const QList<AdbClient>& clients);
   void rebuildClientList();     // merge tetherClients_ + aoaClients_ + netDevices_ into devicesList_
   void onConnectToSelectedDevice();
   // Start a monitor for one specific device. quietIfBusy=true suppresses the
@@ -156,10 +157,11 @@ class MainWindow : public QMainWindow {
   MdnsBrowser browser_;
   TetherScanner tetherScanner_;
   AoaScanner aoaScanner_;
-  AdbReverse adbReverse_;          // keeps `adb reverse tcp:P` alive for the client's USB button
+  AdbTransport adbTransport_;      // adb USB: discovery + reverse tunnel + host-initiated connect
   QList<MdnsDevice> netDevices_;   // last network-discovered clients
   QList<TetherClient> tetherClients_;   // last USB-tether-discovered clients
   QList<AoaClient> aoaClients_;   // last USB-discovered AOA tablets
+  QList<AdbClient> adbClients_;   // last adb-discovered tablets (USB debugging)
   QTimer autoConnectTimer_;   // debounces discovery bursts before auto-connecting
   QHash<QString, qint64> pendingWakes_;
   QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to

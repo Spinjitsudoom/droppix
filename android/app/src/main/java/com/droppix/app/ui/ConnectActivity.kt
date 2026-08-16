@@ -106,8 +106,35 @@ class ConnectActivity : AppCompatActivity() {
         connectWithScannedCode(parsed.host, parsed.port, parsed.code)
     }
 
+    /**
+     * Host-initiated USB connect.
+     *
+     * The PC sets up `adb reverse tcp:P tcp:P` and then launches this Activity with these
+     * extras, so picking the tablet in the host GUI is the whole interaction — nobody has to
+     * pick up the tablet and tap Connect. The port is carried rather than assumed because
+     * each monitor gets its own (base..base+3), so a second tablet is not on 27000.
+     *
+     * Consumed once: removed from the Intent so returning to this screen later (back out of
+     * a stream, rotate) does not silently redial.
+     */
+    private fun handleUsbAutoconnect() {
+        if (!intent.getBooleanExtra("usb_autoconnect", false)) return
+        val port = intent.getIntExtra("usb_port", 27000)
+        intent.removeExtra("usb_autoconnect")
+        status.text = "Connecting over USB (127.0.0.1:$port)..."
+        connectTo("127.0.0.1", port)
+    }
+
+    override fun onNewIntent(newIntent: Intent?) {
+        super.onNewIntent(newIntent)
+        // The host relaunches an already-running client; without adopting the new Intent the
+        // extras below would still be the ones this Activity was first created with.
+        newIntent?.let { intent = it }
+    }
+
     override fun onResume() {
         super.onResume()
+        handleUsbAutoconnect()
         discovery.start(
             onFound = { name, host, port -> onPcFound(name, host, port) },
             onLost = { name -> onPcLost(name) }
