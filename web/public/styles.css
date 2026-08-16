@@ -91,6 +91,11 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 .card h1 { margin: 0 0 0.5rem; font-size: 1.3rem; color: var(--text); }
 .card .lede { margin: 0 0 1.5rem; color: var(--muted); font-size: 0.92rem; line-height: 1.4; }
+.ca-link {
+  display: block; margin-top: 1rem; color: var(--muted); font-size: 0.82rem;
+  text-decoration: none;
+}
+.ca-link:hover { color: var(--accent); text-decoration: underline; }
 
 .code {
   display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1.25rem;
@@ -168,6 +173,32 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 #app.render-mse #video-el { display: block; }
 #app.render-mse #video { background: transparent; }
+
+/* Floating settings button: always reachable while streaming, even once the control bar
+   has auto-hidden. Sits clear of the notch/rounded corners via safe-area insets, and
+   fades to low opacity so it never competes with the desktop it overlays. */
+#fab-settings {
+  position: absolute; z-index: 4;
+  right: calc(0.9rem + env(safe-area-inset-right));
+  bottom: calc(0.9rem + env(safe-area-inset-bottom));
+  width: 48px; height: 48px; border-radius: 50%;
+  display: none; align-items: center; justify-content: center;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  color: var(--text);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+  opacity: 0.55;
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  cursor: pointer;
+}
+#app[data-view="session"] #fab-settings { display: flex; }
+#fab-settings:hover, #fab-settings:focus-visible { opacity: 1; }
+#fab-settings:active { transform: scale(0.94); }
+/* Touch devices have no hover: keep it clearly visible without a pointer. */
+@media (hover: none) { #fab-settings { opacity: 0.8; } }
+/* Out of the way when the settings drawer is already open. */
+#app.drawer-open #fab-settings { display: none; }
 
 #hud {
   position: absolute; left: 0.75rem; top: 0.75rem; padding: 0.35rem 0.55rem;

@@ -30,6 +30,12 @@
         <p class="lede">droppix is serving this page from your computer — just connect. Approve the device on the PC if it asks.</p>
         <button id="btn-connect" class="btn-primary" type="button">Connect</button>
         <div id="c-status" class="status">Connecting…</div>
+        <!-- No `download` attribute: Android's browser recognizes the
+             application/x-x509-ca-cert Content-Type and hands this off straight to the
+             system certificate installer. Forcing a save-as download (via `download=`)
+             bypasses that handoff and routes through Chrome's download manager instead,
+             which is both the wrong UX and observed to stall/fail on some devices. -->
+        <a id="ca-link" class="ca-link" href="/ca.crt">First time on this device? Install the host certificate for a secure connection &rarr;</a>
       </div>
     </section>
 
@@ -84,6 +90,14 @@
           </svg>
         </button>
       </div>
+      <!-- Always-available settings, spacedesk-style: the control bar auto-hides, so
+           without this the only way back to settings is tapping to reveal it first. -->
+      <button id="fab-settings" type="button" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
       <div class="hinttap">Tap to show controls</div>
     </main>
 
@@ -107,10 +121,10 @@
             <label for="set-resolution">Resolution</label>
             <select id="set-resolution">
               <option value="auto">Auto (match device)</option>
-              <option value="1920x1080">1080p (1920×1080)</option>
-              <option value="1280x720">720p (1280×720)</option>
-              <option value="960x540">540p (960×540)</option>
-              <option value="854x480">480p (854×480)</option>
+              <option value="1080">High (1080p)</option>
+              <option value="720">Medium (720p)</option>
+              <option value="540">Low (540p)</option>
+              <option value="480">Lowest (480p)</option>
             </select>
           </div>
           <div class="d-row">

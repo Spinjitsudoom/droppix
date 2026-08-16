@@ -1590,7 +1590,7 @@ function loadSettings() {
     // gracefully via the host's send-backlog pacing rather than by capping everyone at 30.
     fps: 60,
     bitrateKbps: 8e3,
-    resolution: "1280x720",
+    resolution: "720",
     renderer: "canvas",
     audio: true,
     fit: "contain",
@@ -1616,12 +1616,16 @@ function saveSettings(s) {
   localStorage.setItem(KEY, JSON.stringify(s));
 }
 function resolveResolution(setting, auto) {
-  const m = /^(\d+)x(\d+)$/.exec(setting);
-  if (!m) return auto;
-  const w = parseInt(m[1], 10);
-  const h = parseInt(m[2], 10);
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 2 || h < 2) return auto;
-  return { w: w - w % 2, h: h - h % 2 };
+  if (auto.w < 2 || auto.h < 2) return auto;
+  if (setting === "auto") return auto;
+  const legacy = /^(\d+)x(\d+)$/.exec(setting);
+  const targetH = legacy ? parseInt(legacy[2], 10) : parseInt(setting, 10);
+  if (!Number.isFinite(targetH) || targetH < 2) return auto;
+  if (targetH >= auto.h) return auto;
+  const aspect = auto.w / auto.h;
+  const h = targetH;
+  const w = Math.round(h * aspect);
+  return { w: Math.max(2, w - w % 2), h: Math.max(2, h - h % 2) };
 }
 
 // src/fullscreen.ts
@@ -2229,6 +2233,11 @@ btnTheme.addEventListener("click", () => {
   setTheme(theme);
 });
 btnSettings.addEventListener("click", () => drawer.open());
+var fabSettings = document.getElementById("fab-settings");
+fabSettings?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  drawer.open();
+});
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {
     if (!(e.target instanceof HTMLInputElement)) {

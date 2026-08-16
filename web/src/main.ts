@@ -353,6 +353,14 @@ btnTheme.addEventListener("click", () => {
 
 btnSettings.addEventListener("click", () => drawer.open());
 
+// Floating settings button: the control bar auto-hides, so this is the always-present
+// way into settings while streaming (the same affordance spacedesk offers).
+const fabSettings = document.getElementById("fab-settings") as HTMLButtonElement | null;
+fabSettings?.addEventListener("click", (e) => {
+  e.stopPropagation();   // do not let the tap fall through to the canvas as input
+  drawer.open();
+});
+
 window.addEventListener("keydown", (e) => {
   if (e.key === "f" || e.key === "F") {
     if (!(e.target instanceof HTMLInputElement)) {
