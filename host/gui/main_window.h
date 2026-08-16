@@ -14,6 +14,7 @@
 #include "mdns_browser.h"
 #include "tether_scanner.h"
 #include "aoa_scanner.h"
+#include "adb_reverse.h"
 #include "aoa_known_store.h"
 #include "approved_store.h"
 #include "cert_manager.h"
@@ -155,6 +156,7 @@ class MainWindow : public QMainWindow {
   MdnsBrowser browser_;
   TetherScanner tetherScanner_;
   AoaScanner aoaScanner_;
+  AdbReverse adbReverse_;          // keeps `adb reverse tcp:P` alive for the client's USB button
   QList<MdnsDevice> netDevices_;   // last network-discovered clients
   QList<TetherClient> tetherClients_;   // last USB-tether-discovered clients
   QList<AoaClient> aoaClients_;   // last USB-discovered AOA tablets

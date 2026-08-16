@@ -388,6 +388,9 @@ MainWindow::MainWindow(QWidget* parent)
   connect(&browser_, &MdnsBrowser::devicesChanged, this, &MainWindow::onDevicesChanged);
   connect(&tetherScanner_, &TetherScanner::clientsChanged, this, &MainWindow::onTetherClientsChanged);
   connect(&aoaScanner_, &AoaScanner::clientsChanged, this, &MainWindow::onAoaClientsChanged);
+  connect(&adbReverse_, &AdbReverse::message, this, [this](const QString& t) {
+    logEvent({}, "usb", LogLevel::Info, t);
+  });
   connect(connectBtn_, &QPushButton::clicked, this, &MainWindow::onConnectToSelectedDevice);
   connect(devicesList_, &QListWidget::itemDoubleClicked, this,
           [this](QListWidgetItem*){ onConnectToSelectedDevice(); });
@@ -404,6 +407,7 @@ MainWindow::MainWindow(QWidget* parent)
   if (usbEnabled_) {
     tetherScanner_.start();   // always available (no external tool); keeps the devices list live
     aoaScanner_.start();      // poll USB for AOA-capable tablets while idle
+    adbReverse_.start(collectSettings().port);   // client's USB button dials 127.0.0.1:<port>
   }
 
   refreshProfiles();
@@ -899,6 +903,9 @@ void MainWindow::stopServerSession() {
 }
 
 void MainWindow::scheduleServerRefresh() {
+  // The port is one of the settings an edit can change, and a tunnel to the old port would
+  // leave the client's USB button dialling nothing. start() is idempotent unless it moved.
+  if (usbEnabled_) adbReverse_.start(collectSettings().port);
   serverRefreshTimer_.start();   // (re)start the debounce; coalesces rapid edits
 }
 
@@ -1094,9 +1101,11 @@ void MainWindow::onUsbToggled(bool on) {
   if (on) {
     tetherScanner_.start();
     aoaScanner_.start();
+    adbReverse_.start(collectSettings().port);
   } else {
     tetherScanner_.stop();   // stops the 2s USB poll — the idle-resource win
     aoaScanner_.stop();
+    adbReverse_.stop();
     tetherClients_.clear();
     aoaClients_.clear();
     rebuildClientList();
@@ -1328,6 +1337,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
   browser_.stop();
   tetherScanner_.stop();
   aoaScanner_.stop();
+  adbReverse_.stop();
   QMainWindow::closeEvent(event);
 }
 }  // namespace droppix

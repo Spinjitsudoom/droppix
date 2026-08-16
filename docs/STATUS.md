@@ -34,7 +34,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Audio to tablet (PipeWire) | Shipped | `audio_streamer.*`, `audio_sink.*` |
 | WiFi discovery + TLS PIN pairing | Shipped | `mdns_*`, `cert_manager.*`, Android `TlsTrust` |
 | QR-code pairing (scan to skip PIN typing) | Shipped (host); Android build/on-device retest pending | `host/src/qr_generator.*`, `main_window::refreshPairingUi`/`showPairingPopup`; Android `net/QrUri.kt`, ZXing scan in `ui/ConnectActivity.kt` |
-| USB `adb reverse` | Shipped | host GUI / streamer USB path; Android "Connect via USB (adb)" button restored 2026-07-26 |
+| USB `adb reverse` | Shipped | `host/gui/adb_reverse.*` (polls `adb devices`, tunnels each ready serial while USB is enabled); Android "Connect via USB (adb)" button. **Host side was missing 2026-07-05 → 2026-08-16**: `AdbManager` was deleted with the adb USB path (`a349ee5`), the client button was restored 2026-07-26 still dialling `127.0.0.1:27000`, and nothing created the tunnel — see lesson `usb-button-without-a-tunnel` |
 | USB tethering transport | Shipped | `tether_discovery.*`, `TetherProbe.kt` |
 | AOA USB accessory transport | Shipped | `aoa_{channel,connect,scan}.*`, Android `UsbAccessory` |
 | Multi-monitor (N tablets) | Shipped | `session_manager.*`, `port_alloc.*` |
