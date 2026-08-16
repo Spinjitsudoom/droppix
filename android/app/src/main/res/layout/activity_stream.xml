@@ -142,53 +142,101 @@
         </LinearLayout>
     </ScrollView>
 
-    <!-- Toolbar row, LAST child so it draws above both the surface and the settings panel
-         (keeping the gear reachable to dismiss the panel).
+    <!-- Floating action menu, LAST child so it draws above the surface AND the settings
+         panel, and gets touch dispatch first (GlDisplayView consumes MotionEvents without
+         calling super, so anything interactive must be a later sibling).
 
-         These were previously two separate top|end children relying on layout_marginEnd to
-         sit side by side. That margin lost to the layout_margin on the same view, so both
-         ended flush right and the later child (Keyboard) drew straight over the gear: the
-         settings button was present and hit-testable but completely invisible. Laying them
-         out in a row is structural and cannot silently collapse that way. -->
+         Laid out as a column so the items cannot overlap. An earlier version placed two
+         buttons separately and relied on layout_marginEnd to separate them; that margin
+         lost to layout_margin on the same view and one button drew straight over the
+         other, leaving a button that was present, tappable and invisible. -->
     <LinearLayout
+        android:id="@+id/fab_menu"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="top|end"
-        android:layout_margin="8dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
+        android:layout_gravity="bottom|end"
+        android:layout_margin="12dp"
+        android:orientation="vertical"
+        android:gravity="end">
 
-        <Button
-            android:id="@+id/kbd_overlay_btn"
+        <!-- Actions: hidden until the fab is tapped. Each applies to the LIVE stream. -->
+        <LinearLayout
+            android:id="@+id/fab_actions"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:paddingLeft="12dp"
-            android:paddingRight="12dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:textSize="16sp"
-            android:textColor="#FFFFFF"
-            android:background="#80000000"
-            android:contentDescription="Keyboard"
-            android:text="Keyboard" />
+            android:orientation="vertical"
+            android:gravity="end"
+            android:visibility="gone">
+
+            <Button
+                android:id="@+id/act_settings"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="#B0000000"
+                android:text="⚙  Settings" />
+
+            <Button
+                android:id="@+id/act_keyboard"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="#B0000000"
+                android:text="⌨  Keyboard" />
+
+            <Button
+                android:id="@+id/act_audio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="#B0000000"
+                android:text="Audio: on" />
+
+            <Button
+                android:id="@+id/act_touch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:minWidth="0dp"
+                android:minHeight="0dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:textSize="15sp"
+                android:textColor="#FFFFFF"
+                android:background="#B0000000"
+                android:text="Touch: on" />
+        </LinearLayout>
 
         <Button
-            android:id="@+id/settings_overlay_btn"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:id="@+id/fab_main"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
             android:minWidth="0dp"
             android:minHeight="0dp"
-            android:paddingLeft="14dp"
-            android:paddingRight="14dp"
-            android:paddingTop="4dp"
-            android:paddingBottom="4dp"
-            android:textSize="18sp"
+            android:padding="0dp"
+            android:textSize="22sp"
             android:textColor="#FFFFFF"
-            android:background="#80000000"
-            android:contentDescription="Settings"
-            android:text="⚙ Settings" />
+            android:background="#C0202020"
+            android:contentDescription="Menu"
+            android:text="☰" />
     </LinearLayout>
+
 </FrameLayout>

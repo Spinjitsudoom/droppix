@@ -36,6 +36,16 @@ class AudioPlayer {
         if (!queue.offer(pcm)) { queue.poll(); queue.offer(pcm) }   // drop oldest on overflow
     }
 
+    /**
+     * Drop anything buffered but not yet played.
+     *
+     * Used when audio is muted mid-stream: without this the queue (up to 64 chunks) would
+     * be played out on unmute, replaying sound from before the mute.
+     */
+    fun flush() {
+        queue.clear()
+    }
+
     private fun loop(t: AudioTrack) {
         while (running) {
             val pcm = try { queue.take() } catch (e: InterruptedException) { break }

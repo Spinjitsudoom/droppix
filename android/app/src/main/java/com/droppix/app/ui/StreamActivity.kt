@@ -47,6 +47,13 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     @Volatile private var rotationLocked = false
     @Volatile private var localOverlayWanted = false
 
+    // Live quick-toggles from the floating menu. Both are client-side, so they take effect
+    // on the running stream with no renegotiation: audio gates PLAYBACK of received PCM,
+    // touch gates FORWARDING of input. Muting locally rather than renegotiating keeps the
+    // toggle instant; the cost is that the host keeps sending audio we discard.
+    @Volatile private var audioEnabled = true
+    @Volatile private var touchEnabled = true
+
     /**
      * In-stream settings overlay. Display params apply to the running stream immediately;
      * negotiated params (resolution/fps/quality/audio) restart the session in place, without
@@ -59,6 +66,56 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             applyLive = { s -> applyDisplaySettings(s) },
             reconnect = { restartSession() },
         )
+    }
+
+    /**
+     * Floating action menu: a single button that expands to the actions worth reaching
+     * mid-stream. Every one of them applies to the LIVE stream.
+     */
+    private fun wireFloatingMenu() {
+        val actions = findViewById<View>(R.id.fab_actions)
+        val fab = findViewById<Button>(R.id.fab_main)
+        val audioBtn = findViewById<Button>(R.id.act_audio)
+        val touchBtn = findViewById<Button>(R.id.act_touch)
+
+        fun refresh() {
+            audioBtn.text = if (audioEnabled) "Audio: on" else "Audio: off"
+            touchBtn.text = if (touchEnabled) "Touch: on" else "Touch: off"
+        }
+        fun collapse() {
+            actions.visibility = View.GONE
+            fab.text = "\u2630"
+        }
+        refresh()
+
+        fab.setOnClickListener {
+            if (actions.visibility == View.VISIBLE) collapse()
+            else {
+                refresh()
+                actions.visibility = View.VISIBLE
+                fab.text = "\u00D7"
+            }
+        }
+        findViewById<Button>(R.id.act_settings).setOnClickListener {
+            collapse()
+            settingsPanel.toggle()
+        }
+        findViewById<Button>(R.id.act_keyboard).setOnClickListener {
+            collapse()
+            toggleSoftKeyboard()
+        }
+        audioBtn.setOnClickListener {
+            // Instant: stop feeding the player. No renegotiation, no stream interruption.
+            audioEnabled = !audioEnabled
+            if (!audioEnabled) audioPlayer?.flush()
+            refresh()
+        }
+        touchBtn.setOnClickListener {
+            // Instant: stop forwarding input, so the screen can be handled without driving
+            // the desktop.
+            touchEnabled = !touchEnabled
+            refresh()
+        }
     }
 
     /** Push display-only settings onto the live view. No protocol involvement. */
@@ -141,10 +198,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         // In-stream entry point to Settings. Must be a real overlay View (topmost FrameLayout
         // child) rather than a long-press on the surface: GlDisplayView.onTouchEvent
         // consumes MotionEvents without calling super, so View long-press detection never runs.
-        findViewById<Button>(R.id.settings_overlay_btn).setOnClickListener {
-            settingsPanel.toggle()
-        }
-        findViewById<Button>(R.id.kbd_overlay_btn).setOnClickListener { toggleSoftKeyboard() }
+        wireFloatingMenu()
         overlay = findViewById(R.id.overlay)
         overlay.visibility = View.GONE   // shown only if the host asks (Settings → performance overlay)
         applyImmersive()
@@ -200,22 +254,24 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         surfaceView.setSurfaceListener(this)  // fires onSurfaceReady if already valid
         surfaceView.setTouchListener(object : GlDisplayView.TouchListener {
             override fun onTouch(contacts: List<com.droppix.app.protocol.Contact>) {
-                client?.sendTouch(contacts)
+                if (touchEnabled) client?.sendTouch(contacts)
             }
         })
         surfaceView.setMouseListener(object : GlDisplayView.MouseListener {
             override fun onScroll(dx: Int, dy: Int, x: Int, y: Int) {
-                client?.sendScroll(dx, dy, x, y)
+                if (touchEnabled) client?.sendScroll(dx, dy, x, y)
             }
             override fun onMouseButton(button: Int, action: Int, x: Int, y: Int) {
-                client?.sendMouseButton(button, action, x, y)
+                if (touchEnabled) client?.sendMouseButton(button, action, x, y)
             }
         })
         surfaceView.setKeyListener(object : GlDisplayView.KeyListener {
             override fun onKey(keycode: Int, action: Int) { client?.sendKey(keycode, action) }
         })
         surfaceView.setPenListener(object : GlDisplayView.PenListener {
-            override fun onPen(x: Int, y: Int, pressure: Int, flags: Int) { client?.sendPen(x, y, pressure, flags) }
+            override fun onPen(x: Int, y: Int, pressure: Int, flags: Int) {
+                if (touchEnabled) client?.sendPen(x, y, pressure, flags)
+            }
         })
         surfaceView.requestFocus()
         // Live-apply: brightness/contrast are display-only shader params, so a settings change
@@ -316,7 +372,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                     sawVideo = true
                     decoder?.submit(video.nal, video.ptsUs)
                 }
-                override fun onAudio(pcm: ByteArray) { player.submit(pcm) }
+                override fun onAudio(pcm: ByteArray) { if (audioEnabled) player.submit(pcm) }
                 override fun onOverlay(show: Boolean) {
                     runOnUiThread { overlay.visibility = if (show || localOverlayWanted) View.VISIBLE else View.GONE }
                 }
