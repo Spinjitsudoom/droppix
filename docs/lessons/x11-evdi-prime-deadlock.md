@@ -76,3 +76,23 @@ if (!src_ || !src_->start(w, h, on_connected)) { ... }
 - `xrandr --listproviders` showing more than one `Provider` line is the
   giveaway that evdi is a reverse-PRIME sink on this machine, not a connector
   on the primary GPU.
+
+## Update (2026-08-10): the ordering fix alone wasn't sufficient
+
+Even after the above fix landed, live web-client sessions on the same X11
+(Cinnamon) box still failed: `dmesg -T` showed evdi connecting and
+disconnecting again exactly 5s later. Root cause this time was a **timeout
+race, not an ordering bug**: `link_providers()`'s `runuser -u <user> -- ...
+xrandr` chain is wrapped in `timeout 10` (up to 10s, mostly PAM/D-Bus session
+setup for `runuser`, not the xrandr calls themselves), but
+`wait_for_mode(5000)` only waited 5s — shorter than the work it was racing.
+Fix: `evdi_frame_source.cpp`'s wait bumped `5000 -> 12000`ms (safely past the
+callback's own 10s budget). Separately, `stream_daemon.cpp`'s early-failure
+paths (`source start failed`, `encoder open failed`, `send_config` failure,
+`no HELLO`, approval denied) now call `tx_.close_all()` — without it, a
+`--web` (preconnected) session that fails here leaves the browser's
+WebSocket open with no CONFIG ever sent: "connected" forever, black screen,
+no error, because `WebFrontend::serve_until_stream` only waits for a *new*
+`/ws` upgrade and never revisits the abandoned one. The native TCP path
+self-heals via the next `accept_client()`'s own `close_all()`; the web path
+does not, since it skips `accept_client()` entirely (`cfg_.preconnected`).
