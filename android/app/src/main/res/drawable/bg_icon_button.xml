@@ -1,0 +1,18 @@
+<!-- Background for the icon-only actions on the connect screen: rounded slab in the panel
+     colour, with a teal ripple so a tap still gives feedback (an ImageButton with a flat
+     colour background loses the press state a Button would have had). -->
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#4d14b8a6">
+    <item android:id="@android:id/mask">
+        <shape android:shape="rectangle">
+            <corners android:radius="10dp" />
+            <solid android:color="#FFFFFF" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <corners android:radius="10dp" />
+            <solid android:color="#2a2f36" />
+        </shape>
+    </item>
+</ripple>

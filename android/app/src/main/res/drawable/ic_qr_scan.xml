@@ -1,0 +1,45 @@
+<!-- QR scan icon: three finder squares (the marks a QR code is recognised by) plus a few
+     data modules, inside scanner corner brackets. Drawn as a vector so it stays crisp at any
+     density and can be tinted from the layout. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Scanner brackets -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M2,7 V4 A2,2 0 0,1 4,2 H7
+                          M17,2 H20 A2,2 0 0,1 22,4 V7
+                          M22,17 V20 A2,2 0 0,1 20,22 H17
+                          M7,22 H4 A2,2 0 0,1 2,20 V17" />
+
+    <!-- Finder patterns: outer ring + solid centre, top-left / top-right / bottom-left -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M5.5,5.5 h4.2 v4.2 h-4.2 z
+                          M6.8,6.8 h1.6 v1.6 h-1.6 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M14.3,5.5 h4.2 v4.2 h-4.2 z
+                          M15.6,6.8 h1.6 v1.6 h-1.6 z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M5.5,14.3 h4.2 v4.2 h-4.2 z
+                          M6.8,15.6 h1.6 v1.6 h-1.6 z" />
+
+    <!-- A few data modules so it reads as a code rather than three boxes -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M14.3,14.3 h1.7 v1.7 h-1.7 z
+                          M16.8,16.8 h1.7 v1.7 h-1.7 z
+                          M14.3,17.6 h1.7 v0.9 h-1.7 z
+                          M17.6,14.3 h0.9 v1.7 h-0.9 z" />
+</vector>

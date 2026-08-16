@@ -80,37 +80,41 @@
         android:textColor="#1b1f24"
         android:layout_marginBottom="12dp" />
 
-    <!-- Icon actions, side by side: full-width buttons holding a single glyph looked odd.
-         contentDescription carries the meaning for TalkBack, since the glyph alone does not. -->
+    <!-- Icon actions, side by side. These were text buttons holding a single Unicode glyph
+         (\u25A6 and \u26A1), which read as filler rather than as icons; they are now drawn vectors that
+         actually depict a QR code and the USB trident. contentDescription carries the meaning
+         for TalkBack, since an icon alone does not. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:layout_marginBottom="12dp">
 
-        <Button
+        <ImageButton
             android:id="@+id/scan_qr_btn"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
             android:layout_marginEnd="6dp"
-            android:text="\u25A6"
-            android:textSize="24sp"
-            android:contentDescription="Scan QR to pair"
-            android:backgroundTint="#2a2f36"
-            android:textColor="#14b8a6" />
+            android:src="@drawable/ic_qr_scan"
+            android:tint="#14b8a6"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:background="@drawable/bg_icon_button"
+            android:contentDescription="Scan QR to pair" />
 
-        <Button
+        <ImageButton
             android:id="@+id/usb_btn"
             android:layout_width="0dp"
             android:layout_weight="1"
-            android:layout_height="wrap_content"
+            android:layout_height="52dp"
             android:layout_marginStart="6dp"
-            android:text="\u26A1"
-            android:textSize="24sp"
-            android:contentDescription="Connect via USB"
-            android:backgroundTint="#2a2f36"
-            android:textColor="#14b8a6" />
+            android:src="@drawable/ic_usb"
+            android:tint="#14b8a6"
+            android:scaleType="centerInside"
+            android:padding="12dp"
+            android:background="@drawable/bg_icon_button"
+            android:contentDescription="Connect via USB" />
     </LinearLayout>
 
     <TextView

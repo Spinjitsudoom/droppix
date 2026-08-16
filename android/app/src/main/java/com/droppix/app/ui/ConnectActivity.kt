@@ -9,6 +9,7 @@ import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.ListView
 import android.widget.TextView
 import android.widget.Toast
@@ -64,7 +65,7 @@ class ConnectActivity : AppCompatActivity() {
         }
 
         connectBtn.setOnClickListener { onConnectClicked() }
-        findViewById<Button>(R.id.scan_qr_btn).setOnClickListener {
+        findViewById<ImageButton>(R.id.scan_qr_btn).setOnClickListener {
             IntentIntegrator(this)
                 .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
                 .setPrompt("Scan the QR code shown on the PC")
@@ -72,7 +73,7 @@ class ConnectActivity : AppCompatActivity() {
                 .setOrientationLocked(false)
                 .initiateScan()
         }
-        findViewById<Button>(R.id.usb_btn).setOnClickListener {
+        findViewById<ImageButton>(R.id.usb_btn).setOnClickListener {
             // Classic USB path: the host runs `adb reverse tcp:27000 tcp:27000`, so the
             // tablet reaches it on localhost. 127.0.0.1 is auto-trusted (no PIN).
             status.text = "Connecting over USB (127.0.0.1:27000)..."
