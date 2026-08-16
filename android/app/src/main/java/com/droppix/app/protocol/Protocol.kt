@@ -2,7 +2,10 @@ package com.droppix.app.protocol
 
 enum class MsgType(val code: Int) {
     HELLO(1), CONFIG(2), VIDEO(3), PING(4), PONG(5), BYE(6), INPUT(7), ORIENTATION(8),
-    AUDIO(9), OVERLAY(10), TOUCH(11), SCROLL(12), MOUSE_BUTTON(13), KEY(14), PEN(15);
+    AUDIO(9), OVERLAY(10), TOUCH(11), SCROLL(12), MOUSE_BUTTON(13), KEY(14), PEN(15),
+    // client -> host: "my decoder lost sync, send an IDR now". Without it, a dropped
+    // delta leaves the picture corrupt until the host's next scheduled keyframe (~2s).
+    KEYFRAME_REQUEST(16);
     companion object {
         fun fromCode(c: Int): MsgType? = entries.firstOrNull { it.code == c }
     }

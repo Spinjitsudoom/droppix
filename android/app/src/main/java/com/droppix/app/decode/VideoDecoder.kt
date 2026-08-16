@@ -19,6 +19,20 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
     @Volatile private var released = false
     private val submitNs = HashMap<Long, Long>()  // ptsUs -> submit SystemClock ns
 
+    // Set by StreamActivity to ask the host for an IDR. Dropping a NAL breaks the decoder's
+    // reference chain, so without this the picture stays corrupt until the host's next
+    // scheduled keyframe (gop = fps*2, i.e. up to ~2s).
+    var onNeedKeyframe: (() -> Unit)? = null
+    private var lastRequestMs = 0L
+
+    // Rate-limited: a burst of drops must not turn the stream all-intra.
+    private fun requestKeyframe() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastRequestMs < 500) return
+        lastRequestMs = now
+        onNeedKeyframe?.invoke()
+    }
+
     init {
         val fmt = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height)
         if (Build.VERSION.SDK_INT >= 30) {
@@ -44,6 +58,7 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
                     // the index accounted for and log so a frozen stream is diagnosable.
                     Log.w(TAG, "NAL ${nal.size}B exceeds input buffer ${buf.capacity()}B; dropping")
                     codec.queueInputBuffer(inIndex, 0, 0, ptsUs, 0)
+                    requestKeyframe()
                 } else {
                     buf.put(nal)
                     if (stats != null) submitNs[ptsUs] = SystemClock.elapsedRealtimeNanos()
@@ -51,6 +66,7 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
                 }
             } else {
                 Log.w(TAG, "no input buffer available; dropping ${nal.size}B NAL")
+                requestKeyframe()
             }
             var outIndex = codec.dequeueOutputBuffer(info, 0)
             while (outIndex >= 0) {
@@ -66,6 +82,7 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "decoder submit failed: ${e.message}")
+            requestKeyframe()
         }
     }
 

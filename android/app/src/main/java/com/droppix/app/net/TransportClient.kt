@@ -65,6 +65,13 @@ class TransportClient {
         submitSend(o, msg)
     }
 
+    // Ask the host for an immediate IDR after we had to drop a NAL: the reference chain is
+    // broken, so every later delta decodes into garbage until a keyframe arrives.
+    fun sendKeyframeRequest() {
+        val o = out ?: return
+        submitSend(o, Protocol.encodeMessage(MsgType.KEYFRAME_REQUEST, ByteArray(0)))
+    }
+
     fun sendPen(x: Int, y: Int, pressure: Int, flags: Int) {
         val o = out ?: return
         val msg = Protocol.encodeMessage(MsgType.PEN, Protocol.encodePen(x, y, pressure, flags))

@@ -12,16 +12,32 @@ data class AppSettings(
     val wallCol: Int = 0, val wallRow: Int = 0)
 
 object Resolutions {
-    // Presets offered in the UI, in addition to "Native". Landscape-oriented (width >= height).
-    val PRESETS: List<Pair<Int, Int>> = listOf(1280 to 720, 1920 to 1080, 2560 to 1440, 800 to 480)
+    // Presets are a TARGET HEIGHT, not a fixed pair. Fixed 16:9 pairs (1280x720 etc.) make the
+    // host render the wrong SHAPE on a device that is not 16:9 — a 2340x1080 phone is 19.5:9 —
+    // and the picture then has to be letterboxed or stretched to fit, so it never looks right
+    // at any quality. Deriving the width from the device's own aspect makes the stream fill the
+    // screen exactly.
+    val PRESET_HEIGHTS: List<Int> = listOf(1440, 1080, 720, 540, 480)
 
     // The host expects landscape dims (orientation code drives the portrait swap).
     fun landscape(realW: Int, realH: Int): Pair<Int, Int> =
         if (realW >= realH) realW to realH else realH to realW
 
-    // The (w,h) to send in HELLO: explicit setting when set, else the device's native (landscape).
+    // Scale to `targetH` while keeping the device's aspect ratio. Never upscales past the
+    // panel (more pixels than the screen has only costs bandwidth), and keeps both dimensions
+    // even because H.264 requires it.
+    fun forHeight(targetH: Int, realW: Int, realH: Int): Pair<Int, Int> {
+        val (w, h) = landscape(realW, realH)
+        if (w < 2 || h < 2 || targetH < 2 || targetH >= h) return w to h
+        val scaledW = Math.round(targetH * (w.toDouble() / h)).toInt()
+        return maxOf(2, scaledW - (scaledW % 2)) to maxOf(2, targetH - (targetH % 2))
+    }
+
+    // The (w,h) to send in HELLO. A stored setting is honoured by its HEIGHT and re-derived to
+    // the real aspect, so settings saved by an older build (which stored fixed 16:9 pairs) do
+    // not resurrect the wrong shape.
     fun resolve(s: AppSettings, realW: Int, realH: Int): Pair<Int, Int> =
-        if (s.width > 0 && s.height > 0) s.width to s.height else landscape(realW, realH)
+        if (s.height > 0) forHeight(s.height, realW, realH) else landscape(realW, realH)
 }
 
 class SettingsStore(context: Context) {

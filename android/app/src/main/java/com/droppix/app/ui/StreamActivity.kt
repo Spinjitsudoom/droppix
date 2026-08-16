@@ -232,7 +232,11 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                     }
                     decoder?.release()
                     decoder = try {
-                        VideoDecoder(s, config.width, config.height, stats)
+                        VideoDecoder(s, config.width, config.height, stats).also { d ->
+                            // A dropped NAL breaks the reference chain; ask the host for an
+                            // IDR instead of showing corruption until its next scheduled one.
+                            d.onNeedKeyframe = { client?.sendKeyframeRequest() }
+                        }
                     } catch (e: Exception) {
                         Log.w(TAG, "decoder create failed: ${e.message}"); null
                     }

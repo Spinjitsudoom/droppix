@@ -14,10 +14,13 @@ class SettingsActivity : Activity() {
         super.onCreate(b); setContentView(R.layout.activity_settings)
         val store = SettingsStore(this); val cur = store.load()
         val resSpinner = findViewById<Spinner>(R.id.res_spinner)
-        val resItems = listOf("Native") + Resolutions.PRESETS.map { "${it.first}x${it.second}" }
+        // Presets are target heights; the width follows this device's aspect ratio, so the
+        // stream always matches the screen shape instead of being letterboxed or stretched.
+        val resItems = listOf("Native") + Resolutions.PRESET_HEIGHTS.map { "${it}p" }
         resSpinner.adapter = lightAdapter(resItems)
         resSpinner.setSelection(
-            if (cur.width == 0) 0 else 1 + Resolutions.PRESETS.indexOfFirst { it.first == cur.width && it.second == cur.height }.coerceAtLeast(0))
+            if (cur.height <= 0) 0
+            else 1 + Resolutions.PRESET_HEIGHTS.indexOfFirst { it == cur.height }.coerceAtLeast(0))
         val fpsSpinner = findViewById<Spinner>(R.id.fps_spinner)
         val fpsItems = listOf(30, 60)
         fpsSpinner.adapter = lightAdapter(fpsItems.map { it.toString() })
@@ -57,8 +60,10 @@ class SettingsActivity : Activity() {
         // Auto-save: persist the whole settings snapshot on every control change, so a change
         // survives leaving the screen via Back (previously only the Save button wrote settings).
         fun persist() {
+            // Store 0 for "Native", else the chosen target height. Width is derived at connect
+            // time from the real panel, so it is not persisted.
             val res = if (resSpinner.selectedItemPosition == 0) 0 to 0
-                      else Resolutions.PRESETS[resSpinner.selectedItemPosition - 1]
+                      else 0 to Resolutions.PRESET_HEIGHTS[resSpinner.selectedItemPosition - 1]
             store.save(AppSettings(
                 res.first, res.second,
                 fpsItems[fpsSpinner.selectedItemPosition],
