@@ -226,7 +226,16 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                     c.sendOrientation(orientationMapper.currentCode())  // sync host to current orientation
                     val s = surface ?: return
                     runOnUiThread {
-                        surfaceView.holder.setFixedSize(config.width, config.height)
+                        // Deliberately NOT setFixedSize(config.width, config.height).
+                        //
+                        // That pinned the GL surface to the VIDEO size, so onSurfaceChanged
+                        // reported the video's dimensions as the view size and AspectFit
+                        // compared the video against ITSELF — always "perfect fit, no bars".
+                        // SurfaceFlinger then scaled that buffer onto the real view rect,
+                        // stretching non-uniformly whenever the video aspect differed from
+                        // the screen's (e.g. a 2336x1080 stream on a 2340x1080 panel).
+                        // Leaving the surface at the view's own size lets AspectFit do the
+                        // letterboxing it was written for.
                         surfaceView.videoWidth = config.width
                         surfaceView.videoHeight = config.height
                     }
