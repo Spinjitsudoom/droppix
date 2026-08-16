@@ -47,27 +47,43 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     @Volatile private var rotationLocked = false
     @Volatile private var localOverlayWanted = false
 
-    // Live quick-toggles from the floating menu. Both are client-side, so they take effect
-    // on the running stream with no renegotiation: audio gates PLAYBACK of received PCM,
-    // touch gates FORWARDING of input. Muting locally rather than renegotiating keeps the
-    // toggle instant; the cost is that the host keeps sending audio we discard.
+    // Live quick-toggles from the floating menu. Both take effect on the running stream with
+    // no renegotiation: audio gates PLAYBACK of received PCM, touch gates FORWARDING of input.
+    //
+    // `audioEnabled` mirrors the persisted AppSettings.audio rather than standing apart from
+    // it: the floating menu's Audio button and the settings panel's Audio switch are the same
+    // setting, and previously each kept its own state, so one would read "on" while the other
+    // read "off". The gate stays local so muting is instant, but every change is also written
+    // through to the setting and pushed to the host, which then stops capturing instead of
+    // sending PCM we throw away.
     @Volatile private var audioEnabled = true
     @Volatile private var touchEnabled = true
+
+    private val settingsStore by lazy { com.droppix.app.settings.SettingsStore(this) }
 
     /**
      * In-stream settings overlay. Display params apply to the running stream immediately;
      * negotiated params (resolution/fps/quality/audio) restart the session in place, without
      * ever leaving this screen.
      */
-    private val settingsPanel: StreamSettingsPanel by lazy {
-        StreamSettingsPanel(
+    // Built on first use, but held nullably rather than by `lazy` so that code which only
+    // wants to nudge an already-open panel can do so without constructing one.
+    private var openedSettingsPanel: StreamSettingsPanel? = null
+
+    private val settingsPanel: StreamSettingsPanel
+        get() = openedSettingsPanel ?: StreamSettingsPanel(
             activity = this,
-            store = com.droppix.app.settings.SettingsStore(this),
+            store = settingsStore,
             applyLive = { s -> applyDisplaySettings(s) },
-            applyStreamParams = { s -> client?.sendStreamParams(s.fps, s.bitrateKbps, s.audio) },
+            applyStreamParams = { s ->
+                // The panel owns the persisted value; keep the local playback gate (and so
+                // the floating menu's label) in step with it.
+                audioEnabled = s.audio
+                if (!s.audio) audioPlayer?.flush()
+                client?.sendStreamParams(s.fps, s.bitrateKbps, s.audio)
+            },
             reconnect = { restartSession() },
-        )
-    }
+        ).also { openedSettingsPanel = it }
 
     /**
      * Floating action menu: a single button that expands to the actions worth reaching
@@ -78,6 +94,10 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         val fab = findViewById<Button>(R.id.fab_main)
         val audioBtn = findViewById<Button>(R.id.act_audio)
         val touchBtn = findViewById<Button>(R.id.act_touch)
+
+        // Start from the persisted setting, not from an assumed "on" — otherwise the button
+        // claims audio is on for a session that never negotiated it.
+        audioEnabled = settingsStore.load().audio
 
         fun refresh() {
             audioBtn.text = if (audioEnabled) "Audio: on" else "Audio: off"
@@ -106,9 +126,10 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             toggleSoftKeyboard()
         }
         audioBtn.setOnClickListener {
-            // Instant: stop feeding the player. No renegotiation, no stream interruption.
-            audioEnabled = !audioEnabled
-            if (!audioEnabled) audioPlayer?.flush()
+            // Instant locally (stop feeding the player), then written through to the setting
+            // and pushed to the host so the settings panel agrees and the host stops sending.
+            // No renegotiation, no stream interruption.
+            setAudioEnabled(!audioEnabled)
             refresh()
         }
         touchBtn.setOnClickListener {
@@ -117,6 +138,24 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             touchEnabled = !touchEnabled
             refresh()
         }
+    }
+
+    /**
+     * Turn audio on or off from the floating menu.
+     *
+     * The floating button and the settings panel's Audio switch are one setting with two
+     * controls, so this writes through to the store — the panel re-seeds from it every time
+     * it opens, which is what keeps the two in agreement.
+     */
+    private fun setAudioEnabled(on: Boolean) {
+        audioEnabled = on
+        if (!on) audioPlayer?.flush()
+        val s = settingsStore.load().copy(audio = on)
+        settingsStore.save(s)
+        client?.sendStreamParams(s.fps, s.bitrateKbps, on)
+        // The floating button sits above the panel, so it stays tappable while the panel is
+        // open — re-seed it rather than leaving its switch showing the previous value.
+        openedSettingsPanel?.refreshFromStore()
     }
 
     /** Push display-only settings onto the live view. No protocol involvement. */

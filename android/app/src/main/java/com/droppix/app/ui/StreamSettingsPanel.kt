@@ -93,6 +93,15 @@ class StreamSettingsPanel(
 
     fun toggle() { if (isOpen) hide() else show() }
 
+    /**
+     * Re-read the persisted settings into the controls.
+     *
+     * The floating menu changes some of the same settings this panel shows (audio), and it
+     * stays tappable while the panel is open, so without this the panel would keep displaying
+     * the value from when it was opened.
+     */
+    fun refreshFromStore() { if (isOpen) seed() }
+
     /** Load current values into the controls without triggering their listeners. */
     private fun seed() {
         val s = store.load()
