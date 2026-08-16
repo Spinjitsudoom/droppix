@@ -43,6 +43,126 @@
         android:contentDescription="Settings"
         android:text="⚙" />
 
+    <!-- In-stream settings overlay. Drawn above the surface (later FrameLayout child) and
+         clickable so taps land here rather than on GlDisplayView, which consumes
+         MotionEvents without calling super. Hidden until the gear is tapped; the stream
+         keeps running underneath the whole time. -->
+    <ScrollView
+        android:id="@+id/settings_panel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="#D0000000"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="20dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:paddingBottom="12dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_weight="1"
+                    android:layout_height="wrap_content"
+                    android:text="Settings"
+                    android:textColor="#FFFFFF"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+                <Button
+                    android:id="@+id/panel_close"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="Done"
+                    android:textColor="#FFFFFF"
+                    android:background="#40FFFFFF" />
+            </LinearLayout>
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Applies instantly" android:textColor="#8AFF8A" android:textSize="12sp"
+                android:paddingBottom="4dp" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:text="Flip horizontally" android:textColor="#FFFFFF" />
+                <Switch android:id="@+id/p_flip" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:text="Stats overlay" android:textColor="#FFFFFF" />
+                <Switch android:id="@+id/p_overlay" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:text="Lock rotation" android:textColor="#FFFFFF" />
+                <Switch android:id="@+id/p_rotlock" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView android:id="@+id/p_bright_label" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:text="Brightness"
+                android:textColor="#FFFFFF" android:paddingTop="8dp" />
+            <SeekBar android:id="@+id/p_bright" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:max="200" />
+
+            <TextView android:id="@+id/p_contrast_label" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:text="Contrast"
+                android:textColor="#FFFFFF" />
+            <SeekBar android:id="@+id/p_contrast" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:max="200" />
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Reconnects the stream" android:textColor="#FFD08A" android:textSize="12sp"
+                android:paddingTop="16dp" android:paddingBottom="4dp" />
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Resolution" android:textColor="#FFFFFF" />
+            <Spinner android:id="@+id/p_res" android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Frame rate" android:textColor="#FFFFFF" />
+            <Spinner android:id="@+id/p_fps" android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:text="Quality" android:textColor="#FFFFFF" />
+            <Spinner android:id="@+id/p_quality" android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="horizontal" android:gravity="center_vertical">
+                <TextView android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                    android:text="Audio" android:textColor="#FFFFFF" />
+                <Switch android:id="@+id/p_audio" android:layout_width="wrap_content"
+                    android:layout_height="wrap_content" />
+            </LinearLayout>
+
+            <TextView android:id="@+id/p_note" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:text=""
+                android:textColor="#FFD08A" android:textSize="12sp" android:paddingTop="12dp" />
+        </LinearLayout>
+    </ScrollView>
+
     <!-- Toggles the Android soft keyboard for text entry into the remote session (Task 2's
          InputConnection attaches to GlDisplayView). Same topmost-FrameLayout-child trick as
          settings_overlay_btn, offset left via layout_marginEnd so the two buttons don't overlap. -->

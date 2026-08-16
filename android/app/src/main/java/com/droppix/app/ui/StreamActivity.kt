@@ -46,6 +46,45 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     @Volatile private var running = false
     @Volatile private var rotationLocked = false
     @Volatile private var localOverlayWanted = false
+
+    /**
+     * In-stream settings overlay. Display params apply to the running stream immediately;
+     * negotiated params (resolution/fps/quality/audio) restart the session in place, without
+     * ever leaving this screen.
+     */
+    private val settingsPanel: StreamSettingsPanel by lazy {
+        StreamSettingsPanel(
+            activity = this,
+            store = com.droppix.app.settings.SettingsStore(this),
+            applyLive = { s -> applyDisplaySettings(s) },
+            reconnect = { restartSession() },
+        )
+    }
+
+    /** Push display-only settings onto the live view. No protocol involvement. */
+    private fun applyDisplaySettings(s: com.droppix.app.settings.AppSettings) {
+        surfaceView.flipHorizontal = s.flipHorizontal
+        surfaceView.brightness = s.brightness
+        surfaceView.contrast = s.contrast
+        localOverlayWanted = s.showOverlay
+        overlay.visibility = if (s.showOverlay) View.VISIBLE else View.GONE
+        rotationLocked = s.rotationLocked
+        requestedOrientation = if (s.rotationLocked)
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
+        else
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+    }
+
+    /**
+     * Re-negotiate the session in place: resolution/fps/quality/audio travel in HELLO, so the
+     * host can only honour a change on a new session. startStreaming() re-reads settings, so
+     * stopping and starting is all that is required — and the Activity is never left, unlike
+     * the old trip through SettingsActivity.
+     */
+    private fun restartSession() {
+        stopStreaming()
+        if (surface != null) startStreaming()
+    }
     @Volatile private var surface: Surface? = null
     private var netThread: Thread? = null
     @Volatile private var decoder: VideoDecoder? = null
@@ -103,7 +142,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         // child) rather than a long-press on the surface: GlDisplayView.onTouchEvent
         // consumes MotionEvents without calling super, so View long-press detection never runs.
         findViewById<Button>(R.id.settings_overlay_btn).setOnClickListener {
-            startActivity(android.content.Intent(this, SettingsActivity::class.java))
+            settingsPanel.toggle()
         }
         findViewById<Button>(R.id.kbd_overlay_btn).setOnClickListener { toggleSoftKeyboard() }
         overlay = findViewById(R.id.overlay)
@@ -148,6 +187,12 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) applyImmersive()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        // Back should close the overlay, not drop the session the user is looking at.
+        if (settingsPanel.isOpen) settingsPanel.hide() else super.onBackPressed()
     }
 
     override fun onResume() {
