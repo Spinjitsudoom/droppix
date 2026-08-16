@@ -43,7 +43,7 @@ Confirmed with a controlled test rather than by reading code:
 
 ## Fix
 
-`host/gui/adb_reverse.{h,cpp}`: while USB is enabled, poll `adb devices` every 2 s and run
+`host/gui/adb_transport.{h,cpp}`: while USB is enabled, poll `adb devices` every 2 s and run
 `adb reverse tcp:P tcp:P` for every serial in the `device` state, re-applying on replug.
 
 The tunnel belongs to the adb connection, not to droppix — it does not exist until the
