@@ -1,6 +1,10 @@
-<!-- USB trident: arrow head, stem with a disc at its base, and the two branches ending in the
-     square and the circle. Drawn rather than taken from an icon font so it tints and scales
-     with the button and carries no dependency. -->
+<!-- USB trident, drawn to match the standard mark: arrow head over a stem with a disc at its
+     base, and two branches leaving the stem diagonally — the left one rising to a circle, the
+     right one to a square, at different heights. An earlier version routed the branches at
+     right angles, which reads as a flow chart rather than as USB.
+
+     Drawn rather than taken from an icon font so it tints and scales with the button and
+     carries no dependency. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -10,39 +14,39 @@
     <!-- Arrow head at the top of the stem -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M12,1.6 L14.6,6.2 H9.4 Z" />
+        android:pathData="M12,1 L14.2,5.6 H9.8 Z" />
 
-    <!-- Stem, from under the arrow down to the base disc -->
+    <!-- Stem, running from inside the arrow head down into the base disc -->
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.7"
+        android:strokeWidth="1.6"
         android:strokeLineCap="round"
-        android:pathData="M12,6 V19.4" />
+        android:pathData="M12,5.2 V21.4" />
 
-    <!-- Left branch: out, then down to the square terminal -->
+    <!-- Left branch: diagonal off the stem, then straight up to the round terminal -->
     <path
         android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.7"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,10.6 H7.4 V15" />
-
-    <!-- Right branch: out, then up to the round terminal -->
-    <path
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="1.7"
+        android:strokeWidth="1.6"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M12,13.6 H16.6 V10.4" />
+        android:pathData="M12,19.8 L7.5,15.3 V11.8" />
 
-    <!-- Terminals: square on the left branch, circle on the right, disc at the base -->
+    <!-- Right branch: diagonal off the stem, then straight up to the square terminal -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,16.6 L16.7,11.9 V9.5" />
+
+    <!-- Terminals: circle on the left branch, square on the right, disc at the base -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M5.7,15 h3.4 v3.4 h-3.4 z" />
+        android:pathData="M7.5,10.1 m-1.7,0 a1.7,1.7 0 1,0 3.4,0 a1.7,1.7 0 1,0 -3.4,0" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M16.6,8.7 m-1.9,0 a1.9,1.9 0 1,0 3.8,0 a1.9,1.9 0 1,0 -3.8,0" />
+        android:pathData="M15,6.1 h3.4 v3.4 h-3.4 z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M12,20.4 m-2.1,0 a2.1,2.1 0 1,0 4.2,0 a2.1,2.1 0 1,0 -4.2,0" />
+        android:pathData="M12,21.4 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
 </vector>
