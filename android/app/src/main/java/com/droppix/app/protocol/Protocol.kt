@@ -5,7 +5,10 @@ enum class MsgType(val code: Int) {
     AUDIO(9), OVERLAY(10), TOUCH(11), SCROLL(12), MOUSE_BUTTON(13), KEY(14), PEN(15),
     // client -> host: "my decoder lost sync, send an IDR now". Without it, a dropped
     // delta leaves the picture corrupt until the host's next scheduled keyframe (~2s).
-    KEYFRAME_REQUEST(16);
+    KEYFRAME_REQUEST(16),
+    // client -> host: change fps / bitrate / audio on the RUNNING session, so a settings
+    // change applies without tearing the stream down. Body: u32 fps, u32 kbps, u8 audio.
+    STREAM_PARAMS(17);
     companion object {
         fun fromCode(c: Int): MsgType? = entries.firstOrNull { it.code == c }
     }
@@ -105,6 +108,15 @@ object Protocol {
         out.add((x ushr 8).toByte()); out.add(x.toByte())
         out.add((y ushr 8).toByte()); out.add(y.toByte())
         return out.toByteArray()
+    }
+
+    // STREAMPARAMS body: u32 fps, u32 bitrate_kbps, u8 audio_wanted (big-endian).
+    fun encodeStreamParams(fps: Int, bitrateKbps: Int, audioWanted: Int): ByteArray {
+        val b = ByteArray(9)
+        for (i in 0..3) b[i] = ((fps shr (8 * (3 - i))) and 0xff).toByte()
+        for (i in 0..3) b[4 + i] = ((bitrateKbps shr (8 * (3 - i))) and 0xff).toByte()
+        b[8] = audioWanted.toByte()
+        return b
     }
 
     // KEY body: u16 keycode (big-endian), u8 action (0=up,1=down,2=repeat).

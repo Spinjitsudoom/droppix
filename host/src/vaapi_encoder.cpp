@@ -15,7 +15,21 @@ void VaapiEncoder::free_attempt() {
   if (hw_device_) av_buffer_unref(&hw_device_);
 }
 
+void VaapiEncoder::reset() {
+  if (pkt_) av_packet_free(&pkt_);
+  if (vaapi_frame_) av_frame_free(&vaapi_frame_);
+  if (ctx_) avcodec_free_context(&ctx_);
+  if (hw_frames_) av_buffer_unref(&hw_frames_);
+  if (hw_device_) av_buffer_unref(&hw_device_);
+  pts_map_.clear();
+  frame_index_ = 0;
+}
+
 bool VaapiEncoder::open(int width, int height, int fps, int bitrate_kbps) {
+  // Safe to call again mid-session: without this a live fps/bitrate change would
+  // allocate a fresh context over the old one and leak the codec, packet and
+  // (vaapi) hw frames every time.
+  reset();
   width_ = width; height_ = height; fps_ = fps;
 
   const AVCodec* codec = avcodec_find_encoder_by_name("h264_vaapi");
@@ -147,12 +161,6 @@ std::vector<EncodedPacket> VaapiEncoder::flush() {
   return out;
 }
 
-VaapiEncoder::~VaapiEncoder() {
-  if (pkt_) av_packet_free(&pkt_);
-  if (vaapi_frame_) av_frame_free(&vaapi_frame_);
-  if (ctx_) avcodec_free_context(&ctx_);
-  if (hw_frames_) av_buffer_unref(&hw_frames_);
-  if (hw_device_) av_buffer_unref(&hw_device_);
-}
+VaapiEncoder::~VaapiEncoder() { reset(); }
 
 }  // namespace droppix

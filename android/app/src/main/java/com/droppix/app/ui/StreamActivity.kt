@@ -64,6 +64,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             activity = this,
             store = com.droppix.app.settings.SettingsStore(this),
             applyLive = { s -> applyDisplaySettings(s) },
+            applyStreamParams = { s -> client?.sendStreamParams(s.fps, s.bitrateKbps, s.audio) },
             reconnect = { restartSession() },
         )
     }

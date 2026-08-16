@@ -65,6 +65,14 @@ class TransportClient {
         submitSend(o, msg)
     }
 
+    // Change fps / bitrate / audio on the RUNNING session. The host reopens its encoder and
+    // resends CONFIG, so the change lands without a reconnect.
+    fun sendStreamParams(fps: Int, bitrateKbps: Int, audioWanted: Boolean) {
+        val o = out ?: return
+        submitSend(o, Protocol.encodeMessage(MsgType.STREAM_PARAMS,
+            Protocol.encodeStreamParams(fps, bitrateKbps, if (audioWanted) 1 else 0)))
+    }
+
     // Ask the host for an immediate IDR after we had to drop a NAL: the reference chain is
     // broken, so every later delta decodes into garbage until a keyframe arrives.
     fun sendKeyframeRequest() {

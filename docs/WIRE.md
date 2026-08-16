@@ -36,6 +36,7 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 14 | Key | client → host | Keyboard |
 | 15 | Pen | client → host | Stylus pressure / eraser |
 | 16 | KeyframeRequest | client → host | "my decoder lost sync — send an IDR now" (empty body) |
+| 17 | StreamParams | client → host | live fps / bitrate / audio change on the running session |
 | 20 | Pair | client → host | **WSS only** — 6 ASCII digits of the code shown on the PC |
 | 21 | PairResult | host → client | **WSS only** — `[ ok u8 ][ tries_left u8 ]` |
 
@@ -51,6 +52,31 @@ a client that keeps asking does not turn the stream all-intra.
 
 Back-compatible in both directions: older hosts ignore the unknown type (recovery falls
 back to the scheduled keyframe), and older clients simply never send it.
+
+### Live stream params (type 17)
+
+`fps`, `bitrate` and `audio` are negotiated in HELLO, so historically changing any of them
+meant reconnecting. `StreamParams` applies them to the **running** session instead:
+
+```
+u32 fps
+u32 bitrate_kbps
+u8  audio_wanted
+```
+
+The host reopens its encoder with the new fps/bitrate and resends `Config`; the reopen
+starts a fresh GOP, so the client resyncs on the next frame. Audio starts or stops its
+capture without touching the video path. Requests are coalesced by overwrite — dragging a
+quality slider emits a burst, and only the newest matters.
+
+Encoders must therefore be safe to reopen mid-session (`Encoder::reset()`); before that
+they allocated a fresh `AVCodecContext` over the old one and leaked it on every change.
+
+**Resolution is deliberately not here.** It re-creates the host's virtual display, which
+cannot happen inside a live session, so it still reconnects.
+
+Back-compatible: older hosts ignore the unknown type (the client's setting simply does not
+take effect until it reconnects), and older clients never send it.
 
 ## HELLO v6 body
 

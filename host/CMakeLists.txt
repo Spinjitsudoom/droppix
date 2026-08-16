@@ -73,9 +73,6 @@ add_library(droppix_core
   src/jpeg_stripe_encoder.cpp
   src/spacedesk_server.cpp
   src/spacedesk_client.cpp
-  src/jpeg_stripe_encoder.cpp
-  src/spacedesk_server.cpp
-  src/spacedesk_client.cpp
   src/version.cpp
 )
 target_include_directories(droppix_core PUBLIC
@@ -226,8 +223,7 @@ add_executable(droppix_tests
   tests/test_keyframe_request.cpp
   tests/test_spacedesk_server.cpp
   tests/test_spacedesk_client.cpp
-  tests/test_spacedesk_protocol.cpp
-  tests/test_jpeg_stripe_encoder.cpp
+  tests/test_encoder_reconfigure.cpp
   tests/test_version.cpp
   gui/tests/test_port_alloc.cpp
   gui/stats_parser.cpp
@@ -275,12 +271,14 @@ if(Qt6_FOUND)
     gui/pages/settings_page.cpp
     gui/tests/test_toggle_switch.cpp
     gui/toggle_switch.cpp
+    gui/tests/test_cert_manager.cpp
+    gui/cert_manager.cpp
     gui/autostart.cpp
     src/version.cpp
   )
   target_include_directories(droppix_gui_tests PRIVATE gui src gui/pages ${DROPPIX_VERSION_DIR})
   add_dependencies(droppix_gui_tests droppix_version_gen)
-  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network Qt6::Test GTest::gtest_main)
+  target_link_libraries(droppix_gui_tests PRIVATE Qt6::Widgets Qt6::Network Qt6::Test GTest::gtest_main OpenSSL::Crypto)
   gtest_discover_tests(droppix_gui_tests)
 endif()
 endif()  # DROPPIX_BUILD_TESTS

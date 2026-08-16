@@ -8,7 +8,18 @@ extern "C" {
 
 namespace droppix {
 
+void NvencEncoder::reset() {
+  if (pkt_) av_packet_free(&pkt_);
+  if (ctx_) avcodec_free_context(&ctx_);
+  pts_map_.clear();
+  frame_index_ = 0;
+}
+
 bool NvencEncoder::open(int width, int height, int fps, int bitrate_kbps) {
+  // Safe to call again mid-session: without this a live fps/bitrate change would
+  // allocate a fresh context over the old one and leak the codec, packet and
+  // (vaapi) hw frames every time.
+  reset();
   width_ = width; height_ = height; fps_ = fps;
   const AVCodec* codec = avcodec_find_encoder_by_name("h264_nvenc");
   if (!codec) { std::fprintf(stderr, "h264_nvenc encoder not found\n"); return false; }
@@ -95,9 +106,6 @@ std::vector<EncodedPacket> NvencEncoder::flush() {
   return out;
 }
 
-NvencEncoder::~NvencEncoder() {
-  if (pkt_) av_packet_free(&pkt_);
-  if (ctx_) avcodec_free_context(&ctx_);
-}
+NvencEncoder::~NvencEncoder() { reset(); }
 
 }  // namespace droppix

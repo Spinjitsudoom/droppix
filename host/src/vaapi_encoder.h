@@ -26,7 +26,11 @@ class VaapiEncoder : public Encoder {
   std::vector<EncodedPacket> flush() override;
   void request_keyframe() override { force_idr_ = true; }
 
+
  private:
+  // Free everything open() allocated, so open() can be called again mid-session.
+  void reset();
+
   std::vector<EncodedPacket> drain();  // pull packets from the codec
   void free_attempt();                 // free ctx_/hw_frames_/hw_device_, null them
 

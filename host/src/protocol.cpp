@@ -286,4 +286,26 @@ bool decode_overlay(const std::vector<unsigned char>& b, uint8_t& show) {
   return true;
 }
 
+
+std::vector<unsigned char> encode_stream_params(uint32_t fps, uint32_t bitrate_kbps,
+                                                uint8_t audio_wanted) {
+  std::vector<unsigned char> b;
+  b.reserve(9);
+  for (int i = 3; i >= 0; --i) b.push_back(static_cast<unsigned char>((fps >> (8 * i)) & 0xff));
+  for (int i = 3; i >= 0; --i) b.push_back(static_cast<unsigned char>((bitrate_kbps >> (8 * i)) & 0xff));
+  b.push_back(audio_wanted);
+  return b;
+}
+
+bool decode_stream_params(const std::vector<unsigned char>& body, uint32_t& fps,
+                          uint32_t& bitrate_kbps, uint8_t& audio_wanted) {
+  if (body.size() < 9) return false;
+  fps = (uint32_t(body[0]) << 24) | (uint32_t(body[1]) << 16) |
+        (uint32_t(body[2]) << 8) | uint32_t(body[3]);
+  bitrate_kbps = (uint32_t(body[4]) << 24) | (uint32_t(body[5]) << 16) |
+                 (uint32_t(body[6]) << 8) | uint32_t(body[7]);
+  audio_wanted = body[8];
+  return true;
+}
+
 }  // namespace droppix

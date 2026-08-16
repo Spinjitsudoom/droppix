@@ -25,10 +25,12 @@ import com.droppix.app.settings.SettingsStore
  *  - **Display params** (flip, brightness, contrast, stats overlay, rotation lock) are local
  *    to this device — shader uniforms and view state — so they apply to the live stream the
  *    instant they change, with no interruption.
- *  - **Stream params** (resolution, fps, quality, audio) are negotiated in HELLO, so the host
- *    can only change them for a NEW session. Those reconnect, which is quick but visible, so
- *    they are grouped separately in the UI and the panel says so rather than appearing to
- *    stall for no reason.
+ *  - **Stream params** (fps, quality, audio) are pushed to the running session with
+ *    STREAM_PARAMS: the host reopens its encoder and resends CONFIG, so they apply without
+ *    a reconnect. The reopen starts a fresh GOP, so the picture resyncs on the next frame.
+ *  - **Resolution** is the one exception and always will be: it re-creates the host's
+ *    virtual display, which cannot happen inside a live session. It reconnects, and the
+ *    panel says so instead of appearing to stall.
  *
  * Every change is persisted immediately, so a value survives leaving the screen either way.
  */
@@ -37,7 +39,9 @@ class StreamSettingsPanel(
     private val store: SettingsStore,
     /** Apply a display-only change to the live view. Never restarts the session. */
     private val applyLive: (AppSettings) -> Unit,
-    /** Re-negotiate: stop and start the session so HELLO carries the new values. */
+    /** Push fps/bitrate/audio to the RUNNING session (host reopens its encoder). */
+    private val applyStreamParams: (AppSettings) -> Unit,
+    /** Restart the session. Only resolution needs this: it re-creates the virtual display. */
     private val reconnect: () -> Unit,
 ) {
     private val panel: View = activity.findViewById(R.id.settings_panel)
@@ -141,12 +145,21 @@ class StreamSettingsPanel(
         applyLive(s)
     }
 
-    /** A negotiated change: persist, then restart the session so HELLO carries it. */
+    /** fps / quality / audio: pushed to the running session, no interruption. */
+    private fun liveParams() {
+        if (seeding) return
+        val s = collect()
+        applyLive(s)
+        note.text = ""
+        applyStreamParams(s)
+    }
+
+    /** Resolution only: the host must re-create its virtual display, so the session restarts. */
     private fun renegotiate() {
         if (seeding) return
         val s = collect()
         applyLive(s)
-        note.text = "Reconnecting to apply…"
+        note.text = "Reconnecting to apply the new resolution…"
         reconnect()
     }
 
@@ -157,10 +170,10 @@ class StreamSettingsPanel(
         bright.setOnSeekBarChangeListener(seek { live() })
         contrast.setOnSeekBarChangeListener(seek { live() })
 
-        audio.setOnCheckedChangeListener { _, _ -> renegotiate() }
-        res.onItemSelectedListener = select { renegotiate() }
-        fps.onItemSelectedListener = select { renegotiate() }
-        quality.onItemSelectedListener = select { renegotiate() }
+        audio.setOnCheckedChangeListener { _, _ -> liveParams() }
+        fps.onItemSelectedListener = select { liveParams() }
+        quality.onItemSelectedListener = select { liveParams() }
+        res.onItemSelectedListener = select { renegotiate() }   // only this needs a new session
     }
 
     private fun seek(onChange: () -> Unit) = object : SeekBar.OnSeekBarChangeListener {

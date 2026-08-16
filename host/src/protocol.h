@@ -10,7 +10,11 @@ enum class MsgType : uint8_t {
   Orientation = 8, Audio = 9, Overlay = 10, Touch = 11, Scroll = 12, MouseButton = 13, Key = 14, Pen = 15,
   // client -> host: "my decoder lost sync, send an IDR now". Without it a client that
   // drops to the next keyframe freezes for up to gop_size/fps seconds (2s by default).
-  KeyframeRequest = 16
+  KeyframeRequest = 16,
+  // client -> host: change fps / bitrate / audio on the RUNNING session, so a settings
+  // change applies without tearing the stream down and renegotiating a new one.
+  // Body: u32 fps, u32 bitrate_kbps, u8 audio_wanted.
+  StreamParams = 17
 };
 
 // One finger in a multi-touch report. id is the app's pointer id (stable across a
@@ -31,6 +35,12 @@ constexpr uint32_t kProtocolVersion = 6;
 
 // Wire frame: [u32 big-endian length][payload]; length covers payload;
 // payload[0] = type byte, payload[1..] = body.
+// STREAMPARAMS body: u32 fps, u32 bitrate_kbps, u8 audio_wanted (big-endian, like the rest).
+std::vector<unsigned char> encode_stream_params(uint32_t fps, uint32_t bitrate_kbps,
+                                                uint8_t audio_wanted);
+bool decode_stream_params(const std::vector<unsigned char>& body, uint32_t& fps,
+                          uint32_t& bitrate_kbps, uint8_t& audio_wanted);
+
 std::vector<unsigned char> encode_message(MsgType type,
                                           const std::vector<unsigned char>& body);
 

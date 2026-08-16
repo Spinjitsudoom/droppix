@@ -144,6 +144,14 @@ void TransportServer::poll_control() {
   while (parser_.next(m)) {
     if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
+    } else if (m.type == MsgType::StreamParams) {
+      // Latch the newest request; the stream loop applies it between frames. Coalescing by
+      // overwrite matters because dragging a quality slider emits a burst of these.
+      uint32_t fps = 0, kbps = 0; uint8_t aud = 0;
+      if (decode_stream_params(m.body, fps, kbps, aud)) {
+        params_ = StreamParamsRequest{fps, kbps, aud};
+        params_pending_ = true;
+      }
     } else if (m.type == MsgType::KeyframeRequest) {
       // The client's decoder lost sync. Latch it; the stream loop forces an IDR on the
       // next frame rather than leaving the client frozen for the rest of the GOP.

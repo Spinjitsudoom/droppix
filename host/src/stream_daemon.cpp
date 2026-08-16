@@ -317,7 +317,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   auto last_frame_at = std::chrono::steady_clock::now();
   // Link pacing (see send_backlog.h): skip captures while the client's send queue is
   // backed up, so latency stays bounded instead of the stream degrading invisibly.
-  const size_t backlog_limit = backlog_limit_bytes(sp.bitrate);
+  // Mutable: a live bitrate change moves the pacing threshold with it.
+  size_t backlog_limit = backlog_limit_bytes(sp.bitrate);
+  // Current negotiated values, updated in place by live StreamParams changes.
+  int cur_fps = sp.fps;
+  int cur_bitrate = sp.bitrate;
   bool dropping_for_backlog = false;
   int frames_dropped_backlog = 0;
   // With touch on, poll the loop tightly so incoming touch is handled promptly
@@ -353,6 +357,42 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     last_frame_at = frame_at;
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
                          frame_at - t0).count();
+    // Live stream params: apply a client's fps/bitrate/audio change to the RUNNING session
+    // rather than making it reconnect. Encoders are safe to reopen (see Encoder::reset),
+    // and the reopen starts a fresh GOP, so the client resyncs on the next frame.
+    TransportServer::StreamParamsRequest np{};
+    if (tx_.take_stream_params(np)) {
+      const int new_fps = np.fps > 0 ? static_cast<int>(np.fps) : cur_fps;
+      const int new_bitrate = np.bitrate_kbps > 0 ? static_cast<int>(np.bitrate_kbps) : cur_bitrate;
+      if (new_fps != cur_fps || new_bitrate != cur_bitrate) {
+        std::fprintf(stderr, "live params: fps %d -> %d, bitrate %d -> %d kbps\n",
+                     cur_fps, new_fps, cur_bitrate, new_bitrate);
+        if (enc_.open(w, h, new_fps, new_bitrate)) {
+          cur_fps = new_fps;
+          cur_bitrate = new_bitrate;
+          // The client must be told the new fps, and re-reads extradata for the new context.
+          tx_.send_config(static_cast<uint32_t>(w), static_cast<uint32_t>(h),
+                          static_cast<uint32_t>(cur_fps), enc_.extradata());
+          backlog_limit = backlog_limit_bytes(cur_bitrate);
+        } else {
+          std::fprintf(stderr, "live params: encoder reopen FAILED; keeping %d fps %d kbps\n",
+                       cur_fps, cur_bitrate);
+        }
+      }
+      // Audio can start/stop mid-session without touching the video path at all.
+      const bool want_audio = np.audio != 0;
+      if (want_audio != do_audio) {
+        if (want_audio) {
+          do_audio = audio.start(user_session_prefix());
+          std::fprintf(stderr, "live params: audio on (%s)\n", do_audio ? "ok" : "unavailable");
+        } else {
+          audio.stop();
+          do_audio = false;
+          std::fprintf(stderr, "live params: audio off\n");
+        }
+      }
+    }
+
     // A client whose decoder lost sync asked for an IDR; honour it before encoding so it
     // recovers on this frame instead of waiting out the rest of the GOP (~2s).
     if (tx_.take_keyframe_request()) {

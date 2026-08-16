@@ -40,6 +40,15 @@ class TransportServer {
   // Set by poll_control() when a client asks for an IDR; the daemon consumes it.
   bool take_keyframe_request() { bool v = keyframe_requested_; keyframe_requested_ = false; return v; }
 
+  // A client's live fps/bitrate/audio change, consumed once by the stream loop.
+  struct StreamParamsRequest { uint32_t fps; uint32_t bitrate_kbps; uint8_t audio; };
+  bool take_stream_params(StreamParamsRequest& out) {
+    if (!params_pending_) return false;
+    out = params_;
+    params_pending_ = false;
+    return true;
+  }
+
   void set_touch_handler(std::function<void(const std::vector<TouchContact>&)> h) {
     touch_handler_ = std::move(h);
   }
@@ -94,6 +103,8 @@ class TransportServer {
   std::string cert_, key_;
   SSL_CTX* ctx_ = nullptr;
   bool keyframe_requested_ = false;
+  bool params_pending_ = false;
+  StreamParamsRequest params_{};
   std::unique_ptr<ByteChannel> channel_;   // the live client connection (socket or AOA)
 };
 }  // namespace droppix

@@ -22,7 +22,11 @@ class NvencEncoder : public Encoder {
   std::vector<EncodedPacket> flush() override;
   void request_keyframe() override { force_idr_ = true; }
 
+
  private:
+  // Free everything open() allocated, so open() can be called again mid-session.
+  void reset();
+
   std::vector<EncodedPacket> drain();  // pull packets from the codec
 
   AVCodecContext* ctx_ = nullptr;

@@ -110,11 +110,11 @@
                 android:layout_height="wrap_content" android:max="200" />
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Reconnects the stream" android:textColor="#FFD08A" android:textSize="12sp"
+                android:text="Applies to the live stream" android:textColor="#FFD08A" android:textSize="12sp"
                 android:paddingTop="16dp" android:paddingBottom="4dp" />
 
             <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
-                android:text="Resolution" android:textColor="#FFFFFF" />
+                android:text="Resolution  (reconnects)" android:textColor="#FFD08A" />
             <Spinner android:id="@+id/p_res" android:layout_width="match_parent"
                 android:layout_height="wrap_content" />
 

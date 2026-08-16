@@ -85,3 +85,25 @@ TEST(KeyframeRequest, ProtocolTypeIsStableAndClientToHost) {
   EXPECT_EQ(m.type, MsgType::KeyframeRequest);
   EXPECT_TRUE(m.body.empty());
 }
+
+// STREAM_PARAMS carries a live fps/bitrate/audio change. The Kotlin encoder writes the same
+// bytes, so this vector is the contract between them.
+TEST(StreamParams, RoundTripsAndIsStable) {
+  EXPECT_EQ(static_cast<uint8_t>(MsgType::StreamParams), 17);
+  auto body = encode_stream_params(60, 16000, 1);
+  ASSERT_EQ(body.size(), 9u);
+  // Big-endian, like the rest of the protocol.
+  EXPECT_EQ(body[0], 0); EXPECT_EQ(body[1], 0); EXPECT_EQ(body[2], 0); EXPECT_EQ(body[3], 60);
+  EXPECT_EQ(body[8], 1);
+
+  uint32_t fps = 0, kbps = 0; uint8_t aud = 0;
+  ASSERT_TRUE(decode_stream_params(body, fps, kbps, aud));
+  EXPECT_EQ(fps, 60u);
+  EXPECT_EQ(kbps, 16000u);
+  EXPECT_EQ(aud, 1);
+}
+
+TEST(StreamParams, RejectsAShortBody) {
+  uint32_t fps = 0, kbps = 0; uint8_t aud = 0;
+  EXPECT_FALSE(decode_stream_params(std::vector<unsigned char>(8, 0), fps, kbps, aud));
+}
