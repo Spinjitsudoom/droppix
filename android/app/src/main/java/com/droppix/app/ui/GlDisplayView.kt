@@ -317,6 +317,19 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     @Volatile var videoWidth: Int = 0
     @Volatile var videoHeight: Int = 0
 
+    /**
+     * Set the stream's dimensions and refit at once.
+     *
+     * Assigning the fields alone only takes effect on the next frame (RENDERMODE_WHEN_DIRTY),
+     * which is precisely when there are no frames: a new CONFIG arrives while the host is
+     * restarting for a new orientation.
+     */
+    fun setVideoSize(w: Int, h: Int) {
+        videoWidth = w
+        videoHeight = h
+        requestRender()
+    }
+
     private val renderer = GlRenderer()
 
     init {
@@ -381,6 +394,11 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
         override fun onSurfaceChanged(gl: GL10?, w: Int, h: Int) {
             viewW = w; viewH = h
             GLES20.glViewport(0, 0, w, h)
+            // RENDERMODE_WHEN_DIRTY: the only other requestRender() is a new video frame, so
+            // without this a rotation leaves the previous frame on screen under the NEW
+            // geometry until the next frame arrives — and during an orientation change the
+            // host is restarting its session, so that can be a visible pause.
+            requestRender()
         }
 
         override fun onDrawFrame(gl: GL10?) {

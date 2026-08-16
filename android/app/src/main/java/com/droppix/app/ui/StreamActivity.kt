@@ -236,8 +236,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                         // the screen's (e.g. a 2336x1080 stream on a 2340x1080 panel).
                         // Leaving the surface at the view's own size lets AspectFit do the
                         // letterboxing it was written for.
-                        surfaceView.videoWidth = config.width
-                        surfaceView.videoHeight = config.height
+                        surfaceView.setVideoSize(config.width, config.height)
                     }
                     decoder?.release()
                     decoder = try {
