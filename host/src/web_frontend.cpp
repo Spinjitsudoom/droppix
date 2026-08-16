@@ -239,7 +239,8 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
 
     sockaddr_in cli{};
     socklen_t cli_len = sizeof(cli);
-    int fd = ::accept(tx.listen_fd(), (sockaddr*)&cli, &cli_len);
+    // SOCK_CLOEXEC so popen()'d helpers (parec, xrandr) never inherit a browser connection.
+    int fd = ::accept4(tx.listen_fd(), (sockaddr*)&cli, &cli_len, SOCK_CLOEXEC);
     if (fd < 0) continue;
     char ibuf[INET_ADDRSTRLEN] = {0};
     std::string peer = inet_ntop(AF_INET, &cli.sin_addr, ibuf, sizeof(ibuf)) ? ibuf : "";

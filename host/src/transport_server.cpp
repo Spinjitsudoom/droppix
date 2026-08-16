@@ -13,7 +13,14 @@ namespace droppix {
 
 bool TransportServer::listen(uint16_t port, int backlog) {
   if (listen_fd_ >= 0) { ::close(listen_fd_); listen_fd_ = -1; }  // re-listen safe
-  listen_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+  // SOCK_CLOEXEC: the streamer popen()s helpers (parec for audio, xrandr/kscreen-doctor for
+  // layout), and popen forks — every descriptor without close-on-exec lands in the child.
+  // parec lives for the whole audio session and is orphaned if the streamer is killed, so an
+  // inherited listening socket keeps the port bound by a process nobody thinks to look at,
+  // and the next start fails to bind. SO_REUSEADDR does not help: the socket is genuinely
+  // still held. Set atomically at creation rather than via fcntl, which would leave a window
+  // where a concurrent popen still inherits it.
+  listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
   if (listen_fd_ < 0) return false;
   int yes = 1;
   setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -66,7 +73,10 @@ bool TransportServer::accept_client(int timeout_ms) {
 
   sockaddr_in cli{};
   socklen_t cli_len = sizeof(cli);
-  int fd = ::accept(listen_fd_, (sockaddr*)&cli, &cli_len);
+  // accept4 + SOCK_CLOEXEC: accept() does NOT inherit the listening socket's flag, so the
+  // client socket needs its own. Otherwise parec holds the connection open after we close
+  // it and the client never sees a clean disconnect.
+  int fd = ::accept4(listen_fd_, (sockaddr*)&cli, &cli_len, SOCK_CLOEXEC);
   if (fd < 0) return false;
   char buf[INET_ADDRSTRLEN] = {0};
   std::string peer = inet_ntop(AF_INET, &cli.sin_addr, buf, sizeof(buf)) ? buf : "";

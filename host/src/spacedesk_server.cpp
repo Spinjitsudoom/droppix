@@ -84,7 +84,7 @@ bool SpacedeskServer::start() {
   if (running_.load()) return true;
   stopping_.store(false);
 
-  listen_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
+  listen_fd_ = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);  // never inherited by popen() children
   if (listen_fd_ < 0) return false;
   int yes = 1;
   setsockopt(listen_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -102,7 +102,7 @@ bool SpacedeskServer::start() {
     return false;
   }
 
-  udp_fd_ = ::socket(AF_INET, SOCK_DGRAM, 0);
+  udp_fd_ = ::socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0);
   if (udp_fd_ >= 0) {
     setsockopt(udp_fd_, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
     setsockopt(udp_fd_, SOL_SOCKET, SO_BROADCAST, &yes, sizeof(yes));
@@ -194,7 +194,7 @@ void SpacedeskServer::run() {
     if (::poll(&pfd, 1, 500) <= 0) continue;
     sockaddr_in cli{};
     socklen_t clen = sizeof(cli);
-    int fd = ::accept(listen_fd_, reinterpret_cast<sockaddr*>(&cli), &clen);
+    int fd = ::accept4(listen_fd_, reinterpret_cast<sockaddr*>(&cli), &clen, SOCK_CLOEXEC);
     if (fd < 0) continue;
     char ip[INET_ADDRSTRLEN] = {0};
     inet_ntop(AF_INET, &cli.sin_addr, ip, sizeof(ip));

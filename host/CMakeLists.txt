@@ -190,6 +190,7 @@ add_executable(droppix_tests
   tests/test_nv12_converter.cpp
   tests/test_test_pattern_source.cpp
   tests/test_transport_server.cpp
+  tests/test_socket_cloexec.cpp
   tests/test_socket_channel.cpp
   tests/test_stat_accumulator.cpp
   tests/test_stats_json.cpp
