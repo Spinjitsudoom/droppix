@@ -220,6 +220,7 @@ static bool verify_web_pin(ByteChannel& ch, const std::string& expected,
 
 bool WebFrontend::serve_until_stream(TransportServer& tx,
                                      const std::string& web_root,
+                                     const std::string& ca_cert_path,
                                      const std::string& pairing_code,
                                      std::unique_ptr<ByteChannel>& out_channel,
                                      std::string& out_peer,
@@ -309,6 +310,21 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
       }
       std::fprintf(stderr, "web: paired, streaming to %s\n", peer.c_str());
       return true;
+    }
+
+    if (path == "/ca.crt") {
+      // Unauthenticated like /config.json and static files (no pairing gate): the CA cert
+      // is public by design — installing it only lets a browser VALIDATE this host's future
+      // leaf certs, it grants no access. application/x-x509-ca-cert is what makes Android's
+      // browser offer "install certificate" instead of just rendering the PEM as text.
+      std::string body;
+      if (ca_cert_path.empty() || !read_file(ca_cert_path, body)) {
+        http_respond(ssl, 404, "Not Found", "text/plain", "no CA configured");
+      } else {
+        http_respond(ssl, 200, "OK", "application/x-x509-ca-cert", body);
+      }
+      SSL_shutdown(ssl); SSL_free(ssl); ::close(fd);
+      continue;
     }
 
     if (path == "/config.json") {

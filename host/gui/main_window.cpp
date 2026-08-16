@@ -167,8 +167,10 @@ void MainWindow::stageCertsToHost() {
   if (flatpakHostRuntime_.isEmpty()) return;
   flatpakHostCert_ = flatpakHostRuntime_ + "/cert.pem";
   flatpakHostKey_  = flatpakHostRuntime_ + "/key.pem";
+  flatpakHostCa_   = flatpakHostRuntime_ + "/ca.pem";
   copyFileToHost(cert_.certPath(), flatpakHostCert_);
   copyFileToHost(cert_.keyPath(),  flatpakHostKey_);
+  copyFileToHost(cert_.caPath(),   flatpakHostCa_);
 }
 
 MainWindow::MainWindow(QWidget* parent)
@@ -734,9 +736,11 @@ Settings MainWindow::collectSettings() const {
   if (!flatpakHostCert_.isEmpty()) {
     s.certPath = flatpakHostCert_.toStdString();
     s.keyPath  = flatpakHostKey_.toStdString();
+    s.caPath   = flatpakHostCa_.toStdString();
   } else {
     s.certPath = cert_.certPath().toStdString();
     s.keyPath  = cert_.keyPath().toStdString();
+    s.caPath   = cert_.caPath().toStdString();
   }
   if (!flatpakHostWeb_.isEmpty()) s.webRoot = flatpakHostWeb_.toStdString();
   else s.webRoot = resolve_web_root_for_gui();

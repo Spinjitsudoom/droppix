@@ -164,6 +164,7 @@ class MainWindow : public QMainWindow {
   QHash<QString, qint64> pendingWakes_;
   QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to
   QString flatpakHostCert_, flatpakHostKey_;   // Flatpak: host cert/key paths for the streamer
+  QString flatpakHostCa_;               // Flatpak: host path to the staged CA cert
   QString flatpakHostWeb_;             // Flatpak: host path to staged web/ PWA assets
   QSystemTrayIcon* tray_ = nullptr;   // present only if a system tray is available
   bool quitting_ = false;             // true => closeEvent really quits (from tray Quit)

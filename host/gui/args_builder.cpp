@@ -50,6 +50,10 @@ Command build_command(const Settings& s, const std::string& stream_bin,
       a.push_back("--web");
       a.push_back("--web-root");
       a.push_back(root);
+      if (!s.caPath.empty()) {
+        a.push_back("--ca-cert");
+        a.push_back(s.caPath);
+      }
     }
   }
 

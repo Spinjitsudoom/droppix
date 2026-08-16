@@ -52,6 +52,7 @@ int main(int argc, char** argv) {
   std::string cert, key;
   bool web = false;
   std::string web_root;
+  std::string ca_cert;   // local CA public cert, served at /ca.crt so a browser can trust it once
   std::string usb_aoa;   // --usb-aoa <serial>: serve one tablet over USB (AOA), not TCP
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
   int orientation = 0;                                   // --orientation 0/90/180/270
@@ -87,6 +88,7 @@ int main(int argc, char** argv) {
     else if (a == "--key") key = sval();
     else if (a == "--web") web = true;
     else if (a == "--web-root") web_root = sval();
+    else if (a == "--ca-cert") ca_cert = sval();
     else if (a == "--audio") audio = true;
     else if (a == "--overlay") overlay = true;
     else if (a == "--usb-aoa") usb_aoa = sval();
@@ -229,7 +231,7 @@ int main(int argc, char** argv) {
     } else if (web) {
       std::unique_ptr<droppix::ByteChannel> ch;
       std::string peer;
-      if (!droppix::WebFrontend::serve_until_stream(tx, web_root, pairing_code, ch, peer, g_stop)) {
+      if (!droppix::WebFrontend::serve_until_stream(tx, web_root, ca_cert, pairing_code, ch, peer, g_stop)) {
         break;
       }
       tx.adopt_channel(std::move(ch), std::move(peer));

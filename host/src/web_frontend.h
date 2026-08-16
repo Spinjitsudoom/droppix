@@ -13,8 +13,12 @@ namespace droppix {
 // (non-HTTP) TLS client that speaks the length-prefixed protocol.
 class WebFrontend {
  public:
+  // ca_cert_path: local CA public cert (PEM), served unauthenticated at /ca.crt so a
+  // browser can install it once and trust every future leaf cert this host signs. Empty
+  // string disables the route (404) — e.g. an older/portless build without a CertManager.
   static bool serve_until_stream(TransportServer& tx,
                                  const std::string& web_root,
+                                 const std::string& ca_cert_path,
                                  const std::string& pairing_code,
                                  std::unique_ptr<ByteChannel>& out_channel,
                                  std::string& out_peer,
