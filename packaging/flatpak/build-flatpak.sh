@@ -31,8 +31,14 @@ flatpak-builder --user --force-clean --install \
 # Deliver a single-file bundle into the repo's "complete builds/" (git-ignored).
 DEST="$REPO/complete builds"; mkdir -p "$DEST"
 SHA="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo nogit)"
-BUNDLE="$DEST/droppix-$(date +%Y%m%d-%H%M)-$SHA.flatpak"
-flatpak build-bundle "$WORK/repo" "$BUNDLE" org.droppix.Droppix
+NAME="droppix-$(date +%Y%m%d-%H%M)-$SHA.flatpak"
+BUNDLE="$DEST/$NAME"
+# build-bundle writes a temp file and renames it into place. "complete builds/" can sit on
+# a CIFS mount, where that rename fails with EAGAIN ("Resource temporarily unavailable")
+# after the whole build has already succeeded. Build it on local disk, then copy.
+STAGE="$WORK/$NAME"
+flatpak build-bundle "$WORK/repo" "$STAGE" org.droppix.Droppix
+cp -f "$STAGE" "$BUNDLE"
 
 echo "delivered: $BUNDLE"
 echo "installed to --user; run with:  flatpak run org.droppix.Droppix"
