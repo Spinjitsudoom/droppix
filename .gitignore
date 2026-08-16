@@ -11,3 +11,11 @@ spike/**/aoa_spike
 
 # personal scratch notes
 im lazy
+
+# spacedesk reverse-engineering run artifacts: captures, decoded stripes and mitm logs are
+# produced per session and are large/uninteresting — only the tools themselves are tracked.
+__pycache__/
+tools/spacedesk-re/*.bin
+tools/spacedesk-re/*.jpg
+tools/spacedesk-re/*.log
+tools/spacedesk-re/*.stdout
