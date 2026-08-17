@@ -9,9 +9,30 @@ import java.util.concurrent.LinkedBlockingQueue
 // Plays raw s16le/48k/stereo PCM via AudioTrack on a dedicated thread. The net
 // thread only submit()s; playback (a blocking write) never stalls the net loop.
 class AudioPlayer {
-    companion object { private const val RATE = 48000; private const val TAG = "droppix" }
+    companion object {
+        private const val RATE = 48000
+        private const val TAG = "droppix"
 
-    private val queue = LinkedBlockingQueue<ByteArray>(64)   // bounded -> latency stays low
+        // The host reads PCM in 4 KB chunks: 1024 stereo s16 frames = ~21.3 ms each.
+        const val CHUNK_MS = 21.3
+
+        /** ~256 ms of audio. Past this we are audibly behind, not absorbing jitter. */
+        const val MAX_CHUNKS = 12
+
+        /** Overflow drops back to here (~85 ms), leaving headroom instead of staying full. */
+        const val LOW_WATER_CHUNKS = 4
+    }
+
+    // Every queued chunk is audio that has not been heard yet, so queue depth IS latency.
+    //
+    // This used to hold 64 chunks (~1.4s) and drop the oldest one when full. That bounded
+    // memory but not lag: dropping a single chunk per overflow leaves the queue pinned at the
+    // ceiling, so once a stall filled it the stream stayed ~1.4s behind for good. Playback
+    // only advances in real time, so a backlog is never caught up — it has to be thrown away.
+    //
+    // Hold a much shorter budget, and on overflow drop down to a LOW-WATER mark so one glitch
+    // costs a single audible gap instead of permanent lag.
+    private val queue = LinkedBlockingQueue<ByteArray>(MAX_CHUNKS)
     @Volatile private var running = false
     private var thread: Thread? = null
     private var track: AudioTrack? = null
@@ -33,14 +54,19 @@ class AudioPlayer {
 
     fun submit(pcm: ByteArray) {
         if (!running) return
-        if (!queue.offer(pcm)) { queue.poll(); queue.offer(pcm) }   // drop oldest on overflow
+        if (queue.offer(pcm)) return
+        // Full: we are behind. Discard the oldest (stale) audio down to the low-water mark
+        // rather than making room for exactly one chunk, which would leave us at the ceiling
+        // and permanently late.
+        while (queue.size > LOW_WATER_CHUNKS) queue.poll()
+        queue.offer(pcm)
     }
 
     /**
      * Drop anything buffered but not yet played.
      *
-     * Used when audio is muted mid-stream: without this the queue (up to 64 chunks) would
-     * be played out on unmute, replaying sound from before the mute.
+     * Used when audio is muted mid-stream: without this the queued chunks would be played
+     * out on unmute, replaying sound from before the mute.
      */
     fun flush() {
         queue.clear()

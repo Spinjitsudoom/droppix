@@ -2,6 +2,7 @@
 #include <atomic>
 #include <cstdio>
 #include <mutex>
+#include <cstddef>
 #include <string>
 #include <thread>
 #include <vector>
@@ -28,6 +29,10 @@ class AudioStreamer {
 
   void stop();
 
+  // Total PCM discarded to hold the latency budget. Non-zero means the stream loop is not
+  // draining fast enough — useful when diagnosing audio that lags rather than glitches.
+  size_t dropped_bytes() const { return dropped_bytes_; }
+
  private:
   void reader_loop();
 
@@ -37,6 +42,8 @@ class AudioStreamer {
   std::atomic<bool> running_{false};
   std::mutex mu_;
   std::vector<std::vector<unsigned char>> queue_;   // guarded by mu_
+  size_t queued_bytes_ = 0;          // bytes in queue_, so the cap costs no traversal
+  size_t dropped_bytes_ = 0;         // total discarded to keep latency inside its budget
   std::mutex stop_mu_;               // guards stop() for idempotent/concurrent calls
 };
 

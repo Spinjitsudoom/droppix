@@ -1,3 +1,5 @@
+import { scheduleAudio, kAudioResyncLeadSec } from "./audio-policy.ts";
+
 /** Host format: 48000 Hz, s16le, stereo interleaved. */
 export const AUDIO_RATE = 48000;
 export const AUDIO_CHANNELS = 2;
@@ -178,13 +180,22 @@ export class AudioPlayer {
     src.buffer = buf;
     src.connect(this.gain);
     const now = this.ctx.currentTime;
-    if (this.nextTime < now + 0.03) this.nextTime = now + 0.03;
+    // scheduleAudio also caps how far AHEAD we may book. Previously only the underrun case
+    // was handled, so a burst from the host pushed nextTime seconds into the future and it
+    // never came back — playback advances in real time, so being early is permanent until
+    // something discards audio. Blowing the cap drops the stale schedule: one gap, then
+    // correct timing, instead of staying seconds behind for the rest of the session.
+    const sched = scheduleAudio(this.nextTime, now);
+    if (sched.resynced) {
+      console.warn(`audio: ${(this.nextTime - now).toFixed(2)}s behind; resyncing`);
+    }
+    this.nextTime = sched.startAt;
     try {
       src.start(this.nextTime);
       this.nextTime += frames / AUDIO_RATE;
     } catch (e) {
       console.warn("audio schedule", e);
-      this.nextTime = now + 0.05;
+      this.nextTime = now + kAudioResyncLeadSec;
     }
   }
 

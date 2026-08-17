@@ -1207,6 +1207,21 @@ var MseVideoPipeline = class {
   }
 };
 
+// src/audio-policy.ts
+var kMaxAudioLeadSec = 0.25;
+var kAudioResyncLeadSec = 0.06;
+var kAudioMinLeadSec = 0.03;
+function scheduleAudio(nextTime, now) {
+  const lead = nextTime - now;
+  if (lead > kMaxAudioLeadSec) {
+    return { startAt: now + kAudioResyncLeadSec, resynced: true };
+  }
+  if (lead < kAudioMinLeadSec) {
+    return { startAt: now + kAudioMinLeadSec, resynced: false };
+  }
+  return { startAt: nextTime, resynced: false };
+}
+
 // src/audio.ts
 var AUDIO_RATE = 48e3;
 var AUDIO_CHANNELS = 2;
@@ -1357,13 +1372,17 @@ var AudioPlayer = class {
     src.buffer = buf;
     src.connect(this.gain);
     const now = this.ctx.currentTime;
-    if (this.nextTime < now + 0.03) this.nextTime = now + 0.03;
+    const sched = scheduleAudio(this.nextTime, now);
+    if (sched.resynced) {
+      console.warn(`audio: ${(this.nextTime - now).toFixed(2)}s behind; resyncing`);
+    }
+    this.nextTime = sched.startAt;
     try {
       src.start(this.nextTime);
       this.nextTime += frames / AUDIO_RATE;
     } catch (e) {
       console.warn("audio schedule", e);
-      this.nextTime = now + 0.05;
+      this.nextTime = now + kAudioResyncLeadSec;
     }
   }
   close() {

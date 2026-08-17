@@ -31,7 +31,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Mouse scroll / buttons | Shipped | `MsgType::Scroll`, `MouseButton` |
 | Auto-orientation | Shipped | `orientation.h`, `MsgType::Orientation` |
 | Mirror / extend layout toggle | Shipped | `LayoutMode`, `DesktopBackend::apply_layout` |
-| Audio to tablet (PipeWire) | Shipped | `audio_streamer.*`, `audio_sink.*` |
+| Audio to tablet (PipeWire) | Shipped | `audio_streamer.*`, `audio_sink.*`. Latency is bounded in **time** at every stage (`host/src/audio_latency.h`, `web/src/audio-policy.ts`, Android `AudioPlayer`): `parec --latency-msec=20`, a 200 ms host queue, ~256 ms client queue, 250 ms web schedule lead — each recovering to a low-water mark on overflow, since a backlog is never caught up at real-time playback. See lesson `audio-latency-grows-unbounded` |
 | WiFi discovery + TLS PIN pairing | Shipped | `mdns_*`, `cert_manager.*`, Android `TlsTrust` |
 | Local CA for browser-trusted web HTTPS (no cert warning after one-time install) | Shipped | `host/gui/cert_manager.*` (CA + SAN-covered leaf), `host/src/web_frontend.cpp` (`GET /ca.crt`), `web/public/index.html` install link |
 | QR-code pairing (scan to skip PIN typing) | Shipped (host); Android build/on-device retest pending | `host/src/qr_generator.*`, `main_window::refreshPairingUi`/`showPairingPopup`; Android `net/QrUri.kt`, ZXing scan in `ui/ConnectActivity.kt` |
