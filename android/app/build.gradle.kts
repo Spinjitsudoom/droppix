@@ -11,8 +11,8 @@ android {
         applicationId = "com.droppix.app"
         minSdk = 21
         targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
     // Release signing is driven by env vars (set by packaging/android/build-apk.sh) so no
     // keystore or password ever lives in the repo. Absent those vars, release stays unsigned.
