@@ -19,6 +19,9 @@ class StreamController : public QObject {
   void runningChanged(bool running);
   void approvalRequested(QString id, QString name, QString ip);
   void connecting(QString ip);   // a client's socket/TLS was accepted (pre-HELLO)
+  // A web client saved its settings. The streamer runs as root and cannot own a file in
+  // the user's config dir, so it forwards the blob and the GUI persists it.
+  void clientSettingsSaved(QString json);
  private:
   void onReadyRead();
   QProcess proc_;

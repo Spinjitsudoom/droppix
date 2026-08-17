@@ -54,6 +54,10 @@ Command build_command(const Settings& s, const std::string& stream_bin,
         a.push_back("--ca-cert");
         a.push_back(s.caPath);
       }
+      if (!s.clientSettingsPath.empty()) {
+        a.push_back("--client-settings");
+        a.push_back(s.clientSettingsPath);
+      }
     }
   }
 

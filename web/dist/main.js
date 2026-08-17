@@ -22,7 +22,13 @@ var MsgType = {
   // every frame until the host's next scheduled keyframe — a freeze of up to 2s.
   KeyframeRequest: 16,
   Pair: 20,
-  PairResult: 21
+  PairResult: 21,
+  // Host <-> client, WSS only: the client's settings blob (UTF-8 JSON), persisted by the
+  // HOST. The browser's own localStorage is scoped to the exact origin (droppix's session
+  // port moves) and is not kept for origins whose certificate the user clicked through, so
+  // settings vanished between sessions. Sent by the host right after a successful pair, and
+  // by the client whenever the user changes something.
+  ClientSettings: 22
 };
 function putU16(v, out) {
   out.push(v >>> 8 & 255, v & 255);
@@ -130,6 +136,7 @@ var Transport = class {
   pingTimer = null;
   hello = null;
   paired = false;
+  helloTimer = null;
   connect(hello) {
     this.close();
     this.hello = hello;
@@ -158,11 +165,27 @@ var Transport = class {
         const triesLeft = parsed.body[1] ?? 0;
         if (ok) {
           this.paired = true;
-          this.sendHello();
           this.handlers.onPaired?.();
+          this.helloTimer = window.setTimeout(() => {
+            this.helloTimer = null;
+            this.sendHello();
+          }, 1500);
         } else {
           this.handlers.onPinRejected?.(triesLeft);
         }
+        return;
+      }
+      if (this.paired && parsed.type === MsgType.ClientSettings) {
+        try {
+          const json = new TextDecoder().decode(parsed.body);
+          this.handlers.onClientSettings?.(json);
+        } catch {
+        }
+        if (this.helloTimer !== null) {
+          clearTimeout(this.helloTimer);
+          this.helloTimer = null;
+        }
+        this.sendHello();
         return;
       }
       switch (parsed.type) {
@@ -208,6 +231,14 @@ var Transport = class {
   /** Send the code the user typed (read off the host screen) for host verification. */
   submitPin(code) {
     this.send(MsgType.Pair, new TextEncoder().encode(code));
+  }
+  /** Ask the host to persist these settings on our behalf. Safe before/after HELLO. */
+  saveSettingsOnHost(json) {
+    this.send(MsgType.ClientSettings, new TextEncoder().encode(json));
+  }
+  /** Replace the HELLO args (used after host settings arrive, before HELLO is sent). */
+  setHello(h) {
+    this.hello = h;
   }
   sendHello() {
     const h = this.hello;
@@ -1646,6 +1677,18 @@ function resolveResolution(setting, auto) {
   const w = Math.round(h * aspect);
   return { w: Math.max(2, w - w % 2), h: Math.max(2, h - h % 2) };
 }
+function mergeHostSettings(local, json) {
+  let parsed;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return local;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return local;
+  const { id: _hostId, ...rest } = parsed;
+  if (Object.keys(rest).length === 0) return local;
+  return { ...local, ...rest };
+}
 
 // src/fullscreen.ts
 async function enterFullscreen(el) {
@@ -2108,6 +2151,32 @@ function wireTransport() {
     onPaired: () => {
       pairEl.classList.remove("show");
     },
+    onClientSettings: (json) => {
+      try {
+        const merged = mergeHostSettings(settings, json);
+        if (merged === settings) return;
+        settings = merged;
+        saveSettings(settings);
+        applyLiveSettings(settings);
+        theme = settings.theme;
+        setTheme(theme);
+        const { w, h } = resolveResolution(settings.resolution, autoSize());
+        transport?.setHello({
+          width: w,
+          height: h,
+          density: 160,
+          name: settings.name,
+          id: settings.id,
+          fps: settings.fps,
+          audioWanted: settings.audio ? 1 : 0,
+          bitrateKbps: settings.bitrateKbps,
+          wallCol: settings.wallCol,
+          wallRow: settings.wallRow,
+          pinRequired
+        });
+      } catch {
+      }
+    },
     onClose: (r) => {
       setStatus(`Disconnected: ${r}`);
       transport = null;
@@ -2153,6 +2222,19 @@ function wireTransport() {
   input ??= new InputBinder(canvas, (type, body) => transport?.send(type, body));
   input.setFit(settings.fit);
 }
+function autoSize() {
+  return {
+    w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
+    h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)))
+  };
+}
+function applyLiveSettings(s) {
+  video.setAdjust(s.flip, s.brightness, s.contrast);
+  video.setFit(s.fit);
+  input?.setFit(s.fit);
+  mock.setFit(s.fit);
+  audio.setMuted(!s.audio);
+}
 var connecting = false;
 async function connect() {
   if (connecting || transport) return;
@@ -2173,11 +2255,7 @@ async function connect() {
       }
     };
     wireTransport();
-    const auto = {
-      w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
-      h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1)))
-    };
-    const { w, h } = isMock ? { w: 1280, h: 720 } : resolveResolution(settings.resolution, auto);
+    const { w, h } = isMock ? { w: 1280, h: 720 } : resolveResolution(settings.resolution, autoSize());
     transport.connect({
       width: w,
       height: h,
@@ -2215,11 +2293,8 @@ function disconnect() {
 var drawer = new SettingsDrawer((s) => {
   settings = s;
   theme = s.theme;
-  video.setAdjust(s.flip, s.brightness, s.contrast);
-  video.setFit(s.fit);
-  input?.setFit(s.fit);
-  mock.setFit(s.fit);
-  audio.setMuted(!s.audio);
+  transport?.saveSettingsOnHost(JSON.stringify(s));
+  applyLiveSettings(s);
 });
 function openDrawer() {
   drawer.open();

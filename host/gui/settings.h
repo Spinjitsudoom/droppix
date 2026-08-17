@@ -19,5 +19,9 @@ struct Settings {
   std::string caPath;       // local CA public cert (PEM) that signed certPath; served at /ca.crt
   bool webClient = false;   // serve host PWA + WSS on the session port (--web)
   std::string webRoot;      // resolved at collect-time; not persisted
+  // File the GUI keeps the web client's settings in, so they survive a browser that will
+  // not (origin-scoped localStorage, cleared for click-through certs). Resolved at
+  // collect-time; not persisted as a setting itself.
+  std::string clientSettingsPath;
 };
 }  // namespace droppix

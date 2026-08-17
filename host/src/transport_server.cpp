@@ -8,6 +8,7 @@
 #include <cstring>
 #include <openssl/err.h>
 #include "socket_channel.h"
+#include "web_pin.h"
 
 namespace droppix {
 
@@ -168,6 +169,20 @@ void TransportServer::poll_control() {
       if (decode_stream_params(m.body, fps, kbps, aud)) {
         params_ = StreamParamsRequest{fps, kbps, aud};
         params_pending_ = true;
+      }
+    } else if (static_cast<unsigned char>(m.type) == kMsgClientSettings) {
+      // The web client saved its settings. We run as root and the GUI does not, so writing
+      // the file here would leave it root-owned and unwritable by a later non-root streamer.
+      // Hand it up the existing stdout channel and let the GUI (which owns the config dir)
+      // persist it.
+      //
+      // Newlines are stripped rather than rejected: the line framing is what the GUI parses,
+      // and a client controls this payload.
+      if (!m.body.empty() && m.body.size() <= kMaxClientSettingsBytes) {
+        std::string json(m.body.begin(), m.body.end());
+        for (char& c : json) if (c == '\n' || c == '\r') c = ' ';
+        std::printf("client-settings %s\n", json.c_str());
+        std::fflush(stdout);
       }
     } else if (m.type == MsgType::KeyframeRequest) {
       // The client's decoder lost sync. Latch it; the stream loop forces an IDR on the

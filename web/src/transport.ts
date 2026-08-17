@@ -22,6 +22,13 @@ export interface TransportHandlers {
   onAwaitingPin?: () => void;
   onPinRejected?: (triesLeft: number) => void;
   onPaired?: () => void;
+  /**
+   * Settings the HOST had stored for this client, delivered right after pairing.
+   *
+   * The handler should merge and persist them, then update the transport's hello args —
+   * HELLO is sent immediately afterwards and carries fps/resolution/audio.
+   */
+  onClientSettings?: (json: string) => void;
 }
 
 type HelloArgs = {
@@ -43,6 +50,7 @@ export class Transport {
   private pingTimer: number | null = null;
   private hello: HelloArgs | null = null;
   private paired = false;
+  private helloTimer: number | null = null;
 
   constructor(private handlers: TransportHandlers) {}
 
@@ -79,11 +87,34 @@ export class Transport {
         const triesLeft = parsed.body[1] ?? 0;
         if (ok) {
           this.paired = true;
-          this.sendHello();
           this.handlers.onPaired?.();
+          // HELLO waits for the host's stored settings: fps/resolution/audio are carried in
+          // it, so sending it now would spend this whole session on stale values. The host
+          // always sends the frame (even "{}"), and the timer is only a guard against a host
+          // that does not — never the normal path.
+          this.helloTimer = window.setTimeout(() => {
+            this.helloTimer = null;
+            this.sendHello();
+          }, 1500);
         } else {
           this.handlers.onPinRejected?.(triesLeft);
         }
+        return;
+      }
+      if (this.paired && parsed.type === MsgType.ClientSettings) {
+        // Settings the host was holding for us. Apply before HELLO so this session already
+        // uses them; the handler re-reads storage and may replace `this.hello`.
+        try {
+          const json = new TextDecoder().decode(parsed.body);
+          this.handlers.onClientSettings?.(json);
+        } catch {
+          /* malformed blob must not block the stream */
+        }
+        if (this.helloTimer !== null) {
+          clearTimeout(this.helloTimer);
+          this.helloTimer = null;
+        }
+        this.sendHello();
         return;
       }
       switch (parsed.type) {
@@ -133,6 +164,16 @@ export class Transport {
   /** Send the code the user typed (read off the host screen) for host verification. */
   submitPin(code: string): void {
     this.send(MsgType.Pair, new TextEncoder().encode(code));
+  }
+
+  /** Ask the host to persist these settings on our behalf. Safe before/after HELLO. */
+  saveSettingsOnHost(json: string): void {
+    this.send(MsgType.ClientSettings, new TextEncoder().encode(json));
+  }
+
+  /** Replace the HELLO args (used after host settings arrive, before HELLO is sent). */
+  setHello(h: HelloArgs): void {
+    this.hello = h;
   }
 
   private sendHello(): void {

@@ -39,6 +39,7 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 17 | StreamParams | client → host | live fps / bitrate / audio change on the running session |
 | 20 | Pair | client → host | **WSS only** — 6 ASCII digits of the code shown on the PC |
 | 21 | PairResult | host → client | **WSS only** — `[ ok u8 ][ tries_left u8 ]` |
+| 22 | ClientSettings | either | **WSS only** — the web client's settings JSON, persisted by the host |
 
 ### Deliberate disconnect (type 6)
 
@@ -135,6 +136,37 @@ When `droppix_stream` is started with `--web --web-root <dir>` (TLS required), t
 | WSS | one binary WebSocket frame = `[ type u8 ][ body… ]` (length = WS payload length) |
 
 After TLS, the streamer sniffs the first bytes: HTTP → static / WSS path; otherwise → native Android/Qt length-prefixed client. `/config.json` returns `{ "pinRequired": true }` — the pairing code is **never** sent to the browser.
+
+### Host-persisted web client settings (type 22)
+
+The browser cannot keep its own settings reliably. `localStorage` is scoped to the exact
+origin — scheme + host + **port**, and droppix's session port moves between runs — and
+browsers decline to persist it for an origin whose certificate the user clicked through. So
+settings disappeared between sessions even though the client stored them correctly.
+
+The host holds the blob instead. Body is the client's settings object as UTF-8 JSON; the
+host never interprets it, only stores and returns it (max 8 KiB).
+
+```
+host → client   immediately after a successful PairResult, ALWAYS sent (`{}` if none stored)
+client → host   whenever the user changes a setting
+```
+
+The host→client frame is unconditional so the client can *wait* for it: `fps`, resolution and
+`audio` travel in HELLO, so settings arriving afterwards would be a session late. The client
+holds HELLO until the frame lands (with a short timeout as a guard, not a normal path).
+
+**Gated by pairing**, exactly like the stream: the frame is only sent after the PIN is
+accepted, and inbound blobs only reach the host over an already-paired connection. There is
+no HTTP settings endpoint, so this adds no unauthenticated write surface.
+
+The client merges the blob over its local copy but **never adopts `id`** — that is the
+browser's identity in the host's approved-device store, and inheriting another device's would
+inherit its approval (`mergeHostSettings`, tested).
+
+Persisted host-side by the **GUI**, not the streamer: the streamer runs as root, so writing
+the file there would leave it owned by root in the user's config dir. The streamer forwards
+the blob on stdout and the GUI writes `web_client_settings.json`.
 
 ### Web pair handshake (host-verified PIN)
 

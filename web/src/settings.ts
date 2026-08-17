@@ -97,3 +97,30 @@ export function resolveResolution(
   const w = Math.round(h * aspect);
   return { w: Math.max(2, w - (w % 2)), h: Math.max(2, h - (h % 2)) };
 }
+
+/**
+ * Merge settings the HOST was holding over the local copy.
+ *
+ * The host stores this blob on the client's behalf because the browser will not reliably:
+ * localStorage is scoped to the exact origin (droppix's session port moves between runs) and
+ * browsers drop it for origins whose certificate the user had to click through.
+ *
+ * `id` is deliberately NOT adopted. It is this browser's identity — the key the host's
+ * approved-device store recognises — so taking one from the blob would make this client
+ * masquerade as whichever device saved last, inheriting its approval.
+ *
+ * Anything malformed, empty, or non-object leaves the local settings untouched: a bad blob
+ * must never cost the user their configuration or block the stream.
+ */
+export function mergeHostSettings(local: ClientSettings, json: string): ClientSettings {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return local;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return local;
+  const { id: _hostId, ...rest } = parsed as Record<string, unknown>;
+  if (Object.keys(rest).length === 0) return local;
+  return { ...local, ...(rest as Partial<ClientSettings>) };
+}

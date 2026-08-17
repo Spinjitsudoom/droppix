@@ -20,6 +20,10 @@ class WebFrontend {
                                  const std::string& web_root,
                                  const std::string& ca_cert_path,
                                  const std::string& pairing_code,
+                                 // Settings blob (JSON) to hand the client once it pairs, so
+                                 // its preferences survive a browser that will not keep them.
+                                 // Empty = send nothing and the client keeps its own.
+                                 const std::string& client_settings,
                                  std::unique_ptr<ByteChannel>& out_channel,
                                  std::string& out_peer,
                                  volatile std::sig_atomic_t& stop);

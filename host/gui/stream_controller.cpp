@@ -64,6 +64,11 @@ void StreamController::onReadyRead() {
     QString line = QString::fromUtf8(buf_.left(nl)).trimmed();
     buf_.remove(0, nl + 1);
     if (line.isEmpty()) continue;
+    static const QString kSettings = QStringLiteral("client-settings ");
+    if (line.startsWith(kSettings)) {
+      emit clientSettingsSaved(line.mid(kSettings.size()));
+      continue;
+    }
     static const QString kConnecting = QStringLiteral("client-connecting ip=");
     if (line.startsWith(kConnecting)) {
       emit connecting(line.mid(kConnecting.size()).trimmed());

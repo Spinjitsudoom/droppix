@@ -2,6 +2,8 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <fstream>
+#include <sstream>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -53,6 +55,7 @@ int main(int argc, char** argv) {
   bool web = false;
   std::string web_root;
   std::string ca_cert;   // local CA public cert, served at /ca.crt so a browser can trust it once
+  std::string client_settings_path;   // web client settings the GUI persists on its behalf
   std::string usb_aoa;   // --usb-aoa <serial>: serve one tablet over USB (AOA), not TCP
   int mx = 0, my = 0, mw = 0, mh = 0, dtw = 0, dth = 0;  // --monitor / --desktop
   int orientation = 0;                                   // --orientation 0/90/180/270
@@ -89,6 +92,7 @@ int main(int argc, char** argv) {
     else if (a == "--web") web = true;
     else if (a == "--web-root") web_root = sval();
     else if (a == "--ca-cert") ca_cert = sval();
+    else if (a == "--client-settings") client_settings_path = sval();
     else if (a == "--audio") audio = true;
     else if (a == "--overlay") overlay = true;
     else if (a == "--usb-aoa") usb_aoa = sval();
@@ -231,7 +235,18 @@ int main(int argc, char** argv) {
     } else if (web) {
       std::unique_ptr<droppix::ByteChannel> ch;
       std::string peer;
-      if (!droppix::WebFrontend::serve_until_stream(tx, web_root, ca_cert, pairing_code, ch, peer, g_stop)) {
+      // Re-read per session rather than once at startup: the GUI rewrites this file
+      // whenever a client saves, so a reconnect must see the newest values.
+      std::string client_settings;
+      if (!client_settings_path.empty()) {
+        std::ifstream f(client_settings_path, std::ios::binary);
+        if (f) {
+          std::ostringstream ss; ss << f.rdbuf();
+          client_settings = ss.str();
+        }
+      }
+      if (!droppix::WebFrontend::serve_until_stream(tx, web_root, ca_cert, pairing_code,
+                                                    client_settings, ch, peer, g_stop)) {
         break;
       }
       tx.adopt_channel(std::move(ch), std::move(peer));

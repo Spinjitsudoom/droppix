@@ -25,6 +25,12 @@ export const MsgType = {
   KeyframeRequest: 16,
   Pair: 20,
   PairResult: 21,
+  // Host <-> client, WSS only: the client's settings blob (UTF-8 JSON), persisted by the
+  // HOST. The browser's own localStorage is scoped to the exact origin (droppix's session
+  // port moves) and is not kept for origins whose certificate the user clicked through, so
+  // settings vanished between sessions. Sent by the host right after a successful pair, and
+  // by the client whenever the user changes something.
+  ClientSettings: 22,
 } as const;
 export type MsgType = (typeof MsgType)[keyof typeof MsgType];
 

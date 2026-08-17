@@ -5,7 +5,7 @@ import { MseVideoPipeline } from "./mse-decoder.ts";
 import type { VideoRenderer } from "./video-renderer.ts";
 import { AudioPlayer } from "./audio.ts";
 import { InputBinder } from "./input.ts";
-import { loadSettings, saveSettings, resolveResolution } from "./settings.ts";
+import { loadSettings, saveSettings, resolveResolution, mergeHostSettings, type ClientSettings } from "./settings.ts";
 import { toggleFullscreen } from "./fullscreen.ts";
 import { MockOverlay } from "./mock-overlay.ts";
 import { initTheme, setTheme, nextTheme } from "./theme.ts";
@@ -178,6 +178,37 @@ function wireTransport() {
     onPaired: () => {
       pairEl.classList.remove("show");
     },
+    onClientSettings: (json) => {
+      // The host keeps these for us because the browser will not reliably: localStorage is
+      // scoped to the exact origin (the session port moves) and is dropped for origins whose
+      // certificate was clicked through. Merge over the local copy, persist locally too, and
+      // refresh the HELLO the transport is about to send.
+      try {
+        const merged = mergeHostSettings(settings, json);
+        if (merged === settings) return;   // malformed/empty: keep what we have
+        settings = merged;
+        saveSettings(settings);
+        applyLiveSettings(settings);
+        theme = settings.theme;
+        setTheme(theme);
+        const { w, h } = resolveResolution(settings.resolution, autoSize());
+        transport?.setHello({
+          width: w,
+          height: h,
+          density: 160,
+          name: settings.name,
+          id: settings.id,
+          fps: settings.fps,
+          audioWanted: settings.audio ? 1 : 0,
+          bitrateKbps: settings.bitrateKbps,
+          wallCol: settings.wallCol,
+          wallRow: settings.wallRow,
+          pinRequired,
+        });
+      } catch {
+        /* a malformed blob must never block the stream */
+      }
+    },
     onClose: (r) => {
       setStatus(`Disconnected: ${r}`);
       transport = null;
@@ -237,6 +268,29 @@ function wireTransport() {
   input.setFit(settings.fit);
 }
 
+
+/** Physical-pixel size of the canvas; the "auto" resolution tracks this. */
+function autoSize(): { w: number; h: number } {
+  return {
+    w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
+    h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1))),
+  };
+}
+
+/**
+ * Push display-only settings onto the live view.
+ *
+ * Shared by the settings drawer and by settings the host hands back at pair time, so the
+ * two paths cannot drift — the host-delivered case is exactly as "applied" as a manual edit.
+ */
+function applyLiveSettings(s: ClientSettings): void {
+  video.setAdjust(s.flip, s.brightness, s.contrast);
+  video.setFit(s.fit);
+  input?.setFit(s.fit);
+  mock.setFit(s.fit);
+  audio.setMuted(!s.audio);
+}
+
 let connecting = false;
 
 async function connect() {
@@ -265,11 +319,9 @@ async function connect() {
     wireTransport();
     // "auto" tracks the canvas at physical-pixel resolution; a fixed setting (e.g. 1280x720)
     // caps what the host renders, so weak clients don't have to decode/paint a huge frame.
-    const auto = {
-      w: Math.max(640, Math.round(canvas.clientWidth * (window.devicePixelRatio || 1))),
-      h: Math.max(360, Math.round(canvas.clientHeight * (window.devicePixelRatio || 1))),
-    };
-    const { w, h } = isMock ? { w: 1280, h: 720 } : resolveResolution(settings.resolution, auto);
+    const { w, h } = isMock
+      ? { w: 1280, h: 720 }
+      : resolveResolution(settings.resolution, autoSize());
     transport!.connect({
       width: w,
       height: h,
@@ -310,11 +362,9 @@ function disconnect() {
 const drawer = new SettingsDrawer((s) => {
   settings = s;
   theme = s.theme;
-  video.setAdjust(s.flip, s.brightness, s.contrast);
-  video.setFit(s.fit);
-  input?.setFit(s.fit);
-  mock.setFit(s.fit);
-  audio.setMuted(!s.audio);
+  // Persist host-side as well as locally, so these survive the browser forgetting them.
+  transport?.saveSettingsOnHost(JSON.stringify(s));
+  applyLiveSettings(s);
 });
 
 function openDrawer() {

@@ -222,6 +222,7 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
                                      const std::string& web_root,
                                      const std::string& ca_cert_path,
                                      const std::string& pairing_code,
+                                     const std::string& client_settings,
                                      std::unique_ptr<ByteChannel>& out_channel,
                                      std::string& out_peer,
                                      volatile std::sig_atomic_t& stop) {
@@ -308,6 +309,26 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
         out_channel.reset();  // closes fd + ssl
         out_peer.clear();
         continue;
+      }
+      // Hand back the settings this browser saved last time, BEFORE the client builds its
+      // HELLO — fps/resolution/audio travel in it, so arriving later would mean the first
+      // session ignored them. Only after pairing: it is the client's own data.
+      {
+        // ALWAYS send this frame, even with nothing stored ("{}"). The client waits for it
+        // before building HELLO — fps/resolution/audio travel in HELLO, so settings arriving
+        // afterwards would be a session late. A frame that is always present makes that wait
+        // deterministic instead of a race against an empty store.
+        const std::string blob =
+            (client_settings.empty() || client_settings.size() > kMaxClientSettingsBytes)
+                ? std::string("{}")
+                : client_settings;
+        const std::vector<unsigned char> body(blob.begin(), blob.end());
+        const auto out = encode_message(static_cast<MsgType>(kMsgClientSettings), body);
+        if (!out_channel->send_all(out.data(), out.size())) {
+          out_channel.reset();
+          out_peer.clear();
+          continue;
+        }
       }
       std::fprintf(stderr, "web: paired, streaming to %s\n", peer.c_str());
       return true;

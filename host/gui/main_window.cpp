@@ -44,6 +44,16 @@ static QString configDir() {
   return QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
 }
 
+// Where the web client's settings live.
+//
+// Kept host-side because the browser's own storage is not durable enough: localStorage is
+// scoped to the exact origin (droppix's session port moves between runs), and browsers
+// decline to persist it for an origin whose certificate the user clicked through. The host
+// hands this back once a client has entered the pairing code.
+static QString webClientSettingsPath() {
+  return configDir() + "/web_client_settings.json";
+}
+
 // Copy src -> dst, overwriting; returns success. (QFile::copy won't overwrite.)
 static bool copyOver(const QString& src, const QString& dst) {
   QFile::remove(dst);
@@ -796,6 +806,9 @@ Settings MainWindow::collectSettings() const {
   }
   if (!flatpakHostWeb_.isEmpty()) s.webRoot = flatpakHostWeb_.toStdString();
   else s.webRoot = resolve_web_root_for_gui();
+  // The streamer only READS this (it runs as root; the GUI owns the file and writes it),
+  // so the plain config path works in the Flatpak case too via the host-staged runtime dir.
+  s.clientSettingsPath = webClientSettingsPath().toStdString();
   return s;
 }
 
@@ -1215,6 +1228,17 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
       if (key.startsWith("usb-aoa:")) knownAoa_.add(key.mid(8));   // enable future auto-start
     }
     updateStatus();
+  });
+  connect(c, &StreamController::clientSettingsSaved, this, [this](const QString& json){
+    // Persist verbatim: the schema is the web client's, and the host only stores and
+    // returns it. Written by the GUI rather than the (root) streamer so the file stays
+    // owned by the user.
+    if (json.trimmed().isEmpty() || json.size() > 8192) return;
+    QDir().mkpath(configDir());
+    QFile f(webClientSettingsPath());
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+    f.write(json.toUtf8());
+    f.close();
   });
   connect(c, &StreamController::runningChanged, this, [this, key](bool r){
     if (r) return;   // ended -> tear the session down
