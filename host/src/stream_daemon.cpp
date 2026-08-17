@@ -64,10 +64,13 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // portrait<->landscape rotation the session restarts and the reconnect's HELLO gives the
   // swapped dims. start() writes the actual chosen dimensions into w/h.
   int w = static_cast<int>(cw), h = static_cast<int>(ch);
-  // The app always sends landscape HELLO dims (1920x1080). If the tablet last reported a
-  // portrait orientation, build the source portrait-SHAPED (swap) so cur_portrait below
-  // matches the source and the orientation handler does not restart-loop forever — otherwise
-  // every reconnect rebuilds landscape, the tablet re-reports portrait, and it never settles.
+  // Build the source in the shape the tablet's ORIENTATION implies, not the shape its HELLO
+  // dims happen to have — the two disagree routinely and the orientation is authoritative.
+  // (This used to assume "the app always sends landscape HELLO dims", true of the old
+  // landscape-natural tablet but not of a portrait-natural phone, which keeps reporting its
+  // launch-time dims because configChanges keeps the Activity alive across rotation.)
+  // cur_portrait below must agree with the reported orientation or the handler restart-loops
+  // forever: every reconnect would rebuild the wrong shape and the tablet would re-report.
   // A v4 client's HELLO orientation is authoritative, so seed the live-orientation slot from
   // it at connect. Without this the ternary below always reads *live_orientation (the slot is
   // never null in the real streamer) and sp.orientation would be dead — a v4 client's chosen
@@ -75,7 +78,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // future Android client's mid-session live-ORIENTATION value isn't clobbered on reconnect.
   if (cver >= 4 && cfg_.live_orientation) *cfg_.live_orientation = sp.orientation;
   int ocode = cfg_.live_orientation ? *cfg_.live_orientation : sp.orientation;
-  if (orientation_is_portrait(ocode) && w > h) std::swap(w, h);
+  orient_dims(ocode, w, h);
   // Mirror mode: the evdi output must match the PRIMARY's resolution (not the tablet's),
   // so the compositor's mirror command can present identical content at matching size.
   // Prefer the output explicitly flagged primary; fall back to the first enabled output
