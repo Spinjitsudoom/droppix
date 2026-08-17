@@ -1,0 +1,8 @@
+<RCC>
+  <!-- The host's artwork, referenced in place rather than copied: droppix's two desktop
+       apps should never drift into different logos. -->
+  <qresource prefix="/">
+    <file alias="logo.png">../../host/gui/logo.png</file>
+    <file alias="icon.png">../../host/gui/icon.png</file>
+  </qresource>
+</RCC>

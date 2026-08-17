@@ -4,11 +4,15 @@
 #include "settings_dialog.h"
 #include "client_socket_channel.h"
 #include "device_identity.h"
-#include "style.h"
+#include "style.h"        // ../host/gui — shared palette
+#include "header_bar.h"
+#include "idle_page.h"
+#include "client_theme.h"
 #include <QVBoxLayout>
 #include <QLabel>
-#include <QToolBar>
-#include <QStatusBar>
+#include <QStackedWidget>
+#include <QApplication>
+#include <QWidget>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QGuiApplication>
@@ -55,8 +59,32 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   setWindowTitle("Droppix Client");
   resize(1024, 640);
 
+  // Header + a stacked body (idle card / video). The window used to be a bare toolbar over
+  // an empty black central widget, which looks broken rather than idle when nothing is
+  // streaming.
+  header_ = new HeaderBar(this);
+  idle_ = new IdlePage(this);
   video_ = new VideoWidget(this);
-  setCentralWidget(video_);
+
+  stack_ = new QStackedWidget(this);
+  stack_->addWidget(idle_);
+  stack_->addWidget(video_);
+
+  auto* body = new QWidget(this);
+  auto* col = new QVBoxLayout(body);
+  col->setContentsMargins(0, 0, 0, 0);
+  col->setSpacing(0);
+  col->addWidget(header_);
+  col->addWidget(stack_, 1);
+  setCentralWidget(body);
+
+  connect(header_, &HeaderBar::connectRequested, this, &MainWindow::onConnectAction);
+  connect(header_, &HeaderBar::disconnectRequested, this, &MainWindow::onDisconnectAction);
+  connect(header_, &HeaderBar::settingsRequested, this, &MainWindow::onSettingsAction);
+  connect(header_, &HeaderBar::themeToggled, this, [this]{
+    setTheme(theme_ == Theme::Dark ? Theme::Light : Theme::Dark);
+  });
+  connect(idle_, &IdlePage::connectRequested, this, &MainWindow::onConnectAction);
   video_->setTouchCallback([this](const std::vector<TouchContact>& contacts) {
     if (client_) client_->sendTouch(contacts);
   });
@@ -74,16 +102,24 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
   decoder_ = std::make_unique<VideoDecoder>();
   client_ = std::make_unique<TransportClient>();
 
-  auto* toolbar = addToolBar("main");
-  connectAction_ = toolbar->addAction("Connect", this, &MainWindow::onConnectAction);
-  disconnectAction_ = toolbar->addAction("Disconnect", this, &MainWindow::onDisconnectAction);
-  disconnectAction_->setEnabled(false);
-  toolbar->addAction("Settings", this, &MainWindow::onSettingsAction);
-
-  statusLabel_ = new QLabel("Not connected", this);
-  statusLabel_->setObjectName("statusText");
-  statusBar()->addWidget(statusLabel_);
+  theme_ = loadClientTheme();
+  setTheme(theme_);
+  showIdle();
 }
+
+void MainWindow::setTheme(Theme t) {
+  theme_ = t;
+  saveClientTheme(t);
+  qApp->setStyleSheet(droppix::styleSheet(t));   // QWidget::styleSheet() would shadow this   // the shared host stylesheet, both palettes
+  if (header_) header_->setTheme(t);
+}
+
+void MainWindow::showIdle(const QString& message) {
+  idle_->setMessage(message);
+  stack_->setCurrentWidget(idle_);
+}
+
+void MainWindow::showVideo() { stack_->setCurrentWidget(video_); }
 
 MainWindow::~MainWindow() {
   stopSession();
@@ -129,9 +165,8 @@ void MainWindow::startSession(const QString& host, quint16 port) {
   currentHost_ = host;
   lastPort_ = port;
   running_.store(true);
-  connectAction_->setEnabled(false);
-  disconnectAction_->setEnabled(true);
-  statusLabel_->setText(QString("Connecting to %1:%2...").arg(host).arg(port));
+  header_->setConnected(true);
+  header_->setStatus(QString("Connecting to %1:%2...").arg(host).arg(port));
   netThread_ = std::thread(&MainWindow::netThreadMain, this, host, port);
 }
 
@@ -139,9 +174,9 @@ void MainWindow::stopSession() {
   if (!running_.exchange(false)) return;
   client_->close();
   if (netThread_.joinable()) netThread_.join();
-  connectAction_->setEnabled(true);
-  disconnectAction_->setEnabled(false);
-  statusLabel_->setText("Not connected");
+  header_->setConnected(false);
+  header_->setStatus("Not connected");
+  showIdle();
 }
 
 void MainWindow::netThreadMain(QString hostQ, quint16 port) {
@@ -186,14 +221,14 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
         break;
       }
     }
-    QMetaObject::invokeMethod(this, [this]{ statusLabel_->setText("Streaming"); },
+    QMetaObject::invokeMethod(this, [this]{ header_->setStatus("Streaming"); showVideo(); },
                               Qt::QueuedConnection);
     client_->runOverChannel(*channel, w, h, density, fps, audio, orient, bitrate,
                             wall_col, wall_row, listener,
                             [this]{ return running_.load(); }, name, id);
     channel->close();
     if (running_.load()) {
-      QMetaObject::invokeMethod(this, [this]{ statusLabel_->setText("Reconnecting..."); },
+      QMetaObject::invokeMethod(this, [this]{ header_->setStatus("Reconnecting..."); },
                                 Qt::QueuedConnection);
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
@@ -204,8 +239,7 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   // after startSession() has already set running_=true for the new session, so it must
   // leave Disconnect enabled rather than re-disabling it permanently.
   QMetaObject::invokeMethod(this, [this]{
-    connectAction_->setEnabled(!running_.load());
-    disconnectAction_->setEnabled(running_.load());
+    header_->setConnected(running_.load());
   }, Qt::QueuedConnection);
 }
 
@@ -213,7 +247,7 @@ void MainWindow::showCertChangedDialog(const QString& host) {
   auto btn = QMessageBox::question(this, "Droppix",
       QString("This PC's security identity changed since you paired with %1. Re-pair?").arg(host));
   if (btn == QMessageBox::Yes) tlsTrust_.clear(host.toStdString());
-  statusLabel_->setText("Not connected");
+  header_->setStatus("Not connected");
 }
 
 }  // namespace droppix

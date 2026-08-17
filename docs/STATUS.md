@@ -11,7 +11,7 @@ Living source of truth for "is this designed / planned / shipped?". Design specs
 | Core extend path (evdi → H.264 → Android MediaCodec) | **Shipped** |
 | Host GUI (Qt6 multi-session control panel) | **Shipped** — redesigned (2026-08-03) into spacedesk-style sections (Status/Connections/Interfaces/Settings/About) behind a `QStackedWidget`, with a Status hero (server ON/OFF switch + live monitors/clients/interfaces metrics + scan-to-pair), dark+light themes with a persisted in-app toggle, and previously-hidden resolution/fps/audio/orientation settings surfaced in Settings |
 | Android client (minSdk 21) | **Shipped** |
-| Linux desktop receive client (`client/`) | **Shipped** |
+| Linux desktop receive client (`client/`) | **Shipped** — redesigned (2026-08-17) to match the host GUI: header bar (logo/title/status dot/primary action/theme toggle), an idle status card instead of a blank window, and the host's `gui/style.h`+`theme.h` included directly rather than copied, so the palettes cannot drift again (the old copy already had). Dark+light with the choice persisted in `QSettings` |
 | Packaging (AppImage + Flatpak host/client, APK script) | **Shipped** |
 | macOS host backend | **Archived** (`macos/`; not in build). CGVirtualDisplay OSS research: `2026-07-18-cgvirtualdisplay-oss-research.md` |
 | Cross-desktop beyond KWin | **Partial** — M1 seam + X11 backend shipped; Sway/GNOME Wayland still open. X11 reverse-PRIME evdi (separate-GPU provider, e.g. Cinnamon/Xorg) fixed 2026-07-26: provider link + auto-enable now run concurrently with the mode-wait, not after |

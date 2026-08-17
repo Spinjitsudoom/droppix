@@ -44,8 +44,16 @@ add_executable(droppix_client
   gui/settings_dialog.cpp
   gui/video_widget.cpp
   gui/host_store.cpp
+  gui/header_bar.cpp
+  gui/idle_page.cpp
+  gui/client_theme.cpp
+  gui/resources.qrc
 )
-target_include_directories(droppix_client PRIVATE gui src)
+# ../host/gui for the shared design tokens (style.h + theme.h — header-only, no linking).
+# The palette used to be COPIED into client/gui/style.h and had already drifted: the client
+# painted its window in the host's *surface* colour. Same reuse-by-relative-path approach
+# droppix_client_core already takes with ../host/src.
+target_include_directories(droppix_client PRIVATE gui src ../host/gui)
 target_link_libraries(droppix_client PRIVATE
   droppix_client_core Qt6::Widgets Qt6::Network Qt6::Multimedia Qt6::MultimediaWidgets
 )
