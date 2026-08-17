@@ -92,4 +92,20 @@ QString ProfileStore::lastUsed() const {
   if (!f.open(QIODevice::ReadOnly)) return {};
   return QString::fromUtf8(f.readAll()).trimmed();
 }
+
+QString ProfileStore::sessionPath() const { return dir_ + "/session_settings.json"; }
+
+bool ProfileStore::saveSession(const Settings& s) {
+  return writeAll(dir_, sessionPath(), toJson(s));
+}
+
+bool ProfileStore::loadSession(Settings& out) const {
+  QFile f(sessionPath());
+  if (!f.open(QIODevice::ReadOnly)) return false;
+  const auto doc = QJsonDocument::fromJson(f.readAll());
+  if (!doc.isObject()) return false;
+  out = fromJson(doc.object());
+  return true;
+}
+
 }  // namespace droppix

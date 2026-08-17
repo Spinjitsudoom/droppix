@@ -826,15 +826,22 @@ void MainWindow::refreshProfiles() {
 
 void MainWindow::restoreLastProfile() {
   const QStringList names = store_.names();
-  if (names.isEmpty()) return;
-  QString want = store_.lastUsed();
-  if (want.isEmpty() || !names.contains(want)) want = names.first();
-  Settings s;
-  if (!store_.load(want, s)) return;
-  QSignalBlocker block(profileBox_);   // populate fired no signal; apply manually
-  profileBox_->setCurrentText(want);
-  applySettings(s);
-  store_.setLastUsed(want);
+  if (!names.isEmpty()) {
+    QString want = store_.lastUsed();
+    if (want.isEmpty() || !names.contains(want)) want = names.first();
+    Settings s;
+    if (store_.load(want, s)) {
+      QSignalBlocker block(profileBox_);   // populate fired no signal; apply manually
+      profileBox_->setCurrentText(want);
+      applySettings(s);
+      store_.setLastUsed(want);
+    }
+  }
+  // The working settings win over the profile: they are how the user actually left the app.
+  // Profiles stay an explicit Save/Load, so tweaking something and closing no longer silently
+  // reverts to whatever was saved under a profile name (or to defaults when none exists).
+  Settings session;
+  if (store_.loadSession(session)) applySettings(session);
 }
 
 void MainWindow::setupAuth() {
@@ -972,6 +979,9 @@ void MainWindow::stopServerSession() {
 }
 
 void MainWindow::scheduleServerRefresh() {
+  // Persist the working settings here as well as on close: a crash, a kill, or a logout
+  // would otherwise lose everything since the last explicit profile Save.
+  store_.saveSession(collectSettings());
   // The port is one of the settings an edit can change, and a tunnel to the old port would
   // leave the client's USB button dialling nothing. start() is idempotent unless it moved.
   if (usbEnabled_) adbTransport_.start(collectSettings().port);
@@ -1412,6 +1422,7 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     event->ignore();
     return;
   }
+  store_.saveSession(collectSettings());   // restore exactly how the user left it
   for (auto& s : sessions_.list()) if (s.controller) s.controller->stop();  // don't orphan streamers
   advertiser_.stop();
   browser_.stop();

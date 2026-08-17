@@ -46,3 +46,58 @@ TEST(ProfileStore, LastUsedRoundTrip) {
   // A fresh instance (simulating a restart) must read the persisted value.
   EXPECT_EQ(ProfileStore(tmp.path()).lastUsed(), QString("hi-q"));
 }
+
+// The working settings must persist WITHOUT an explicit profile Save. Ticking "Web client"
+// and closing used to lose it: profiles are only written by Save/Save As, and nothing
+// captured the live state, so the next launch restored an older profile (or defaults).
+TEST(ProfileStore, SessionRoundTripsWithoutANamedProfile) {
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  ProfileStore store(tmp.path());
+
+  Settings s;
+  s.webClient = true;        // the setting that prompted this
+  s.audio = false;           // default is true; prove a flip round-trips both ways
+  s.port = 27500;
+  s.fps = 24;
+  ASSERT_TRUE(store.saveSession(s));
+
+  Settings out;
+  ASSERT_TRUE(store.loadSession(out));
+  EXPECT_TRUE(out.webClient);
+  EXPECT_FALSE(out.audio);
+  EXPECT_EQ(out.port, 27500);
+  EXPECT_EQ(out.fps, 24);
+
+  EXPECT_TRUE(store.names().isEmpty()) << "the session must not appear as a named profile";
+}
+
+TEST(ProfileStore, NoSessionYetIsNotAnError) {
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  ProfileStore store(tmp.path());
+  Settings out;
+  EXPECT_FALSE(store.loadSession(out)) << "a first launch must fall back, not fail loudly";
+}
+
+// Saving the working state must never rewrite a profile the user saved deliberately.
+TEST(ProfileStore, SessionDoesNotDisturbNamedProfiles) {
+  QTemporaryDir tmp;
+  ASSERT_TRUE(tmp.isValid());
+  ProfileStore store(tmp.path());
+
+  Settings profile;
+  profile.webClient = false;
+  profile.fps = 60;
+  ASSERT_TRUE(store.save("desk", profile));
+
+  Settings session;
+  session.webClient = true;
+  session.fps = 24;
+  ASSERT_TRUE(store.saveSession(session));
+
+  Settings out;
+  ASSERT_TRUE(store.load("desk", out));
+  EXPECT_FALSE(out.webClient) << "the named profile must be untouched";
+  EXPECT_EQ(out.fps, 60);
+}

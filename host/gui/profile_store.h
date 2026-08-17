@@ -15,9 +15,19 @@ class ProfileStore {
   // Remember which profile was last in use so it can be restored on next launch.
   void setLastUsed(const QString& name);
   QString lastUsed() const;
+
+  // The working settings, independent of any named profile.
+  //
+  // Profiles are an explicit Save; without this, anything changed after the last Save was
+  // lost on exit — tick "Web client", close, and it came back unticked. Kept in its own file
+  // so restoring how you left the app never rewrites a profile you did not save.
+  bool saveSession(const Settings& s);
+  bool loadSession(Settings& out) const;
+
  private:
   QString path() const;          // <dir>/profiles.json
   QString lastUsedPath() const;  // <dir>/last_profile
+  QString sessionPath() const;   // <dir>/session_settings.json
   QString dir_;
 };
 }  // namespace droppix
