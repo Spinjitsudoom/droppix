@@ -16,6 +16,7 @@
 #include "aoa_scanner.h"
 #include "adb_transport.h"
 #include "aoa_known_store.h"
+#include "aoa_presence.h"
 #include "approved_store.h"
 #include "cert_manager.h"
 #include "audio_sink.h"
@@ -82,6 +83,7 @@ class MainWindow : public QMainWindow {
   void onTetherClientsChanged(const QList<TetherClient>& clients);
   void onAoaClientsChanged(const QList<AoaClient>& clients);
   void onAdbClientsChanged(const QList<AdbClient>& clients);
+  void dropUnpluggedUsbMonitors();   // end sessions whose USB tablet was unplugged
   void rebuildClientList();     // merge tetherClients_ + aoaClients_ + netDevices_ into devicesList_
   void onConnectToSelectedDevice();
   // Start a monitor for one specific device. quietIfBusy=true suppresses the
@@ -162,6 +164,7 @@ class MainWindow : public QMainWindow {
   QList<TetherClient> tetherClients_;   // last USB-tether-discovered clients
   QList<AoaClient> aoaClients_;   // last USB-discovered AOA tablets
   QList<AdbClient> adbClients_;   // last adb-discovered tablets (USB debugging)
+  AoaPresence aoaPresence_;       // debounced unplug detection for live USB monitors
   QTimer autoConnectTimer_;   // debounces discovery bursts before auto-connecting
   QHash<QString, qint64> pendingWakes_;
   QString flatpakHostRuntime_;         // Flatpak: host dir the streamer runtime is staged to

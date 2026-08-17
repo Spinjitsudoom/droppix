@@ -244,6 +244,14 @@ int main(int argc, char** argv) {
          preconnected});
     daemon.run_until(g_stop, frames);
     if (frames > 0) break;  // one-shot (test) mode exits after a single session
+    // Disconnect pressed on the tablet. A dropped link means "wait for them to come back",
+    // but this means "I am done": exit so the GUI's runningChanged(false) removes the
+    // monitor. Without this, AOA would immediately re-run the accessory handshake, which
+    // relaunches the app on the tablet and reconnects the session the user just ended.
+    if (tx.said_bye()) {
+      std::fprintf(stderr, "client disconnected (BYE); ending session\n");
+      break;
+    }
   }
   return 0;
 }

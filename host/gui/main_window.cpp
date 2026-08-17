@@ -585,8 +585,34 @@ void MainWindow::onTetherClientsChanged(const QList<TetherClient>& clients) {
 void MainWindow::onAoaClientsChanged(const QList<AoaClient>& clients) {
   if (!usbEnabled_) return;   // USB transport off — ignore discovery
   aoaClients_ = clients;
+  dropUnpluggedUsbMonitors();
   rebuildClientList();
   autoConnectTimer_.start();   // (re)arm the debounced auto-connect evaluation
+}
+
+// Unplugging the cable must remove the monitor, not leave a dead row behind.
+//
+// Nothing else notices: the streamer's AOA reconnect loop just retries the accessory
+// handshake forever, so its process stays alive and the session is never torn down. The
+// scanner lists accessory-mode devices, so a live tablet keeps appearing while it streams
+// and its disappearance is the unplug signal — debounced, because the accessory-mode switch
+// re-enumerates the device and a marginal cable drops it repeatedly.
+void MainWindow::dropUnpluggedUsbMonitors() {
+  QSet<QString> attached;
+  for (const auto& a : aoaClients_) attached.insert(a.serial);
+
+  QSet<QString> tracked;
+  for (const QString& key : sessions_.keys())
+    if (key.startsWith("usb-aoa:")) tracked.insert(key.mid(8));
+
+  for (const QString& serial : aoaPresence_.update(tracked, attached)) {
+    logEvent({}, "usb", LogLevel::Info,
+             QString("USB tablet %1 unplugged — removing its monitor").arg(serial));
+    // stop() ends the streamer; runningChanged(false) removes the session + its row, the
+    // same path the Stop button uses.
+    if (Session* s = sessions_.find("usb-aoa:" + serial))
+      if (s->controller) s->controller->stop();
+  }
 }
 
 // Repopulates the unified list from three sources (USB-tether first, then USB-AOA, then

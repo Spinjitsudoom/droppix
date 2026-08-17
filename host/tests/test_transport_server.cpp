@@ -192,3 +192,49 @@ TEST(TransportServer, RelistenClosesOldSocketAndSucceeds) {
   ASSERT_TRUE(s.listen(0));        // re-listen must close the old fd, not fail/leak
   EXPECT_NE(s.port(), 0);
 }
+
+// A deliberate Disconnect must be distinguishable from a link that merely dropped. The
+// streamer keeps re-serving after a drop (the tablet is expected back), so without this the
+// monitor would survive a Disconnect — and over USB the host would re-run the accessory
+// handshake, relaunching the app the user just left.
+TEST(TransportServer, ByeMarksADeliberateDisconnect) {
+  TransportServer s;
+  auto fake = std::make_unique<FakeChannel>();
+  fake->to_recv = encode_message(MsgType::Bye, {});
+  s.adopt_channel(std::move(fake), "test");
+
+  EXPECT_FALSE(s.said_bye());
+  s.poll_control();
+  EXPECT_TRUE(s.said_bye());
+  EXPECT_FALSE(s.connected()) << "BYE must close the channel, not just flag it";
+}
+
+// A dropped socket is NOT a Bye: the streamer must keep waiting for the client to return.
+TEST(TransportServer, DroppedLinkIsNotABye) {
+  TransportServer s;
+  auto fake = std::make_unique<FakeChannel>();
+  fake->to_recv = {};            // recv() returns 0 => peer went away
+  s.adopt_channel(std::move(fake), "test");
+
+  s.poll_control();
+  EXPECT_FALSE(s.said_bye()) << "an ordinary disconnect must not be treated as Disconnect";
+}
+
+// Messages already parsed ahead of a BYE still dispatch; anything after it is irrelevant
+// because the channel is gone. Guards against the early return skipping real input.
+TEST(TransportServer, MessagesBeforeByeStillDispatch) {
+  TransportServer s;
+  auto fake = std::make_unique<FakeChannel>();
+  auto scroll = encode_message(MsgType::Scroll, encode_scroll(1, 2, 3, 4));
+  auto bye = encode_message(MsgType::Bye, {});
+  scroll.insert(scroll.end(), bye.begin(), bye.end());
+  fake->to_recv = scroll;
+  s.adopt_channel(std::move(fake), "test");
+
+  bool scrolled = false;
+  s.set_scroll_handler([&](int16_t, int16_t, uint16_t, uint16_t) { scrolled = true; });
+  s.poll_control();
+
+  EXPECT_TRUE(scrolled);
+  EXPECT_TRUE(s.said_bye());
+}

@@ -138,6 +138,10 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             touchEnabled = !touchEnabled
             refresh()
         }
+        findViewById<Button>(R.id.act_disconnect).setOnClickListener {
+            collapse()
+            disconnect()
+        }
     }
 
     /**
@@ -156,6 +160,25 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         // The floating button sits above the panel, so it stays tappable while the panel is
         // open — re-seed it rather than leaving its switch showing the previous value.
         openedSettingsPanel?.refreshFromStore()
+    }
+
+    /**
+     * End the session on purpose and go back to the connect screen.
+     *
+     * Just leaving the Activity is not enough: the host cannot tell a deliberate exit from a
+     * dropped link, so it keeps the monitor and waits — and over USB it re-runs the accessory
+     * handshake, which relaunches this app and reconnects the session the user just ended.
+     * BYE says "I am done", and the host tears the monitor down.
+     *
+     * Sent off the UI thread because sendBye() waits for the write to leave, and stopping the
+     * session joins the net thread.
+     */
+    private fun disconnect() {
+        val c = client
+        thread(name = "droppix-bye") {
+            try { c?.sendBye() } catch (_: Exception) { /* going away regardless */ }
+            runOnUiThread { finish() }
+        }
     }
 
     /** Push display-only settings onto the live view. No protocol involvement. */

@@ -255,6 +255,7 @@ if(Qt6_FOUND)
     gui/tests/test_aoa_known_store.cpp
     gui/aoa_known_store.cpp
     gui/tests/test_adb_transport.cpp
+  gui/tests/test_aoa_presence.cpp
     gui/adb_transport.cpp
     gui/tests/test_log_classify.cpp
     gui/log_classify.cpp

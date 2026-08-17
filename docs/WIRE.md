@@ -25,7 +25,7 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 3 | Video | host → client | H.264 Annex-B AU + pts + keyframe flag |
 | 4 | Ping | either | Latency / liveness |
 | 5 | Pong | either | Echo |
-| 6 | Bye | either | Clean shutdown |
+| 6 | Bye | either | Deliberate disconnect (empty body) — see below |
 | 7 | Input | client → host | Legacy single-pointer input |
 | 8 | Orientation | client → host | Physical orientation |
 | 9 | Audio | host → client | PCM audio chunks |
@@ -39,6 +39,24 @@ Single TCP (or AOA byte-channel) connection. Every message:
 | 17 | StreamParams | client → host | live fps / bitrate / audio change on the running session |
 | 20 | Pair | client → host | **WSS only** — 6 ASCII digits of the code shown on the PC |
 | 21 | PairResult | host → client | **WSS only** — `[ ok u8 ][ tries_left u8 ]` |
+
+### Deliberate disconnect (type 6)
+
+Empty body, client → host when the user presses **Disconnect** in the client's floating menu.
+
+The host cannot otherwise tell a deliberate exit from a dropped link, and it treats those
+oppositely: a drop is assumed temporary, so the streamer keeps the session and waits for the
+tablet to dial back in. `Bye` closes the channel *and* ends the reconnect loop, so the
+streamer exits and the host GUI removes the monitor.
+
+This matters most over USB/AOA, where the reconnect loop re-runs the accessory handshake —
+that relaunches the client app on the tablet and re-establishes the very session the user
+just ended.
+
+The client must ensure the message actually leaves before tearing the connection down; a
+`Bye` still sitting in a send queue is indistinguishable from never having sent one.
+
+Back-compatible: older hosts ignore the unknown type and fall back to drop handling.
 
 ### Keyframe recovery (type 16)
 

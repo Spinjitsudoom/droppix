@@ -152,7 +152,14 @@ void TransportServer::poll_control() {
   parser_.feed(buf, static_cast<size_t>(n));
   ParsedMessage m;
   while (parser_.next(m)) {
-    if (m.type == MsgType::Ping) {
+    if (m.type == MsgType::Bye) {
+      // The user pressed Disconnect on the tablet. Distinct from the socket simply dropping:
+      // a drop is assumed temporary and the streamer waits for the client to come back, but
+      // this says "I am done", so the caller tears the session down instead of re-serving it.
+      said_bye_ = true;
+      close_all();
+      return;
+    } else if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
     } else if (m.type == MsgType::StreamParams) {
       // Latch the newest request; the stream loop applies it between frames. Coalescing by

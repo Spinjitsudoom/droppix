@@ -80,6 +80,26 @@ class TransportClient {
         submitSend(o, Protocol.encodeMessage(MsgType.KEYFRAME_REQUEST, ByteArray(0)))
     }
 
+    /**
+     * Tell the host this is a deliberate disconnect, and wait for it to actually leave.
+     *
+     * Unlike every other send this one cannot be fire-and-forget: the caller tears the
+     * session down immediately afterwards, and a BYE still queued on the sender would die
+     * with the socket. The host would then see an ordinary dropped link, assume the tablet
+     * is coming back, and keep the monitor alive — over USB it would even re-run the
+     * accessory handshake and relaunch the app the user just left.
+     *
+     * `sender` is single-threaded, so draining a no-op behind the write proves the BYE went
+     * out. Blocks briefly — call it off the UI thread.
+     */
+    fun sendBye() {
+        val o = out ?: return
+        submitSend(o, Protocol.encodeMessage(MsgType.BYE, ByteArray(0)))
+        try {
+            sender.submit { }.get(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (_: Exception) { /* best effort — we are disconnecting either way */ }
+    }
+
     fun sendPen(x: Int, y: Int, pressure: Int, flags: Int) {
         val o = out ?: return
         val msg = Protocol.encodeMessage(MsgType.PEN, Protocol.encodePen(x, y, pressure, flags))

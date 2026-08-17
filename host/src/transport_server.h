@@ -76,6 +76,10 @@ class TransportServer {
     pen_handler_ = std::move(h);
   }
   bool connected() const { return channel_ && channel_->connected(); }
+
+  // True once a client sent BYE — a deliberate Disconnect, not a dropped link. The reconnect
+  // loop uses this to stop serving rather than waiting for the tablet to dial back in.
+  bool said_bye() const { return said_bye_; }
   // Unacknowledged bytes queued to the client; see ByteChannel::pending_bytes. Used to
   // pace capture against a slow link (a blocking send can't reveal that on its own).
   size_t pending_bytes() const { return channel_ ? channel_->pending_bytes() : 0; }
@@ -104,6 +108,7 @@ class TransportServer {
   SSL_CTX* ctx_ = nullptr;
   bool keyframe_requested_ = false;
   bool params_pending_ = false;
+  bool said_bye_ = false;          // client sent BYE: a deliberate disconnect, not a drop
   StreamParamsRequest params_{};
   std::unique_ptr<ByteChannel> channel_;   // the live client connection (socket or AOA)
 };
