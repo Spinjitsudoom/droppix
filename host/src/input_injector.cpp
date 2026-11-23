@@ -24,7 +24,7 @@ void emit(int fd, int type, int code, int val) {
 }  // namespace
 
 bool InputInjector::open(const std::string& name) {
-  fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+  fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (fd_ < 0) { std::fprintf(stderr, "uinput open failed (need root); input disabled\n"); return false; }
 
   // Declare a multi-touch TOUCHSCREEN (evdev protocol B, absolute/direct) rather than a bare
@@ -59,7 +59,7 @@ bool InputInjector::open(const std::string& name) {
   }
 
   // Keyboard device (non-fatal on failure: touch stays primary, keyboard is optional).
-  kb_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+  kb_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (kb_fd_ >= 0) {
     ioctl(kb_fd_, UI_SET_EVBIT, EV_KEY);
     for (int code = 1; code < 256; ++code) ioctl(kb_fd_, UI_SET_KEYBIT, code);
@@ -76,7 +76,7 @@ bool InputInjector::open(const std::string& name) {
 
   // Pen/stylus device (non-fatal): a graphics tablet (BTN_TOOL_PEN + pressure), DIRECT +
   // ABS 0..65535, bound to the droppix output by stream_daemon so 0..65535 spans it.
-  pen_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+  pen_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (pen_fd_ >= 0) {
     ioctl(pen_fd_, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
     ioctl(pen_fd_, UI_SET_EVBIT, EV_KEY);
@@ -142,7 +142,7 @@ void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
   deskW_ = desktop_w; deskH_ = desktop_h;
   if (rc_fd_ >= 0 || deskW_ <= 0 || deskH_ <= 0) return;   // created once; needs desktop bounds
 
-  rc_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+  rc_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (rc_fd_ < 0) { std::fprintf(stderr, "right-click: uinput open failed; disabled\n"); return; }
   // Absolute pointer spanning the whole desktop; we place it in desktop pixels + click RIGHT.
   ioctl(rc_fd_, UI_SET_PROPBIT, INPUT_PROP_DIRECT);

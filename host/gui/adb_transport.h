@@ -1,6 +1,9 @@
 #pragma once
 #include <QList>
 #include <QObject>
+#include <QElapsedTimer>
+#include <QPointer>
+#include <QProcess>
 #include <QSet>
 #include <QString>
 #include <QTimer>
@@ -60,6 +63,8 @@ class AdbTransport : public QObject {
   void resolveModel(const QString& serial);
 
   QTimer timer_;
+  QPointer<QProcess> polling_;   // the in-flight `adb devices`, if any
+  QElapsedTimer pollClock_;
   int port_ = 0;
   bool adbMissing_ = false;      // stop nagging once we know adb is not installed
   QSet<QString> tunnelled_;      // serials currently carrying our reverse tunnel

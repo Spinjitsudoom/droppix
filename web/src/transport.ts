@@ -51,6 +51,8 @@ export class Transport {
   private hello: HelloArgs | null = null;
   private paired = false;
   private helloTimer: number | null = null;
+  // One HELLO per connection: the settings frame and the fallback timer can both fire.
+  private helloSent = false;
 
   constructor(private handlers: TransportHandlers) {}
 
@@ -178,7 +180,8 @@ export class Transport {
 
   private sendHello(): void {
     const h = this.hello;
-    if (!h || !this.ws) return;
+    if (!h || !this.ws || this.ws.readyState !== WebSocket.OPEN || this.helloSent) return;
+    this.helloSent = true;
     const body = encodeHello(
       kProtocolVersion,
       h.width,
@@ -195,6 +198,7 @@ export class Transport {
     );
     this.ws.send(frameMessage(MsgType.Hello, body));
     this.handlers.onStatus("Connected - waiting for CONFIG");
+    this.clearPing();
     this.pingTimer = window.setInterval(() => {
       this.send(MsgType.Ping, new Uint8Array());
     }, 2000);
@@ -207,6 +211,12 @@ export class Transport {
 
   close(): void {
     this.clearPing();
+    // A pending fallback HELLO would otherwise fire on the NEXT connection's socket.
+    if (this.helloTimer !== null) {
+      clearTimeout(this.helloTimer);
+      this.helloTimer = null;
+    }
+    this.helloSent = false;
     const ws = this.ws;
     this.ws = null; // detach first so late events from this socket are ignored
     if (ws) {

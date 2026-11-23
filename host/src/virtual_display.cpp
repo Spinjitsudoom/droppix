@@ -1,6 +1,7 @@
 #include "virtual_display.h"
 #include <sys/file.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cstdio>
@@ -40,6 +41,22 @@ int claim_available_node(int* lock_fd) {
   }
   return -1;
 }
+
+// kmod-evdi installs the module but nothing loads it at boot, and evdi_add_device() needs
+// /sys/devices/evdi to exist. Without this the streamer ran but no monitor ever appeared.
+void ensure_evdi_module() {
+  if (::access("/sys/devices/evdi/add", F_OK) == 0) return;
+  std::fprintf(stderr, "evdi module not loaded; running modprobe evdi\n");
+  const pid_t pid = ::fork();
+  if (pid == 0) {
+    ::execlp("modprobe", "modprobe", "evdi", static_cast<char*>(nullptr));
+    ::_exit(127);
+  }
+  if (pid > 0) {
+    int status = 0;
+    ::waitpid(pid, &status, 0);
+  }
+}
 }  // namespace
 
 bool VirtualDisplay::open() {
@@ -48,6 +65,7 @@ bool VirtualDisplay::open() {
   ::mkdir(kLockDir, 0755);
   int glock = ::open("/run/droppix/select.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0600);
   if (glock >= 0) ::flock(glock, LOCK_EX);
+  ensure_evdi_module();
 
   node_ = claim_available_node(&lock_fd_);
   if (node_ < 0) {

@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <exception>
 #include <vector>
 
 #include "jpeg_stripe_encoder.h"
@@ -202,7 +203,12 @@ void SpacedeskServer::run() {
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
     client_connected_.store(true);
-    serve_client(fd);
+    try {
+      serve_client(fd);
+    } catch (const std::exception& e) {
+      // An escaping exception on this thread is std::terminate for the whole streamer.
+      std::fprintf(stderr, "spacedesk: viewer session failed: %s\n", e.what());
+    }
     client_connected_.store(false);
     ::close(fd);
     std::fprintf(stderr, "spacedesk: viewer disconnected (%s)\n", ip);
@@ -217,6 +223,13 @@ void SpacedeskServer::serve_client(int fd) {
   if (!recv_exact(fd, hdr, kHeaderSize, 10000)) return;
   Header h;
   if (!parse_header(hdr, kHeaderSize, h)) return;
+  // Unauthenticated peer-supplied length: an uncapped allocation threw bad_alloc on this
+  // thread and std::terminate took down the streamer and every session in it.
+  constexpr uint32_t kMaxHelloPayload = 64 * 1024;
+  if (h.payload_len > kMaxHelloPayload) {
+    std::fprintf(stderr, "spacedesk: hello payload %u too large, dropping\n", h.payload_len);
+    return;
+  }
   std::vector<unsigned char> body(h.payload_len);
   if (h.payload_len && !recv_exact(fd, body.data(), body.size(), 10000)) return;
 
@@ -228,6 +241,10 @@ void SpacedeskServer::serve_client(int fd) {
   const int w = static_cast<int>(hello.width);
   const int disp_h = static_cast<int>(hello.height);
   std::fprintf(stderr, "spacedesk: viewer screen %dx%d\n", w, disp_h);
+  if (w < 160 || disp_h < 160 || w > 7680 || disp_h > 7680) {
+    std::fprintf(stderr, "spacedesk: refusing implausible screen size\n");
+    return;
+  }
 
   // 2. Replay the real server's opening sequence: ack, two display messages, two
   // heartbeats. The viewer stays connected with its display OFF until it gets these —

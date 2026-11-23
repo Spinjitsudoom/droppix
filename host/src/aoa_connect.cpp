@@ -56,10 +56,23 @@ std::unique_ptr<AoaChannel> claim_accessory(libusb_context* ctx, libusb_device_h
   return std::make_unique<AoaChannel>(ctx, a, ep_in, ep_out);  // AoaChannel owns ctx + a
 }
 
-libusb_device_handle* open_accessory(libusb_context* ctx) {
-  libusb_device_handle* a = libusb_open_device_with_vid_pid(ctx, GOOGLE_VID, ACC_PID1);
-  if (!a) a = libusb_open_device_with_vid_pid(ctx, GOOGLE_VID, ACC_PID0);
-  return a;
+// The accessory-mode device for `serial` (Android keeps its USB serial across the switch).
+// Not just the first 18d1:2d0x on the bus: with two tablets plugged in, that could be the
+// other session's tablet.
+libusb_device_handle* open_accessory(libusb_context* ctx, const std::string& serial) {
+  libusb_device_handle* found = nullptr;
+  libusb_device** list;
+  const ssize_t cnt = libusb_get_device_list(ctx, &list);
+  for (ssize_t i = 0; i < cnt && !found; ++i) {
+    libusb_device_descriptor d;
+    if (libusb_get_device_descriptor(list[i], &d)) continue;
+    if (d.idVendor != GOOGLE_VID || (d.idProduct != ACC_PID0 && d.idProduct != ACC_PID1)) continue;
+    libusb_device_handle* h = nullptr;
+    if (libusb_open(list[i], &h) != 0) continue;
+    if (device_matches(h, d, serial)) found = h; else libusb_close(h);
+  }
+  if (cnt >= 0) libusb_free_device_list(list, 1);
+  return found;
 }
 
 }  // namespace
@@ -73,23 +86,18 @@ std::unique_ptr<AoaChannel> aoa_connect(const std::string& serial) {
   // time, which relaunches the tablet app and — on older hardware — can drop the device
   // off the bus entirely ("Device not responding to setup address", error -71). Only if
   // the claim fails (a genuinely wedged session) do we reset and redo the handshake.
-  if (libusb_device_handle* acc = open_accessory(ctx)) {
-    libusb_device_descriptor d{};
-    libusb_get_device_descriptor(libusb_get_device(acc), &d);
-    if (device_matches(acc, d, serial)) {
-      std::fprintf(stderr, "aoa: adopting device already in accessory mode\n");
-      if (auto ch = claim_accessory(ctx, acc, 0)) return ch;   // closes acc on failure
-      // OUR device, but wedged (claim/endpoints failed): reset it back to normal mode
-      // so the handshake below can run fresh.
-      if (libusb_device_handle* stuck = open_accessory(ctx)) {
-        std::fprintf(stderr, "aoa: accessory claim failed; resetting for a fresh handshake\n");
-        libusb_reset_device(stuck);
-        libusb_close(stuck);
-        timespec ts{1, 500 * 1000 * 1000};  // give it time to re-enumerate to the default config
-        nanosleep(&ts, nullptr);
-      }
-    } else {
-      libusb_close(acc);   // another session's accessory (multi-monitor): leave it alone
+  // open_accessory only returns OUR tablet, so another session's accessory is left alone.
+  if (libusb_device_handle* acc = open_accessory(ctx, serial)) {
+    std::fprintf(stderr, "aoa: adopting device already in accessory mode\n");
+    if (auto ch = claim_accessory(ctx, acc, 0)) return ch;   // closes acc on failure
+    // OUR device, but wedged (claim/endpoints failed): reset it back to normal mode
+    // so the handshake below can run fresh.
+    if (libusb_device_handle* stuck = open_accessory(ctx, serial)) {
+      std::fprintf(stderr, "aoa: accessory claim failed; resetting for a fresh handshake\n");
+      libusb_reset_device(stuck);
+      libusb_close(stuck);
+      timespec ts{1, 500 * 1000 * 1000};  // give it time to re-enumerate to the default config
+      nanosleep(&ts, nullptr);
     }
   }
 
@@ -105,7 +113,7 @@ std::unique_ptr<AoaChannel> aoa_connect(const std::string& serial) {
     if (libusb_open(list[i], &hh) != 0) continue;
     if (device_matches(hh, d, serial)) h = hh; else libusb_close(hh);
   }
-  libusb_free_device_list(list, 1);
+  if (cnt >= 0) libusb_free_device_list(list, 1);   // list is unset when enumeration fails
   if (!h) { libusb_exit(ctx); return nullptr; }
 
   // 2) Query AOA support, send our identification strings, start accessory mode.
@@ -128,7 +136,7 @@ std::unique_ptr<AoaChannel> aoa_connect(const std::string& serial) {
   for (int tries = 0; tries < 50 && !a; ++tries) {
     timespec ts{0, 100 * 1000 * 1000};
     nanosleep(&ts, nullptr);
-    a = open_accessory(ctx);
+    a = open_accessory(ctx, serial);
   }
   if (!a) { libusb_exit(ctx); return nullptr; }
   auto ch = claim_accessory(ctx, a, proto);

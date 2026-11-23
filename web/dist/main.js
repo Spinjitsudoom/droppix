@@ -137,6 +137,8 @@ var Transport = class {
   hello = null;
   paired = false;
   helloTimer = null;
+  // One HELLO per connection: the settings frame and the fallback timer can both fire.
+  helloSent = false;
   connect(hello) {
     this.close();
     this.hello = hello;
@@ -242,7 +244,8 @@ var Transport = class {
   }
   sendHello() {
     const h = this.hello;
-    if (!h || !this.ws) return;
+    if (!h || !this.ws || this.ws.readyState !== WebSocket.OPEN || this.helloSent) return;
+    this.helloSent = true;
     const body = encodeHello(
       kProtocolVersion,
       h.width,
@@ -259,6 +262,7 @@ var Transport = class {
     );
     this.ws.send(frameMessage(MsgType.Hello, body));
     this.handlers.onStatus("Connected - waiting for CONFIG");
+    this.clearPing();
     this.pingTimer = window.setInterval(() => {
       this.send(MsgType.Ping, new Uint8Array());
     }, 2e3);
@@ -269,6 +273,11 @@ var Transport = class {
   }
   close() {
     this.clearPing();
+    if (this.helloTimer !== null) {
+      clearTimeout(this.helloTimer);
+      this.helloTimer = null;
+    }
+    this.helloSent = false;
     const ws = this.ws;
     this.ws = null;
     if (ws) {
@@ -989,6 +998,9 @@ var MseVideoPipeline = class {
   queue = [];
   busy = false;
   closed = false;
+  // Set by fail(): a SourceBuffer error or unsupported codec cannot recover, so stop
+  // queueing (unbounded memory) and stop asking for a keyframe on every frame.
+  dead = false;
   lastError = "";
   requestKeyframe = null;
   displayW = 1280;
@@ -1147,6 +1159,7 @@ var MseVideoPipeline = class {
     }
   }
   enqueue(buf) {
+    if (this.dead) return;
     this.queue.push(buf);
     this.flush();
   }
@@ -1188,6 +1201,7 @@ var MseVideoPipeline = class {
         sb.remove(start, cutoff);
       }
     } catch {
+      this.busy = false;
     }
   }
   trimHard() {
@@ -1204,11 +1218,15 @@ var MseVideoPipeline = class {
         sb.remove(start, cutoff);
       }
     } catch {
+      this.busy = false;
     }
   }
   fail(msg) {
     this.lastError = msg;
-    this.onInfo?.(`MSE: ${msg}`);
+    if (this.dead) return;
+    this.dead = true;
+    this.queue = [];
+    this.onInfo?.(`MSE: ${msg} \u2014 try the WebCodecs renderer in Settings`);
     this.requestKeyframe?.();
   }
   close() {
@@ -1229,6 +1247,7 @@ var MseVideoPipeline = class {
     this.prev = null;
     this.started = false;
     this.busy = false;
+    this.dead = false;
     this.sps = void 0;
     this.pps = void 0;
     this.firstPtsUs = null;

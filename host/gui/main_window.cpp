@@ -128,9 +128,16 @@ std::string MainWindow::resolveStreamBin() {
   const QString srcWeb = appdir + "/usr/share/droppix/web";
   const QString dstWeb = runtime + "/web";
 
-  // (Re)extract only when the destination is missing or older than the bundled copy.
-  if (!QFileInfo::exists(dstBin) ||
-      QFileInfo(dstBin).lastModified() < QFileInfo(srcBin).lastModified()) {
+  // (Re)extract whenever the staged streamer is not byte-identical to this AppImage's.
+  // Comparing mtimes was wrong: the copy is stamped at extraction time, so after running a
+  // newer AppImage an older one (or a rebuild minutes later) kept the other build's streamer.
+  const auto sameBytes = [](const QString& a, const QString& b) {
+    QFile fa(a), fb(b);
+    if (fa.size() != fb.size()) return false;
+    if (!fa.open(QIODevice::ReadOnly) || !fb.open(QIODevice::ReadOnly)) return false;
+    return fa.readAll() == fb.readAll();
+  };
+  if (!QFileInfo::exists(dstBin) || !sameBytes(srcBin, dstBin)) {
     QDir().mkpath(runtime + "/bin");
     QDir().mkpath(dstLib);
     copyOver(srcBin, dstBin);
@@ -190,7 +197,10 @@ MainWindow::MainWindow(QWidget* parent)
       knownAoa_(configDir()),
       cert_(configDir()) {
   streamBin_ = resolveStreamBin();
-  cert_.regenerate();   // fresh cert => new pairing code every launch (per-restart rotation)
+  // Fresh cert => new pairing code every launch (per-restart rotation).
+  if (!cert_.regenerate())
+    qWarning("TLS certificate generation failed (is `openssl` installed?) — the server "
+             "and Wi-Fi pairing will not work until it succeeds");
   stageCertsToHost();   // Flatpak: mirror cert/key to the host for the streamer (else no-op)
   // Build version in the title bar so a running instance is always identifiable at a
   // glance (git describe, e.g. "Droppix  v0.1.0-121-ge6bd3ca") even when the UI is unchanged.
@@ -632,6 +642,7 @@ void MainWindow::dropUnpluggedUsbMonitors() {
 // UserRole = transport; UserRole+1 = ident (net address, or AOA serial);
 // UserRole+2 = net wake port (0 for AOA); UserRole+3 = id (device id, or AOA serial).
 void MainWindow::onAdbClientsChanged(const QList<AdbClient>& clients) {
+  if (!usbEnabled_ && !clients.isEmpty()) return;   // USB transport off — ignore discovery
   adbClients_ = clients;
   rebuildClientList();
   autoConnectTimer_.start();
@@ -719,7 +730,10 @@ bool MainWindow::connectDevice(const QString& key, const QString& label, const Q
     if (!quietIfBusy) QMessageBox::information(this, "Droppix", "That device already has an active monitor.");
     return false;
   }
-  const int port = sessions_.allocatePort(collectSettings().port);
+  // While the Server is on, the base port is its listener's even between re-arms: an AOA
+  // session (which needs no TCP port) taking it pushed the listener to base+1, leaving the
+  // mDNS advert and the adb tunnel pointing at a port with nothing listening.
+  const int port = sessions_.allocatePort(collectSettings().port, /*reserveBase=*/serverEnabled_);
   if (port < 0) { if (!quietIfBusy) QMessageBox::information(this, "Droppix", "Monitor limit reached (4)."); return false; }
   std::function<void()> direct;
   if (transport == "usb-aoa") {
@@ -1312,10 +1326,15 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
         return;
       }
       if (approved_.isApproved(akey)) { onApproved(); c->writeLine("approve " + akey); return; }
+      // The dialog runs a nested event loop: if the session ends meanwhile (unplug, USB
+      // takeover, streamer crash) its controller is deleteLater'd inside it.
+      QPointer<StreamController> pc(c);
       auto btn = QMessageBox::question(this, "Allow connection?",
           QString("Allow \"%1\" (%2) to connect?").arg(name.isEmpty() ? ip : name, ip));
-      if (btn == QMessageBox::Yes) { approved_.approve(akey); onApproved(); c->writeLine("approve " + akey); }
-      else c->writeLine("deny " + akey);
+      if (btn == QMessageBox::Yes) approved_.approve(akey);
+      if (!pc) return;
+      if (btn == QMessageBox::Yes) { onApproved(); pc->writeLine("approve " + akey); }
+      else pc->writeLine("deny " + akey);
     });
 }
 
@@ -1361,12 +1380,23 @@ void MainWindow::toggleSelectedMonitorMirror() {
   // stop()'s waitForFinished, so both lambdas fire before stop() even returns;
   // kill() (>3s) fires runningChanged(false) asynchronously later, and this
   // handler simply waits for it.
+  // The Server listener's own session: its teardown would re-arm a second listener, and the
+  // respawn below would no longer be tracked as the Server. Suppress the re-arm (as
+  // refreshServer does) and hand the Server role to the respawned session.
+  const bool isServer = (key == serverKey_);
+  if (isServer) serverRefreshing_ = true;
   connect(c, &StreamController::runningChanged, this,
-      [this, key, label, transport, port, id, newMirror](bool r) {
+      [this, key, label, transport, port, id, newMirror, isServer](bool r) {
         // Safe one-shot: the session is already running when we connect this (c->stop()
         // is called below, after this connect), so the next runningChanged edge is always
         // false (stopped) — this guard never eats the single shot on a spurious `true`.
         if (r) return;   // only act on the stopped (false) edge
+        if (isServer) {
+          serverRefreshing_ = false;
+          if (!serverEnabled_) return;   // Server switched off meanwhile: don't resurrect it
+          serverKey_ = key;
+          serverStartMs_ = QDateTime::currentMSecsSinceEpoch();
+        }
         startSession(key, label, transport, port, id, {}, newMirror);
       }, Qt::SingleShotConnection);
 
@@ -1423,7 +1453,11 @@ void MainWindow::closeEvent(QCloseEvent* event) {
     return;
   }
   store_.saveSession(collectSettings());   // restore exactly how the user left it
-  for (auto& s : sessions_.list()) if (s.controller) s.controller->stop();  // don't orphan streamers
+  // Don't orphan streamers. stop() waits for the process, so `finished` (and the teardown
+  // that removes the session from sessions_) fires inside it: iterate a copy, not the list.
+  QList<QPointer<StreamController>> controllers;
+  for (const auto& s : sessions_.list()) if (s.controller) controllers << s.controller;
+  for (const auto& c : controllers) if (c) c->stop();
   advertiser_.stop();
   browser_.stop();
   tetherScanner_.stop();

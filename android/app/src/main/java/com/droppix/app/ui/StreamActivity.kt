@@ -19,6 +19,7 @@ import android.hardware.usb.UsbAccessory
 import android.hardware.usb.UsbManager
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import com.droppix.app.R
 import com.droppix.app.audio.AudioPlayer
 import com.droppix.app.decode.VideoDecoder
@@ -32,8 +33,12 @@ import com.droppix.app.stats.StatsSink
 import kotlin.concurrent.thread
 
 class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
-    private companion object {
-        const val TAG = "droppix"
+    companion object {
+        private const val TAG = "droppix"
+        private val aoaInstances = java.util.concurrent.atomic.AtomicInteger(0)
+        // An accessory can only be opened once; ConnectActivity must not start a second stream
+        // screen for it while one (e.g. the system-launched one, in its own task) exists.
+        val aoaSessionActive: Boolean get() = aoaInstances.get() > 0
     }
 
     private val host by lazy { intent.getStringExtra("host") ?: "127.0.0.1" }
@@ -43,7 +48,14 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         intent.getParcelableExtra(UsbManager.EXTRA_ACCESSORY)
     }
 
-    @Volatile private var running = false
+    // Run flag of the CURRENT session. Each session gets its own, so a previous network thread
+    // still stuck in I/O after stopStreaming() gave up on it cannot keep looping into (or
+    // clear the fields of) the session that replaced it.
+    @Volatile private var live: AtomicBoolean? = null
+    // The AOA read stream, so stopStreaming() can close it: an accessory read has no timeout
+    // and the host sends nothing on a static silent screen. Closing the FileInputStream
+    // signals the blocked reader.
+    @Volatile private var aoaIn: FileInputStream? = null
     @Volatile private var rotationLocked = false
     @Volatile private var localOverlayWanted = false
 
@@ -252,6 +264,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (aoaAccessory != null) aoaInstances.incrementAndGet()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_stream)
         // Don't let the IME resize/pan the window when it appears: the surface is a fixed-size
@@ -360,6 +373,11 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         stopStreaming()
     }
 
+    override fun onDestroy() {
+        if (aoaAccessory != null) aoaInstances.decrementAndGet()
+        super.onDestroy()
+    }
+
     // --- GlDisplayView.SurfaceListener (UI thread) ---
     override fun onSurfaceReady(surface: Surface) {
         this.surface = surface
@@ -372,8 +390,9 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     }
 
     private fun startStreaming() {
-        if (running) return
-        running = true
+        if (live?.get() == true) return
+        val running = AtomicBoolean(true)
+        live = running
         // Fresh load each time we start: returning from SettingsActivity resumes the Activity,
         // and the onResume -> setSurfaceListener -> onSurfaceReady -> startStreaming path re-reads
         // the just-saved settings here, so a settings change made mid-stream reconnects with the
@@ -402,9 +421,19 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             var sawVideo = false
             val player = AudioPlayer().apply { start() }
             audioPlayer = player
+            // This session's decoder. The shared `decoder` field is only cleared while it still
+            // points here, so a late-exiting thread can't release its successor's decoder.
+            var ownDecoder: VideoDecoder? = null
+            fun dropDecoder() {
+                val d = ownDecoder ?: return
+                ownDecoder = null
+                if (decoder === d) decoder = null
+                d.release()
+            }
             val listener = object : StreamListener {
                 override fun onConfig(config: Protocol.Config) {
                     Log.i(TAG, "CONFIG ${config.width}x${config.height}@${config.fps}")
+                    if (!running.get()) return
                     c.sendOrientation(orientationMapper.currentCode())  // sync host to current orientation
                     val s = surface ?: return
                     runOnUiThread {
@@ -420,20 +449,21 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                         // letterboxing it was written for.
                         surfaceView.setVideoSize(config.width, config.height)
                     }
-                    decoder?.release()
-                    decoder = try {
+                    dropDecoder()
+                    ownDecoder = try {
                         VideoDecoder(s, config.width, config.height, stats).also { d ->
                             // A dropped NAL breaks the reference chain; ask the host for an
                             // IDR instead of showing corruption until its next scheduled one.
-                            d.onNeedKeyframe = { client?.sendKeyframeRequest() }
+                            d.onNeedKeyframe = { c.sendKeyframeRequest() }
                         }
                     } catch (e: Exception) {
                         Log.w(TAG, "decoder create failed: ${e.message}"); null
                     }
+                    decoder = ownDecoder
                 }
                 override fun onVideo(video: Protocol.Video) {
                     sawVideo = true
-                    decoder?.submit(video.nal, video.ptsUs)
+                    ownDecoder?.submit(video.nal, video.ptsUs)
                 }
                 override fun onAudio(pcm: ByteArray) { if (audioEnabled) player.submit(pcm) }
                 override fun onOverlay(show: Boolean) {
@@ -454,65 +484,72 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                 // mid-claim EIOs the first read (M0: opening late, after a manual tap, avoided it).
                 Thread.sleep(1200)
                 var attempt = 0
-                while (running && attempt < 20) {
+                while (running.get() && attempt < 20) {
                     attempt++
                     sawVideo = false
                     val pfd = usb.openAccessory(acc)
                     if (pfd == null) { Log.w(TAG, "aoa: openAccessory null ($attempt)"); Thread.sleep(200); continue }
+                    val input = FileInputStream(pfd.fileDescriptor)
+                    aoaIn = input
+                    // stopStreaming() may have run between the open and publishing `input`.
+                    if (!running.get()) { aoaIn = null; try { pfd.close() } catch (_: Exception) {}; break }
                     try {
                         Log.i(TAG, "aoa: streaming (attempt $attempt)")
-                        c.runOverChannel(FileInputStream(pfd.fileDescriptor),
+                        c.runOverChannel(input,
                             FileOutputStream(pfd.fileDescriptor), sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
                             sendBitrate,
                             settings.wallCol, settings.wallRow,
-                            listener, { running }, stats,
+                            listener, { running.get() }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity))
                         Log.i(TAG, "aoa: session ended")
                     } catch (e: Exception) {
                         Log.w(TAG, "aoa: attempt $attempt ended: ${e.message}")
                     } finally {
-                        decoder?.release(); decoder = null
+                        dropDecoder()
+                        if (aoaIn === input) aoaIn = null
+                        try { input.close() } catch (_: Exception) {}
                         try { pfd.close() } catch (_: Exception) {}
                     }
                     if (sawVideo) attempt = 0  // real session ended -> reconnect with a fresh budget
                     Thread.sleep(200)
                 }
-                running = false
-                runOnUiThread { finish() }
+                // Only a session that ran out of retries (an unplug) leaves the screen; a stop
+                // from onPause must not finish an Activity that is about to resume.
+                if (running.getAndSet(false)) runOnUiThread { finish() }
             } else {
                 // The host re-accepts clients in a loop, so keep dialing until paused.
-                while (running) {
+                while (running.get()) {
                     try {
                         Log.i(TAG, "connecting to $host:$port")
                         c.run(host, port, sendW, sendH,
                             resources.displayMetrics.densityDpi, sendFps, sendAudio, orientationMapper.currentCode(),
                             sendBitrate,
                             settings.wallCol, settings.wallRow,
-                            listener, { running }, stats,
+                            listener, { running.get() }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
                             id = DeviceIdentity.stableId(this@StreamActivity),
                             tlsTrust = tlsTrust)
                         Log.i(TAG, "stream session ended")
                     } catch (e: CertChangedException) {
                         Log.w(TAG, "cert changed for $host: ${e.message}")
-                        running = false
-                        runOnUiThread { showCertChangedDialog(tlsTrust) }
+                        if (running.getAndSet(false)) runOnUiThread { showCertChangedDialog(tlsTrust) }
                     } catch (e: IllegalStateException) {
                         Log.w(TAG, "not paired for $host: ${e.message}")
-                        running = false
-                        runOnUiThread { finish() }
+                        if (running.getAndSet(false)) runOnUiThread { finish() }
                     } catch (e: Exception) {
                         Log.w(TAG, "connect/stream failed: ${e.message}")
                     }
-                    decoder?.release(); decoder = null
-                    if (running) Thread.sleep(1000)  // back off before retrying
+                    dropDecoder()
+                    if (running.get()) Thread.sleep(1000)  // back off before retrying
                 }
             }
-            client = null
+            dropDecoder()
+            if (client === c) client = null
             c.close()
-            player.release(); audioPlayer = null
+            if (audioPlayer === player) audioPlayer = null
+            player.release()
         }
     }
 
@@ -530,7 +567,9 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     }
 
     private fun stopStreaming() {
-        running = false
+        live?.set(false)
+        live = null
+        try { aoaIn?.close() } catch (_: Exception) {}
         netThread?.join(1500)
         if (netThread?.isAlive == true) Log.w(TAG, "net thread did not exit within 1.5s")
         netThread = null

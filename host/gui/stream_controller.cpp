@@ -10,6 +10,12 @@ StreamController::StreamController(QObject* parent) : QObject(parent) {
   connect(&proc_, &QProcess::started, this, [this]{ emit runningChanged(true); });
   connect(&proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
           this, [this](int, QProcess::ExitStatus){ emit runningChanged(false); });
+  // A program that never launches emits errorOccurred but never finished(), so without this
+  // the session (and its port) stayed registered forever and the Server toggle showed ON
+  // with nothing listening.
+  connect(&proc_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
+    if (e == QProcess::FailedToStart) emit runningChanged(false);
+  });
 }
 
 void StreamController::start(const Command& cmd) {

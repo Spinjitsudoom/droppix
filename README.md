@@ -24,11 +24,11 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 droppix is deeply integrated with the host, so some things can't ship inside the AppImage and must be present on the machine:
 
 - **A supported desktop session** — primary path is **KDE Plasma 6 / KWin** (Wayland). An **X11** backend (`xrandr` / `xinput`) is also implemented. Other Wayland compositors (Sway, GNOME) are on the [cross-desktop roadmap](docs/superpowers/specs/2026-07-05-cross-desktop-portability-design.md); without a backend, the display may still appear but touch mapping is best-effort / Generic.
-- **The `evdi` kernel module** — via distro / DKMS (cannot live in an AppImage). Required for the extended-monitor feature; test-pattern streaming works without it.
+- **The `evdi` kernel module** — via distro / DKMS (cannot live in an AppImage). Required for the extended-monitor feature; test-pattern streaming works without it. It only has to be installed: the streamer loads it (`modprobe evdi`) when it isn't loaded.
 - **polkit / `pkexec`** — the streamer runs as root for uinput + evdi.
 - **PipeWire** (`parec` / `pw-record`) — for the audio-to-tablet sink.
 - **avahi-daemon** — for WiFi discovery (`avahi-publish` / `avahi-browse`).
-- **`adb`** — for classic USB (`adb reverse`) connections.
+- **`adb`** — for classic USB (`adb reverse`) connections. AOA over the cable needs neither adb nor USB debugging, but the tablet must have a USB mode enabled (MTP or PTP, under Storage → USB computer connection on older Android). A tablet set to "debug only" disappears from USB when debugging is turned off.
 - **GPU encode (optional)** — NVIDIA NVENC and/or VAAPI H.264 encode accelerate the stream; software x264 is always the fallback.
 
 ## Layout

@@ -3,7 +3,10 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
 #include <openssl/err.h>
@@ -64,6 +67,15 @@ void TransportServer::enable_tls(const std::string& cert, const std::string& key
 void TransportServer::adopt_channel(std::unique_ptr<ByteChannel> ch, std::string peer) {
   channel_ = std::move(ch);
   peer_ip_ = std::move(peer);
+  reset_session_state();
+}
+
+// A client that dropped mid-message leaves a partial frame in the parser; prefixed to the
+// next client's bytes it misaligns that client's HELLO. Its latched requests are stale too.
+void TransportServer::reset_session_state() {
+  parser_ = MessageParser{};
+  keyframe_requested_ = false;
+  params_pending_ = false;
 }
 
 bool TransportServer::accept_client(int timeout_ms) {
@@ -92,10 +104,19 @@ bool TransportServer::accept_client(int timeout_ms) {
       ::close(fd); return false;
     }
     SSL_set_fd(ssl, fd);
+    // Bound the handshake: a peer that connects and goes silent (port scanner, `nc`, a
+    // pairing probe dropped mid-handshake) otherwise blocks SSL_accept forever, and this
+    // one-client listener never accepts the real tablet.
+    timeval hs{10, 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &hs, sizeof(hs));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &hs, sizeof(hs));
     if (SSL_accept(ssl) <= 0) {
       std::fprintf(stderr, "tls: SSL_accept failed\n"); ERR_print_errors_fp(stderr);
       SSL_free(ssl); ::close(fd); return false;
     }
+    timeval none{0, 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &none, sizeof(none));
+    setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &none, sizeof(none));
   }
   adopt_channel(std::make_unique<SocketChannel>(fd, ssl), std::move(peer));
   return true;
@@ -108,13 +129,18 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
   if (!channel_) return false;
   unsigned char buf[1024];
   ParsedMessage m;
+  // One deadline for the whole HELLO, not per read: a peer trickling a byte every few
+  // seconds would otherwise hold this one-client listener indefinitely.
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   for (;;) {
     if (parser_.next(m)) {
       if (m.type != MsgType::Hello) continue;
       return decode_hello(m.body, version, w, h, density, fps, audio_wanted, orientation,
                           bitrate, wall_col, wall_row, name, id);
     }
-    if (!channel_->wait_readable(timeout_ms)) return false;
+    const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          deadline - std::chrono::steady_clock::now()).count();
+    if (!channel_->wait_readable(left > 0 ? static_cast<int>(left) : 0)) return false;
     ssize_t n = channel_->recv(buf, sizeof(buf));
     if (n <= 0) { close_all(); return false; }
     parser_.feed(buf, static_cast<size_t>(n));
@@ -219,6 +245,7 @@ void TransportServer::poll_control() {
 
 void TransportServer::close_all() {
   if (channel_) { channel_->close(); channel_.reset(); }
+  reset_session_state();
 }
 
 TransportServer::~TransportServer() {

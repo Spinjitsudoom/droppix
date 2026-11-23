@@ -286,28 +286,32 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // at a time: claim an advisory lock; if another session holds it, run video-only.
   AudioStreamer audio;
   int audio_lock_fd = -1;
-  bool do_audio = sp.audio;
-  if (do_audio) {
+  // Claim the shared-sink lock and start capture; false (lock released) if either fails.
+  // Used for HELLO and for a live "audio on", which used to skip the lock entirely.
+  auto start_audio = [&]() -> bool {
     const char* rt = std::getenv("XDG_RUNTIME_DIR");
     std::string lockpath = std::string(rt ? rt : "/tmp") + "/droppix-audio.lock";
-    audio_lock_fd = ::open(lockpath.c_str(), O_CREAT | O_RDWR, 0600);
+    audio_lock_fd = ::open(lockpath.c_str(), O_CREAT | O_RDWR | O_CLOEXEC, 0600);
     if (audio_lock_fd < 0 || ::flock(audio_lock_fd, LOCK_EX | LOCK_NB) != 0) {
       if (audio_lock_fd >= 0) { ::close(audio_lock_fd); audio_lock_fd = -1; }
-      do_audio = false;                    // another session owns audio
       std::fprintf(stderr, "audio: already claimed by another session; video-only\n");
+      return false;
     }
-  }
-  if (do_audio) {
-    if (audio.start(user_session_prefix())) {
-      std::fprintf(stderr, "audio: capturing droppix-audio.monitor\n");
-    } else {
+    if (!audio.start(user_session_prefix())) {
       // Capture never started (pw-record/droppix-audio missing): don't keep starving other
-      // sessions of the lock, and drop back to the relaxed frame timeout — release the claim.
+      // sessions of the lock, and drop back to the relaxed frame timeout.
       std::fprintf(stderr, "audio: capture unavailable (pw-record/droppix-audio missing)\n");
-      do_audio = false;
-      if (audio_lock_fd >= 0) { ::close(audio_lock_fd); audio_lock_fd = -1; }
+      ::close(audio_lock_fd); audio_lock_fd = -1;
+      return false;
     }
-  }
+    std::fprintf(stderr, "audio: capturing droppix-audio.monitor\n");
+    return true;
+  };
+  auto stop_audio = [&]() {
+    audio.stop();
+    if (audio_lock_fd >= 0) { ::close(audio_lock_fd); audio_lock_fd = -1; }
+  };
+  bool do_audio = sp.audio && start_audio();
 
   auto t0 = std::chrono::steady_clock::now();
   int sent = 0;
@@ -365,8 +369,8 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     // and the reopen starts a fresh GOP, so the client resyncs on the next frame.
     TransportServer::StreamParamsRequest np{};
     if (tx_.take_stream_params(np)) {
-      const int new_fps = np.fps > 0 ? static_cast<int>(np.fps) : cur_fps;
-      const int new_bitrate = np.bitrate_kbps > 0 ? static_cast<int>(np.bitrate_kbps) : cur_bitrate;
+      const int new_fps = np.fps > 0 ? clamp_fps(np.fps) : cur_fps;
+      const int new_bitrate = np.bitrate_kbps > 0 ? clamp_bitrate_kbps(np.bitrate_kbps) : cur_bitrate;
       if (new_fps != cur_fps || new_bitrate != cur_bitrate) {
         std::fprintf(stderr, "live params: fps %d -> %d, bitrate %d -> %d kbps\n",
                      cur_fps, new_fps, cur_bitrate, new_bitrate);
@@ -386,10 +390,10 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       const bool want_audio = np.audio != 0;
       if (want_audio != do_audio) {
         if (want_audio) {
-          do_audio = audio.start(user_session_prefix());
+          do_audio = start_audio();
           std::fprintf(stderr, "live params: audio on (%s)\n", do_audio ? "ok" : "unavailable");
         } else {
-          audio.stop();
+          stop_audio();
           do_audio = false;
           std::fprintf(stderr, "live params: audio off\n");
         }

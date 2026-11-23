@@ -1,8 +1,14 @@
 package com.droppix.app.ui
 
 import android.app.AlertDialog
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbAccessory
+import android.hardware.usb.UsbManager
+import android.os.Build
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
@@ -19,6 +25,7 @@ import com.droppix.app.net.Discovery
 import com.droppix.app.net.PairingCode
 import com.droppix.app.net.TlsTrust
 import com.droppix.app.net.certFingerprint
+import com.droppix.app.net.isDroppixAccessory
 import com.droppix.app.net.WakeService
 import com.droppix.app.net.parseQrUri
 import com.google.zxing.integration.android.IntentIntegrator
@@ -41,6 +48,8 @@ class ConnectActivity : AppCompatActivity() {
     private lateinit var pcListAdapter: ArrayAdapter<String>
     private data class DiscoveredPc(val name: String, val host: String, val port: Int)
     private val discoveredPcs = mutableListOf<DiscoveredPc>()
+    private var aoaAdopted = false
+    private var usbPermissionReceiver: BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,12 +126,70 @@ class ConnectActivity : AppCompatActivity() {
      * Consumed once: removed from the Intent so returning to this screen later (back out of
      * a stream, rotate) does not silently redial.
      */
-    private fun handleUsbAutoconnect() {
-        if (!intent.getBooleanExtra("usb_autoconnect", false)) return
+    private fun handleUsbAutoconnect(): Boolean {
+        if (!intent.getBooleanExtra("usb_autoconnect", false)) return false
         val port = intent.getIntExtra("usb_port", 27000)
         intent.removeExtra("usb_autoconnect")
         status.text = "Connecting over USB (127.0.0.1:$port)..."
         connectTo("127.0.0.1", port)
+        return true
+    }
+
+    /**
+     * Stream over a droppix accessory that is already attached.
+     *
+     * Android only sends USB_ACCESSORY_ATTACHED when the host switches the tablet into
+     * accessory mode. If the app was opened any other way with the cable already in (from
+     * the launcher, or after being killed), it never saw the accessory and the host's AOA
+     * streamer waited forever. Once per screen instance, so backing out of a stream stays here.
+     */
+    private fun adoptAttachedAccessory() {
+        if (aoaAdopted || StreamActivity.aoaSessionActive) return
+        val usb = getSystemService(Context.USB_SERVICE) as UsbManager
+        val acc = usb.accessoryList?.firstOrNull { isDroppixAccessory(it.manufacturer, it.model) }
+            ?: return
+        aoaAdopted = true
+        if (usb.hasPermission(acc)) { launchAccessoryStream(acc); return }
+
+        status.text = "Allow droppix to use the USB connection..."
+        val action = "$packageName.USB_PERMISSION"
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context, result: Intent) {
+                unregisterUsbPermissionReceiver()
+                if (result.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
+                    launchAccessoryStream(acc)
+                } else {
+                    status.text = "USB permission denied"
+                    aoaAdopted = false   // ask again next time this screen resumes
+                }
+            }
+        }
+        usbPermissionReceiver = receiver
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, IntentFilter(action), Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, IntentFilter(action))
+        }
+        // The system fills in the grant extras, so the PendingIntent must be mutable on S+.
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        usb.requestPermission(acc,
+            PendingIntent.getBroadcast(this, 0, Intent(action).setPackage(packageName), flags))
+    }
+
+    private fun launchAccessoryStream(acc: UsbAccessory) {
+        status.text = "Connecting over USB cable..."
+        startActivity(Intent(this, StreamActivity::class.java)
+            .putExtra(UsbManager.EXTRA_ACCESSORY, acc))
+    }
+
+    private fun unregisterUsbPermissionReceiver() {
+        usbPermissionReceiver?.let { unregisterReceiver(it) }
+        usbPermissionReceiver = null
+    }
+
+    override fun onDestroy() {
+        unregisterUsbPermissionReceiver()
+        super.onDestroy()
     }
 
     override fun onNewIntent(newIntent: Intent?) {
@@ -134,7 +201,7 @@ class ConnectActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        handleUsbAutoconnect()
+        if (!handleUsbAutoconnect()) adoptAttachedAccessory()
         discovery.start(
             onFound = { name, host, port -> onPcFound(name, host, port) },
             onLost = { name -> onPcLost(name) }
@@ -262,6 +329,7 @@ class ConnectActivity : AppCompatActivity() {
                 val socket = tlsTrust.socketFactory { cert -> captured = cert }.createSocket() as SSLSocket
                 try {
                     socket.connect(InetSocketAddress(host, port), 5000)
+                    socket.soTimeout = 5000
                     socket.startHandshake()
                     ok = true
                 } finally {

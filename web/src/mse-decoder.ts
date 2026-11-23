@@ -39,6 +39,9 @@ export class MseVideoPipeline implements VideoRenderer {
   private queue: Uint8Array[] = [];
   private busy = false;
   private closed = false;
+  // Set by fail(): a SourceBuffer error or unsupported codec cannot recover, so stop
+  // queueing (unbounded memory) and stop asking for a keyframe on every frame.
+  private dead = false;
   private lastError = "";
   private requestKeyframe: (() => void) | null = null;
   private displayW = 1280;
@@ -225,6 +228,7 @@ export class MseVideoPipeline implements VideoRenderer {
   }
 
   private enqueue(buf: Uint8Array): void {
+    if (this.dead) return;
     this.queue.push(buf);
     this.flush();
   }
@@ -271,7 +275,7 @@ export class MseVideoPipeline implements VideoRenderer {
         sb.remove(start, cutoff);
       }
     } catch {
-      /* ignore */
+      this.busy = false; // remove threw, so no updateend will ever clear it
     }
   }
 
@@ -289,15 +293,16 @@ export class MseVideoPipeline implements VideoRenderer {
         sb.remove(start, cutoff);
       }
     } catch {
-      /* ignore */
+      this.busy = false; // remove threw, so no updateend will ever clear it
     }
   }
 
   private fail(msg: string): void {
     this.lastError = msg;
-    this.onInfo?.(`MSE: ${msg}`);
-    // A fresh IDR is what lets the SourceBuffer resync; without asking we would wait for
-    // the host's scheduled keyframe.
+    if (this.dead) return;
+    this.dead = true;
+    this.queue = [];
+    this.onInfo?.(`MSE: ${msg} — try the WebCodecs renderer in Settings`);
     this.requestKeyframe?.();
   }
 
@@ -321,6 +326,7 @@ export class MseVideoPipeline implements VideoRenderer {
     this.prev = null;
     this.started = false;
     this.busy = false;
+    this.dead = false;
     this.sps = undefined;
     this.pps = undefined;
     this.firstPtsUs = null;

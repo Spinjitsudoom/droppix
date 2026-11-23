@@ -107,8 +107,9 @@ void TransportClient::runOverChannel(ByteChannel& channel, uint32_t width, uint3
     }
     if (!channel.wait_readable(200)) continue;   // periodic wakeup to recheck isRunning()
     ssize_t n = channel.recv(chunk.data(), chunk.size());
-    if (n == 0) continue;      // no data ready (non-blocking edge) — keep looping
-    if (n < 0) break;          // peer closed / error
+    // The channel is blocking and wait_readable said readable, so 0 is EOF (peer closed),
+    // not "no data yet": treating it as the latter spun this loop at 100% CPU.
+    if (n <= 0) break;
     parser.feed(chunk.data(), static_cast<size_t>(n));
     ParsedMessage msg;
     while (parser.next(msg)) {

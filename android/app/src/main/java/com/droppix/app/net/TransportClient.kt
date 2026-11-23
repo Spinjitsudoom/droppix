@@ -131,6 +131,7 @@ class TransportClient {
         try {
             socket.tcpNoDelay = true
             socket.connect(InetSocketAddress(host, port), 5000)
+            socket.soTimeout = 5000  // a host that accepts but never answers must not hang us
             socket.startHandshake()
 
             if (host != "127.0.0.1") {

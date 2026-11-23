@@ -41,8 +41,15 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
         // Generously size input buffers so a large IDR (with in-band SPS/PPS)
         // can't overflow the default allocation on conservative OEM decoders.
         fmt.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, maxOf(width * height, 1024 * 1024))
-        codec.configure(fmt, surface, null, 0)
-        codec.start()
+        try {
+            codec.configure(fmt, surface, null, 0)
+            codec.start()
+        } catch (e: Exception) {
+            // Hardware decoder instances are scarce (few on a Nexus 10); a leaked one makes
+            // every later create fail until the process dies.
+            codec.release()
+            throw e
+        }
     }
 
     @Synchronized
@@ -88,6 +95,7 @@ class VideoDecoder(surface: Surface, width: Int, height: Int,
 
     @Synchronized
     fun release() {
+        if (released) return   // the stream thread and stopStreaming() can both release
         released = true
         try { codec.stop() } catch (_: Exception) {}
         codec.release()

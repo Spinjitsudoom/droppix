@@ -7,7 +7,9 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <unistd.h>
 #include <cstdio>
 #include <cstring>
@@ -22,6 +24,14 @@
 
 namespace droppix {
 namespace {
+
+// Bounds blocking SSL/socket I/O on a connection that has not been handed off yet: a
+// silent peer otherwise parks this one-at-a-time accept loop in SSL_accept forever.
+void set_io_timeout(int fd, int secs) {
+  timeval tv{secs, 0};
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+}
 
 constexpr const char* kWsGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
@@ -247,6 +257,7 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
     std::string peer = inet_ntop(AF_INET, &cli.sin_addr, ibuf, sizeof(ibuf)) ? ibuf : "";
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    set_io_timeout(fd, 10);
 
     SSL* ssl = SSL_new(tx.ssl_ctx());
     if (!ssl) { ::close(fd); continue; }
@@ -267,6 +278,7 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
 
     if (!looks_like_http(peek, static_cast<size_t>(peeked))) {
       // Native Android/Qt client on the same port.
+      set_io_timeout(fd, 0);
       out_channel = std::make_unique<SocketChannel>(fd, ssl);
       out_peer = peer;
       std::fprintf(stderr, "web: native client from %s\n", peer.c_str());
@@ -330,6 +342,7 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
           continue;
         }
       }
+      set_io_timeout(fd, 0);
       std::fprintf(stderr, "web: paired, streaming to %s\n", peer.c_str());
       return true;
     }

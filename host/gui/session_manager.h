@@ -29,7 +29,9 @@ class SessionManager {
   std::set<int> usedPorts() const;
   QSet<QString> keys() const;   // keys of all active sessions
   QSet<QString> ids() const;    // non-empty device ids of active sessions
-  int allocatePort(int base) const { return allocate_port(base, usedPorts()); }
+  int allocatePort(int base, bool reserveBase = false) const {
+    return allocate_port(base, usedPorts(), 4, reserveBase);
+  }
   int count() const { return static_cast<int>(sessions_.size()); }
   Session& add(const Session& s);               // appends; ref valid until the next mutation
   void remove(const QString& key);

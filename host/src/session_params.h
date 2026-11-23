@@ -1,6 +1,14 @@
 #pragma once
 #include <cstdint>
 namespace droppix {
+// Bounds for client-requested values (HELLO and live StreamParams). evdi modes top out at
+// 120 Hz; the bitrate range covers anything a USB 2.0 / Wi-Fi link can carry.
+constexpr int kMaxSessionFps = 120;
+constexpr int kMinSessionBitrateKbps = 250;
+constexpr int kMaxSessionBitrateKbps = 200000;
+int clamp_fps(uint32_t fps);
+int clamp_bitrate_kbps(uint32_t kbps);
+
 // The effective per-session display params after reconciling the client's HELLO with the
 // host's fallback defaults. A v4 client is authoritative; older clients use the defaults.
 struct SessionParams { int fps; bool audio; int orientation; int bitrate; };

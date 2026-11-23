@@ -36,3 +36,19 @@ TEST(SessionParams, V5ZeroBitrateFallsBack) {
   auto p = select_session_params(5, 60, 1, 1, 0, 30, false, 0, 8000);
   EXPECT_EQ(p.bitrate, 8000);
 }
+
+// Client-supplied u32s: a value past INT_MAX went negative after the int cast, and a huge
+// fps overflowed the encoder's gop (fps*2), failing every reconnect the same way forever.
+TEST(SessionParams, ClampsHugeClientValues) {
+  auto p = select_session_params(5, 0xFFFFFFFFu, 1, 0, 0xFFFFFFFFu, 30, false, 0, 8000);
+  EXPECT_EQ(p.fps, kMaxSessionFps);
+  EXPECT_EQ(p.bitrate, kMaxSessionBitrateKbps);
+}
+TEST(SessionParams, ClampsTinyBitrate) {
+  auto p = select_session_params(5, 30, 0, 0, 1, 30, false, 0, 8000);
+  EXPECT_EQ(p.bitrate, kMinSessionBitrateKbps);
+}
+TEST(SessionParams, ClampHelpersPassSaneValues) {
+  EXPECT_EQ(clamp_fps(60), 60);
+  EXPECT_EQ(clamp_bitrate_kbps(8000), 8000);
+}

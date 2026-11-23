@@ -50,11 +50,20 @@ void AdbTransport::stop() {
 }
 
 void AdbTransport::poll() {
+  // One `adb devices` at a time: it can hang while a device re-enumerates, and a new one
+  // every tick would pile up without bound.
+  if (polling_) {
+    if (pollClock_.elapsed() > 10000) polling_->kill();   // wedged; finished() cleans it up
+    return;
+  }
   auto* p = new QProcess(this);
+  polling_ = p;
+  pollClock_.start();
   connect(p, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
           [this, p](int, QProcess::ExitStatus) {
     const QString out = QString::fromUtf8(p->readAllStandardOutput());
     p->deleteLater();
+    if (!timer_.isActive()) return;   // stop() ran while this poll was in flight
 
     const QSet<QString> present = parse_ready_serials(out);
 
@@ -80,7 +89,9 @@ void AdbTransport::poll() {
       changed = next[i].serial != clients_[i].serial || next[i].model != clients_[i].model;
     if (changed) { clients_ = next; emit clientsChanged(clients_); }
   });
-  connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError) {
+  connect(p, &QProcess::errorOccurred, this, [this, p](QProcess::ProcessError e) {
+    // Only a failed launch means adb is missing; a crash or hang is retried next tick.
+    if (e != QProcess::FailedToStart) return;
     p->deleteLater();
     if (adbMissing_) return;
     adbMissing_ = true;

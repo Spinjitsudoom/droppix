@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <cstring>
 
 // POSIX sockets only (Linux/macOS). A Windows port needs Winsock2 (WSAStartup,
@@ -45,6 +46,12 @@ std::unique_ptr<ClientSocketChannel> ClientSocketChannel::connect(
     const std::string& host, uint16_t port, bool use_tls, int timeout_ms) {
   int fd = connect_tcp(host, port, timeout_ms);
   if (fd < 0) return nullptr;
+  // Bound every blocking read/write (incl. SSL_connect): a host that accepts but stalls
+  // mid-handshake or mid-record otherwise wedges the network thread, and Disconnect /
+  // closing the window joins that thread from the GUI thread.
+  timeval io{5, 0};
+  setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &io, sizeof(io));
+  setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &io, sizeof(io));
 
   if (!use_tls) return std::make_unique<ClientSocketChannel>(fd, nullptr, nullptr);
 

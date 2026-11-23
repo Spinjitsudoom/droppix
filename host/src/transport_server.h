@@ -91,6 +91,7 @@ class TransportServer {
 
  private:
   bool send_all(const std::vector<unsigned char>& bytes);
+  void reset_session_state();
 
   int listen_fd_ = -1;
   uint16_t port_ = 0;
