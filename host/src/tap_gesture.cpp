@@ -44,4 +44,34 @@ TwoFingerTap::Result TwoFingerTap::update(const std::vector<TouchContact>& conta
   return r;
 }
 
+HoldGesture::Result HoldGesture::update(const std::vector<TouchContact>& contacts,
+                                        int64_t now_ms) {
+  if (contacts.empty()) {   // sequence over: re-arm for the next one
+    inGesture_ = disqualified_ = spent_ = false;
+    return {};
+  }
+  if (!inGesture_) {
+    inGesture_ = true;
+    startMs_ = now_ms;
+    id_ = contacts.front().id;
+    x0_ = x_ = contacts.front().x;
+    y0_ = y_ = contacts.front().y;
+  }
+  if (contacts.size() > 1 || contacts.front().id != id_) {
+    disqualified_ = true;
+    return {};
+  }
+  x_ = contacts.front().x;
+  y_ = contacts.front().y;
+  if (std::abs(int(x_) - int(x0_)) > kHoldSlop || std::abs(int(y_) - int(y0_)) > kHoldSlop)
+    disqualified_ = true;
+  return tick(now_ms);
+}
+
+HoldGesture::Result HoldGesture::tick(int64_t now_ms) {
+  if (!inGesture_ || disqualified_ || spent_ || now_ms - startMs_ < kHoldMs) return {};
+  spent_ = true;
+  return {true, id_, x_, y_};
+}
+
 }  // namespace droppix
