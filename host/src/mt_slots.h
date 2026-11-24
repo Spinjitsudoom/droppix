@@ -16,6 +16,10 @@ class MtSlots {
   struct Assign { int slot; TouchContact c; bool isNew; };
   struct Update { std::vector<Assign> active; std::vector<int> lifted; };
   Update update(const std::vector<TouchContact>& contacts);
+  int slot_of(uint8_t id) const {   // kernel slot currently held by `id`, or -1
+    auto it = idSlot_.find(id);
+    return it == idSlot_.end() ? -1 : it->second;
+  }
 
  private:
   int maxSlots_;
