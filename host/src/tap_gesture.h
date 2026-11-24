@@ -29,29 +29,29 @@ class TwoFingerTap {
   uint16_t centroidX_ = 0, centroidY_ = 0;   // midpoint while exactly two contacts were down
 };
 
-// Detects a one-finger PRESS-AND-HOLD and reports it as a right-click at the finger. Pure.
-// Fed every contact update plus a periodic tick(): a finger held still sends no events, so
-// the hold can only be noticed by the clock. Fires at most once per touch sequence (down
-// until every finger is up), and only while exactly one finger has ever been down and it
-// has stayed within kHoldSlop of where it landed.
-class HoldGesture {
+// A mouse-like right-click spread over time: move, then press 30 ms later, release 80 ms
+// after that. Pure; the injector polls due() from the stream loop instead of sleeping, so
+// the video thread never blocks.
+class ClickSchedule {
  public:
-  struct Result { bool fire = false; uint8_t id = 0; uint16_t x = 0; uint16_t y = 0; };
-  Result update(const std::vector<TouchContact>& contacts, int64_t now_ms);
-  Result tick(int64_t now_ms);
-  bool spent() const { return spent_; }
-
-  static constexpr uint16_t kHoldSlop = 1000;   // ~1.5% of the output
-  static constexpr int64_t  kHoldMs = 600;
+  enum class Step { Move, Press, Release };
+  void start(int64_t now_ms, uint16_t x, uint16_t y) {
+    t0_ = now_ms; x_ = x; y_ = y; next_ = 0;
+  }
+  bool active() const { return next_ >= 0 && next_ < 3; }
+  std::vector<Step> due(int64_t now_ms) {
+    static constexpr int64_t kAt[3] = {0, 30, 110};
+    std::vector<Step> out;
+    while (active() && now_ms - t0_ >= kAt[next_]) out.push_back(static_cast<Step>(next_++));
+    return out;
+  }
+  uint16_t x() const { return x_; }
+  uint16_t y() const { return y_; }
 
  private:
-  bool inGesture_ = false;
-  bool disqualified_ = false;   // second finger, or moved beyond the slop
-  bool spent_ = false;          // already fired this sequence
-  int64_t startMs_ = 0;
-  uint8_t id_ = 0;
-  uint16_t x0_ = 0, y0_ = 0;    // where the finger landed
-  uint16_t x_ = 0, y_ = 0;      // where it is now
+  int64_t t0_ = 0;
+  uint16_t x_ = 0, y_ = 0;
+  int next_ = -1;   // -1 idle, 0..2 the next step, 3 done
 };
 
 }  // namespace droppix

@@ -1,7 +1,7 @@
 # Press-and-hold → right-click — design
 
 **Date:** 2026-11-24
-**Status:** Approved, not yet built.
+**Status:** Withdrawn (2026-11-24). After on-device testing the user chose to keep only the two-finger tap. What shipped from this work: the real-origin desktop bounds (`58ba5ec`) and the time-spaced right-click (`ClickSchedule`). The hold detector was built and then removed: libinput cancelled the touch correctly, but Plasma's desktop (`AppletsLayout`, `AfterPressAndHold`) still entered Edit Mode, because its timer ignores touch cancels.
 
 ## Intent
 

@@ -331,6 +331,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // instead of being gated by the up-to-1s damage-driven frame wait.
   const int frame_timeout = (cfg_.touch || do_audio) ? 8 : 1000;
   while (!stop && !restart_for_orientation && tx_.connected()) {
+    injector.tick();   // advances a time-spaced right-click (the loop wakes every <=8 ms with touch on)
     if (cfg_.live_overlay) {  // host-side overlay toggle changed -> tell the app (loop thread = single writer)
       int ov = cfg_.live_overlay->load();
       if (ov != last_overlay) { tx_.send_overlay(ov ? 1 : 0); last_overlay = ov; }

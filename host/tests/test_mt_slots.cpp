@@ -46,13 +46,3 @@ TEST(MtSlots, DropsContactsBeyondSlotBudget) {
   auto u = m.update({{1, 0, 0, 0}, {2, 0, 0, 0}, {3, 0, 0, 0}});
   EXPECT_EQ(u.active.size(), 2u);   // third contact dropped
 }
-
-TEST(MtSlots, SlotOfReportsAssignedSlotOrMinusOne) {
-  MtSlots s;
-  s.update({{7, 0, 0, 0}, {9, 0, 0, 0}});
-  EXPECT_GE(s.slot_of(9), 0);
-  EXPECT_NE(s.slot_of(9), s.slot_of(7));
-  EXPECT_EQ(s.slot_of(42), -1);
-  s.update({{7, 0, 0, 0}});
-  EXPECT_EQ(s.slot_of(9), -1);
-}

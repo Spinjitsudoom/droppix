@@ -136,6 +136,10 @@ void InputInjector::inject(const std::vector<TouchContact>& contacts) {
   if (t.rightClick) right_click(t.x, t.y);
 }
 
+void InputInjector::tick() {
+  if (click_.active() && rc_fd_ >= 0) run_click();
+}
+
 void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
                                  int desk_x, int desk_y, int desk_w, int desk_h) {
   outX_ = out_x; outY_ = out_y; outW_ = out_w; outH_ = out_h;
@@ -183,13 +187,22 @@ int InputInjector::scale_y(uint16_t y_norm) const {
 
 void InputInjector::right_click(uint16_t x_norm, uint16_t y_norm) {
   if (rc_fd_ < 0 || outW_ <= 0 || outH_ <= 0) return;
-  emit(rc_fd_, EV_ABS, ABS_X, scale_x(x_norm));
-  emit(rc_fd_, EV_ABS, ABS_Y, scale_y(y_norm));
-  emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
-  emit(rc_fd_, EV_KEY, BTN_RIGHT, 1);
-  emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
-  emit(rc_fd_, EV_KEY, BTN_RIGHT, 0);
-  emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
+  click_.start(now_ms(), x_norm, y_norm);
+  run_click();   // the move goes out now; press/release come due on later tick()s
+}
+
+void InputInjector::run_click() {
+  for (ClickSchedule::Step st : click_.due(now_ms())) {
+    switch (st) {
+      case ClickSchedule::Step::Move:
+        emit(rc_fd_, EV_ABS, ABS_X, scale_x(click_.x()));
+        emit(rc_fd_, EV_ABS, ABS_Y, scale_y(click_.y()));
+        break;
+      case ClickSchedule::Step::Press:   emit(rc_fd_, EV_KEY, BTN_RIGHT, 1); break;
+      case ClickSchedule::Step::Release: emit(rc_fd_, EV_KEY, BTN_RIGHT, 0); break;
+    }
+    emit(rc_fd_, EV_SYN, SYN_REPORT, 0);
+  }
 }
 
 void InputInjector::scroll(int dx, int dy, uint16_t x_norm, uint16_t y_norm) {

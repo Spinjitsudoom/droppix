@@ -17,6 +17,8 @@ class InputInjector {
   bool open(const std::string& name = "droppix-touch");  // needs root /dev/uinput (the MT touchscreen)
   bool ok() const { return fd_ >= 0; }
   void inject(const std::vector<TouchContact>& contacts);
+  // Call every stream-loop pass: advances a pending (time-spaced) right-click.
+  void tick();
   // Records the droppix output rect within the desktop and creates the right-click pointer
   // (a desktop-ranged absolute device) used for two-finger-tap -> BTN_RIGHT. No-op when the
   // desktop bounds are unknown — right-click stays disabled; normal touch is unaffected.
@@ -40,6 +42,7 @@ class InputInjector {
 
  private:
   void right_click(uint16_t x_norm, uint16_t y_norm);
+  void run_click();   // emit whatever steps of the pending right-click are due
   // Shared 0..65535 -> desktop-pixel scaling used by right_click/scroll/mouse_button.
   int scale_x(uint16_t x_norm) const;
   int scale_y(uint16_t y_norm) const;
@@ -52,6 +55,7 @@ class InputInjector {
   MtSlots slots_;
   bool anyDown_ = false;   // last BTN_TOUCH state
   TwoFingerTap tap_;
+  ClickSchedule click_;
   int outX_ = 0, outY_ = 0, outW_ = 0, outH_ = 0, deskX_ = 0, deskY_ = 0, deskW_ = 0, deskH_ = 0;
 };
 }  // namespace droppix
