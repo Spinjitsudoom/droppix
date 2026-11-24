@@ -7,6 +7,7 @@
 #include <QStandardPaths>
 #include <string>
 #include "main_window.h"
+#include "process_lifetime.h"
 #include "style.h"
 
 namespace {
@@ -60,6 +61,10 @@ int main(int argc, char** argv) {
   migrateAppImageConfig(configDir);
 
   droppix::MainWindow w;
+  // Logout and `kill` send SIGTERM; without this the GUI died mid-session and skipped
+  // the shutdown the tray's Quit does.
+  droppix::QuitSignals quitSignals;
+  QObject::connect(&quitSignals, &droppix::QuitSignals::requested, &w, &droppix::MainWindow::quitNow);
   if (minimized) w.startMinimizedToTray(); else w.show();
   return app.exec();
 }

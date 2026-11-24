@@ -40,6 +40,9 @@ class MainWindow : public QMainWindow {
   // Start hidden to the system tray (tray icon visible, window not shown) when a tray
   // exists; falls back to a normal show() otherwise so --minimized never strands the user.
   void startMinimizedToTray();
+  // Full shutdown (save settings, stop every streamer and helper), then leave the event
+  // loop. Used by the tray's Quit and by SIGTERM/SIGINT/SIGHUP.
+  void quitNow();
  protected:
   void closeEvent(QCloseEvent* event) override;
  private:

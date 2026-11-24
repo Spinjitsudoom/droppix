@@ -37,3 +37,30 @@ TEST(SocketChannel, WaitReadableTimesOutThenCloseDisconnects) {
   EXPECT_FALSE(a.connected());
   ::close(sv[1]);
 }
+
+#include <arpa/inet.h>
+#include <netinet/tcp.h>
+
+TEST(SocketChannel, DeadPeerDetectionIsArmedOnTcp) {
+  int ls = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_GE(ls, 0);
+  sockaddr_in a{}; a.sin_family = AF_INET; a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  ASSERT_EQ(bind(ls, (sockaddr*)&a, sizeof a), 0);
+  ASSERT_EQ(listen(ls, 1), 0);
+  socklen_t al = sizeof a;
+  getsockname(ls, (sockaddr*)&a, &al);
+  int c = socket(AF_INET, SOCK_STREAM, 0);
+  ASSERT_EQ(connect(c, (sockaddr*)&a, sizeof a), 0);
+  int fd = accept(ls, nullptr, nullptr);
+  ASSERT_GE(fd, 0);
+
+  enable_dead_peer_detection(fd);
+
+  auto opt = [&](int level, int name) { int v = -1; socklen_t l = sizeof v; getsockopt(fd, level, name, &v, &l); return v; };
+  EXPECT_EQ(opt(SOL_SOCKET, SO_KEEPALIVE), 1);
+  EXPECT_EQ(opt(IPPROTO_TCP, TCP_KEEPIDLE), kKeepIdleS);
+  EXPECT_EQ(opt(IPPROTO_TCP, TCP_KEEPINTVL), kKeepIntvlS);
+  EXPECT_EQ(opt(IPPROTO_TCP, TCP_KEEPCNT), kKeepCnt);
+  EXPECT_EQ(opt(IPPROTO_TCP, TCP_USER_TIMEOUT), kUserTimeoutMs);
+  close(fd); close(c); close(ls);
+}

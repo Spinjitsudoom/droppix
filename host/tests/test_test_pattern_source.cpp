@@ -22,3 +22,22 @@ TEST(TestPatternSource, ContentChangesBetweenFrames) {
   Frame b = s.next(0);
   EXPECT_NE(a.bgra, b.bgra);  // pattern animates
 }
+
+// A screen mode change mid-session used to hand the encoder a frame whose size no longer
+// matched the session (or its own pixel buffer), so it read past the buffer.
+namespace {
+Frame frame(int w, int h, int stride, size_t bytes) {
+  Frame f; f.width = w; f.height = h; f.stride = stride; f.bgra.resize(bytes); f.valid = true;
+  return f;
+}
+}  // namespace
+TEST(FrameFitsSession, MatchingFrameFits) {
+  EXPECT_TRUE(frame_fits_session(frame(800, 600, 3200, 3200u * 600), 800, 600));
+}
+TEST(FrameFitsSession, NewModeDoesNotFit) {
+  EXPECT_FALSE(frame_fits_session(frame(1024, 768, 4096, 4096u * 768), 800, 600));
+}
+TEST(FrameFitsSession, BufferSmallerThanItsStatedSizeDoesNotFit) {
+  EXPECT_FALSE(frame_fits_session(frame(800, 600, 3200, 3200u * 600 - 1), 800, 600));
+  EXPECT_FALSE(frame_fits_session(frame(800, 600, 3000, 3200u * 600), 800, 600));
+}

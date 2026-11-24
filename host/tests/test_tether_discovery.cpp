@@ -54,3 +54,19 @@ TEST(TetherDiscovery, DecodeRejectsNameLenOverflow) {
   // valid idLen=1 ("a"), then nameLen=5 with only 1 name byte present:
   EXPECT_FALSE(decode_reply({'D','P','X','R',0x00,0x01,0x01,'a',0x05,'b'}, out));
 }
+
+// The probe used to go out on every interface, so a tablet on Wi-Fi answered and was
+// listed as "— USB" next to its real Wi-Fi row. Only USB network adapters are tethers.
+TEST(TetherDiscovery, UsbNetAdapterIsATether) {
+  EXPECT_TRUE(is_usb_tether_netdev("/sys/devices/pci0000:00/0000:00:14.0/usb3/3-2/3-2:1.0", false));
+}
+TEST(TetherDiscovery, PciEthernetAndWifiAreNotTethers) {
+  EXPECT_FALSE(is_usb_tether_netdev("/sys/devices/pci0000:00/0000:00:1c.0/0000:03:00.0", false));
+  EXPECT_FALSE(is_usb_tether_netdev("/sys/devices/pci0000:00/0000:00:1c.2/0000:04:00.0", true));
+}
+TEST(TetherDiscovery, UsbWifiStickIsNotATether) {
+  EXPECT_FALSE(is_usb_tether_netdev("/sys/devices/pci0000:00/0000:00:14.0/usb1/1-4/1-4:1.0", true));
+}
+TEST(TetherDiscovery, VirtualInterfaceWithNoDeviceIsNotATether) {
+  EXPECT_FALSE(is_usb_tether_netdev("", false));
+}

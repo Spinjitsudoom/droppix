@@ -1,11 +1,13 @@
 #include "mdns_browser.h"
 #include <QStandardPaths>
+#include "process_lifetime.h"
 
 namespace droppix {
 
 MdnsBrowser::MdnsBrowser(QObject* p) : QObject(p) {
   qRegisterMetaType<droppix::MdnsDevice>("droppix::MdnsDevice");
   qRegisterMetaType<QList<droppix::MdnsDevice>>("QList<droppix::MdnsDevice>");
+  endWithParent(proc_);
   timer_.setInterval(3000);
   connect(&timer_, &QTimer::timeout, this, &MdnsBrowser::runBrowse);
 }

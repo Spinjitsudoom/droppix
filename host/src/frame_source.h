@@ -3,6 +3,14 @@
 #include "capturer.h"  // droppix::Frame
 
 namespace droppix {
+
+// True when a captured frame can be encoded by the session it arrived in: same size as the
+// session, and its pixel buffer really holds stride*height bytes.
+inline bool frame_fits_session(const Frame& f, int w, int h) {
+  return f.width == w && f.height == h && f.stride >= w * 4 &&
+         f.bgra.size() >= static_cast<size_t>(f.stride) * static_cast<size_t>(f.height);
+}
+
 class FrameSource {
  public:
   virtual ~FrameSource() = default;

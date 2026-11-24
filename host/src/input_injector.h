@@ -43,6 +43,8 @@ class InputInjector {
  private:
   void right_click(uint16_t x_norm, uint16_t y_norm);
   void run_click();   // emit whatever steps of the pending right-click are due
+  void end_click();   // stop a pending right-click, releasing the button if it is down
+  void send_click_steps(const std::vector<ClickSchedule::Step>& steps);
   // Shared 0..65535 -> desktop-pixel scaling used by right_click/scroll/mouse_button.
   int scale_x(uint16_t x_norm) const;
   int scale_y(uint16_t y_norm) const;

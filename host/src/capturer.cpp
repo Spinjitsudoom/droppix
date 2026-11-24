@@ -74,18 +74,24 @@ Frame Capturer::grab(int timeout_ms) {
 
   evdi_event_context ctx{};
   ctx.update_ready_handler = &Capturer::on_update_ready;
-  // NOTE (Phase 0 limitation): if a mode change arrives mid-session, width_/
-  // stride_ update but the framebuffer is not re-registered, so Frame metadata
-  // could mismatch buffer_ contents. Re-registration is handled in a later phase.
   ctx.mode_changed_handler = &Capturer::on_mode_changed;
   ctx.user_data = this;
 
   update_ready_ = false;
+  got_mode_ = false;
   // If the update is immediately ready, evdi_request_update returns true.
   bool ready = evdi_request_update(handle_, buffer_id_);
   if (!ready) {
     if (!wait_readable(timeout_ms)) return f;
     evdi_handle_events(handle_, &ctx);
+    if (got_mode_) {
+      // The screen mode changed mid-session (e.g. a new resolution picked in Display
+      // Settings). The registered buffer still has the old size, so re-register it at the
+      // new one; returning a frame now would pair the new size with the old pixels.
+      evdi_unregister_buffer(handle_, buffer_id_);
+      register_buffer();
+      return f;
+    }
     if (!update_ready_) return f;
   }
 

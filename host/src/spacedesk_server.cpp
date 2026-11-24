@@ -1,4 +1,5 @@
 #include "spacedesk_server.h"
+#include "socket_pending.h"
 
 #include <arpa/inet.h>
 #include <cerrno>
@@ -202,6 +203,7 @@ void SpacedeskServer::run() {
     std::fprintf(stderr, "spacedesk: viewer connected from %s\n", ip);
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    enable_dead_peer_detection(fd);   // a vanished tablet must not hold the session
     client_connected_.store(true);
     try {
       serve_client(fd);

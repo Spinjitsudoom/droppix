@@ -567,7 +567,7 @@ void MainWindow::setupTray() {
   });
   menu->addSeparator();
   QAction* quitAct = menu->addAction("Quit");
-  connect(quitAct, &QAction::triggered, this, [this]{ quitting_ = true; close(); });
+  connect(quitAct, &QAction::triggered, this, &MainWindow::quitNow);
   tray_->setContextMenu(menu);
   connect(tray_, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason r){
     if (r == QSystemTrayIcon::Trigger || r == QSystemTrayIcon::DoubleClick) {
@@ -958,7 +958,8 @@ void MainWindow::onServerToggled(bool on) {
   serverEnabled_ = on;
   const QString marker = configDir() + "/server_enabled";
   if (on) {
-    QFile(marker).open(QIODevice::WriteOnly);   // touch: remember "server was on"
+    if (!QFile(marker).open(QIODevice::WriteOnly))   // touch: remember "server was on"
+      qWarning("server: could not save the Server setting to %s", qPrintable(marker));
     startServerSession();
   } else {
     QFile::remove(marker);
@@ -1158,8 +1159,13 @@ void MainWindow::loadInterfacePrefs() {
 void MainWindow::saveInterfacePrefs() {
   const QString cfg = configDir();
   auto marker = [&](const char* name, bool present) {
-    if (present) QFile(cfg + "/" + name).open(QIODevice::WriteOnly);
-    else QFile::remove(cfg + "/" + name);
+    const QString path = cfg + "/" + name;
+    if (present) {
+      if (!QFile(path).open(QIODevice::WriteOnly))
+        qWarning("interfaces: could not save setting %s", qPrintable(path));
+    } else {
+      QFile::remove(path);
+    }
   };
   marker("lan_disabled", !lanEnabled_);
   marker("usb_disabled", !usbEnabled_);
@@ -1435,6 +1441,14 @@ void MainWindow::setStatusDot(const char* color) {
   statusDot_->setStyleSheet(QString(
       "background:%1; border-radius:6px;"
       "min-width:12px; max-width:12px; min-height:12px; max-height:12px;").arg(color));
+}
+
+void MainWindow::quitNow() {
+  if (quitting_) return;   // a second signal while the first shutdown runs
+  quitting_ = true;
+  close();
+  // Closing a window that is hidden in the tray does not end the app on its own.
+  QCoreApplication::quit();
 }
 
 void MainWindow::closeEvent(QCloseEvent* event) {

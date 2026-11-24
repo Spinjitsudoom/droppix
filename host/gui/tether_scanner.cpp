@@ -1,6 +1,18 @@
 #include "tether_scanner.h"
 #include "tether_discovery.h"
+#include <QFileInfo>
 #include <QNetworkInterface>
+
+namespace {
+// Only USB adapters carry a tether. Probing every interface made tablets on Wi-Fi answer
+// and show up as "— USB" beside their Wi-Fi row.
+bool isUsbTether(const QString& ifname) {
+  const QString base = "/sys/class/net/" + ifname;
+  const bool wireless = QFileInfo::exists(base + "/wireless") || QFileInfo::exists(base + "/phy80211");
+  return droppix::is_usb_tether_netdev(QFileInfo(base + "/device").canonicalFilePath().toStdString(),
+                                       wireless);
+}
+}  // namespace
 
 namespace droppix {
 
@@ -23,7 +35,7 @@ void TetherScanner::tick() {
   const QByteArray dg(reinterpret_cast<const char*>(probe.data()), (int)probe.size());
   for (const auto& iface : QNetworkInterface::allInterfaces()) {
     if (!(iface.flags() & QNetworkInterface::IsUp) ||
-        (iface.flags() & QNetworkInterface::IsLoopBack)) continue;
+        (iface.flags() & QNetworkInterface::IsLoopBack) || !isUsbTether(iface.name())) continue;
     for (const auto& entry : iface.addressEntries()) {
       const QHostAddress bc = entry.broadcast();
       if (!bc.isNull()) sock_.writeDatagram(dg, bc, kTetherDiscoveryPort);

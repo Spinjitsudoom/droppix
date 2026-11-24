@@ -1,4 +1,5 @@
 #include "transport_server.h"
+#include "socket_pending.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -95,6 +96,7 @@ bool TransportServer::accept_client(int timeout_ms) {
   std::string peer = inet_ntop(AF_INET, &cli.sin_addr, buf, sizeof(buf)) ? buf : "";
   int yes = 1;
   setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+  enable_dead_peer_detection(fd);   // a vanished tablet must not hold the session
 
   SSL* ssl = nullptr;
   if (tls_) {

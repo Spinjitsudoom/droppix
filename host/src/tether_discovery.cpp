@@ -31,3 +31,9 @@ bool decode_reply(const std::vector<unsigned char>& b, TetherReply& out) {
 }
 
 }  // namespace droppix
+
+namespace droppix {
+bool is_usb_tether_netdev(const std::string& device_path, bool wireless) {
+  return !wireless && device_path.find("/usb") != std::string::npos;
+}
+}  // namespace droppix

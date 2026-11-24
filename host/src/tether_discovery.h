@@ -22,4 +22,9 @@ struct TetherReply { uint16_t wake_port = 0; std::string id; std::string name; }
 std::vector<unsigned char> encode_reply(const TetherReply& r);
 bool decode_reply(const std::vector<unsigned char>& b, TetherReply& out);
 
+// True for a network adapter that is a USB tether: its device (the resolved
+// /sys/class/net/<if>/device path, empty for virtual interfaces) sits on a USB bus and it
+// is not wireless (a USB Wi-Fi stick is a LAN, not a tether).
+bool is_usb_tether_netdev(const std::string& device_path, bool wireless);
+
 }  // namespace droppix

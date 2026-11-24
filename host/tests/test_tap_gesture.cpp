@@ -90,3 +90,32 @@ TEST(ClickSchedule, WiggleAlwaysPrecedesMove) {
   EXPECT_EQ(a[0], ClickSchedule::Step::Wiggle);
   EXPECT_EQ(a[1], ClickSchedule::Step::Move);
 }
+
+// A second right-click 30..110 ms after the first arrived while the button was still down,
+// so its Move dragged with the right button held. Cancelling releases a held button.
+TEST(ClickSchedule, CancelReleasesAHeldButton) {
+  ClickSchedule s;
+  s.start(0, 5, 6);
+  s.due(50);   // wiggle, move, press
+  auto c = s.cancel();
+  ASSERT_EQ(c.size(), 1u);
+  EXPECT_EQ(c[0], ClickSchedule::Step::Release);
+  EXPECT_FALSE(s.active());
+  EXPECT_TRUE(s.due(1000).empty());
+}
+
+TEST(ClickSchedule, CancelBeforePressSendsNothing) {
+  ClickSchedule s;
+  s.start(0, 5, 6);
+  s.due(0);    // wiggle, move only
+  EXPECT_TRUE(s.cancel().empty());
+  EXPECT_FALSE(s.active());
+}
+
+TEST(ClickSchedule, CancelWhenIdleOrDoneSendsNothing) {
+  ClickSchedule s;
+  EXPECT_TRUE(s.cancel().empty());
+  s.start(0, 5, 6);
+  s.due(1000); // complete
+  EXPECT_TRUE(s.cancel().empty());
+}

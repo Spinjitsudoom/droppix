@@ -128,6 +128,7 @@ if(Qt6_FOUND)
     gui/stream_controller.cpp
     gui/mdns_advertiser.cpp
     gui/mdns_browser.cpp
+    gui/process_lifetime.cpp
     gui/tether_scanner.cpp
     gui/adb_transport.cpp
     gui/approved_store.cpp
@@ -279,6 +280,8 @@ if(Qt6_FOUND)
     gui/toggle_switch.cpp
     gui/tests/test_cert_manager.cpp
     gui/cert_manager.cpp
+    gui/tests/test_process_lifetime.cpp
+    gui/process_lifetime.cpp
     gui/autostart.cpp
     src/version.cpp
   )

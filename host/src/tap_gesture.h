@@ -47,6 +47,13 @@ class ClickSchedule {
     while (active() && now_ms - t0_ >= kAt[next_]) out.push_back(static_cast<Step>(next_++));
     return out;
   }
+  // Ends the click early (a new click, other pointer input, teardown). Returns Release when
+  // the button is down, so it is never left held; a click that has not pressed yet is dropped.
+  std::vector<Step> cancel() {
+    const bool held = next_ == static_cast<int>(Step::Release);
+    next_ = -1;
+    return held ? std::vector<Step>{Step::Release} : std::vector<Step>{};
+  }
   uint16_t x() const { return x_; }
   uint16_t y() const { return y_; }
 

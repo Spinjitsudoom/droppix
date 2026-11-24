@@ -13,6 +13,7 @@ import android.view.View
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.ImageButton
 import android.widget.TextView
 import android.content.Context
 import android.hardware.usb.UsbAccessory
@@ -103,7 +104,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
      */
     private fun wireFloatingMenu() {
         val actions = findViewById<View>(R.id.fab_actions)
-        val fab = findViewById<Button>(R.id.fab_main)
+        val fab = findViewById<ImageButton>(R.id.fab_main)
         val audioBtn = findViewById<Button>(R.id.act_audio)
         val touchBtn = findViewById<Button>(R.id.act_touch)
 
@@ -117,7 +118,8 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         }
         fun collapse() {
             actions.visibility = View.GONE
-            fab.text = "\u2630"
+            fab.setImageResource(R.drawable.ic_menu)
+            fab.contentDescription = "Menu"
         }
         refresh()
 
@@ -126,7 +128,8 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             else {
                 refresh()
                 actions.visibility = View.VISIBLE
-                fab.text = "\u00D7"
+                fab.setImageResource(R.drawable.ic_close)
+                fab.contentDescription = "Close menu"
             }
         }
         findViewById<Button>(R.id.act_settings).setOnClickListener {

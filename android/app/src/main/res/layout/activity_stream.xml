@@ -180,7 +180,10 @@
                 android:textSize="15sp"
                 android:textColor="#FFFFFF"
                 android:background="#B0000000"
-                android:text="⚙  Settings" />
+                android:drawableLeft="@drawable/ic_settings"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="Settings" />
 
             <Button
                 android:id="@+id/act_keyboard"
@@ -194,7 +197,10 @@
                 android:textSize="15sp"
                 android:textColor="#FFFFFF"
                 android:background="#B0000000"
-                android:text="⌨  Keyboard" />
+                android:drawableLeft="@drawable/ic_keyboard"
+                android:drawablePadding="8dp"
+                android:gravity="center_vertical"
+                android:text="Keyboard" />
 
             <Button
                 android:id="@+id/act_audio"
@@ -242,18 +248,17 @@
                 android:text="Disconnect" />
         </LinearLayout>
 
-        <Button
+        <!-- Menu / close icons are vectors: the Android 5.1 font has no glyph for the
+             menu-bars character and drew an empty box. -->
+        <ImageButton
             android:id="@+id/fab_main"
             android:layout_width="56dp"
             android:layout_height="56dp"
-            android:minWidth="0dp"
-            android:minHeight="0dp"
-            android:padding="0dp"
-            android:textSize="22sp"
-            android:textColor="#FFFFFF"
+            android:padding="16dp"
+            android:scaleType="fitCenter"
             android:background="#C0202020"
             android:contentDescription="Menu"
-            android:text="☰" />
+            android:src="@drawable/ic_menu" />
     </LinearLayout>
 
 </FrameLayout>

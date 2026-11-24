@@ -1,4 +1,5 @@
 #include "web_frontend.h"
+#include "socket_pending.h"
 #include "socket_channel.h"
 #include "ws_channel.h"
 #include "protocol.h"
@@ -257,6 +258,7 @@ bool WebFrontend::serve_until_stream(TransportServer& tx,
     std::string peer = inet_ntop(AF_INET, &cli.sin_addr, ibuf, sizeof(ibuf)) ? ibuf : "";
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
+    enable_dead_peer_detection(fd);   // a vanished tablet must not hold the session
     set_io_timeout(fd, 10);
 
     SSL* ssl = SSL_new(tx.ssl_ctx());

@@ -343,6 +343,15 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     }
     Frame f = src_->next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
+    if (!frame_fits_session(f, w, h)) {
+      // The screen mode changed under the session. The encoder, the client's decoder and
+      // the touch mapping are all sized for w x h, so restart the session: the source is
+      // rebuilt and reports the new mode, and the client reconnects to it.
+      std::fprintf(stderr, "mode: screen is now %dx%d (session %dx%d); restarting stream\n",
+                   f.width, f.height, w, h);
+      restart_for_orientation = true;
+      break;
+    }
     // Pace against the client's link. If unacknowledged bytes are piling up we are
     // producing faster than the link drains; encoding more only inflates latency (the
     // send itself stays fast — the kernel buffers it). Drop the capture BEFORE the
@@ -450,8 +459,8 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   }
   for (auto& pkt : enc_.flush()) tx_.send_video(pkt.pts_us, pkt.keyframe, pkt.data);
   std::fprintf(stderr, "sent %d video packets\n", sent);
-  // On an orientation-driven restart, drop the client so it reconnects and the caller
-  // rebuilds the source at the new dimensions.
+  // On an orientation- or mode-driven restart, drop the client so it reconnects and the
+  // caller rebuilds the source at the new dimensions.
   if (restart_for_orientation) tx_.close_all();
   // Release the audio claim (if held) so the next session can capture the shared sink.
   if (audio_lock_fd >= 0) ::close(audio_lock_fd);

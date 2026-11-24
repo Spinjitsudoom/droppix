@@ -104,6 +104,17 @@ evdi → Capturer → Encoder → TransportServer
 
 ## Recent session notes
 
+- **2026-11-24 (polish pass):**
+  - **Orphaned helpers:** 10 `avahi-publish-service` processes outlived killed GUIs. Fixed with `endWithParent` (`PR_SET_PDEATHSIG`) and `QuitSignals`: SIGTERM/INT/HUP now run `MainWindow::quitNow()`, the same path as the tray's Quit.
+  - **Dead peers:** a vanished Wi-Fi tablet held its session. Every accepted socket now gets keep-alives plus `TCP_USER_TIMEOUT` (`enable_dead_peer_detection`).
+  - **Mode change:** a mid-session evdi mode change kept the old buffer registered. `grab()` now re-registers it, and the loop restarts the session when `!frame_fits_session`.
+  - **Tether probe:** now goes out only on USB network adapters that aren't wireless. This PC's Wi-Fi is itself a USB stick (`wlp0s20f0u11u1`), hence the wireless check.
+  - **Right-click:** `ClickSchedule::cancel()` releases a held button before a new click, a scroll or a mouse button, and at teardown.
+  - **Android 5.1:** the font has no ☰ ⚙ ⌨ glyphs, so these are now vector icons.
+  - **Checked and not bugs:** AOA + Wi-Fi double session (the wake listener only runs on the connect screen). `stop()` blocking for up to 3 s is left as is.
+  - **Still open, awaiting user decisions:** the spacedesk-compat listener on by default; Wi-Fi re-pairing after each PC restart (Android pins the per-launch leaf, not the CA).
+  - **Build gotcha:** a distrobox restart mid-build left 0-byte objects. See lesson `interrupted-build-empty-objects`.
+
 - **2026-11-24 (later):**
   - **Touch was dead:** the root streamer hardcoded `WAYLAND_DISPLAY=wayland-0` while Plasma ran on `wayland-1`, so the droppix output was never found and touch was skipped (`pick_wayland_display`).
   - **The soft keyboard auto-opened over half the stream:** fixed with `SOFT_INPUT_STATE_ALWAYS_HIDDEN`.
