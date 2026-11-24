@@ -264,14 +264,13 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       std::string pname = tname + "-pen";
       std::thread([backend, out_name, pname]{ backend->map_pen(out_name, pname); }).detach();
       // Desktop bounds for the two-finger-tap right-click pointer: prefer --desktop, else
-      // the bounding box of all outputs.
+      // the bounding box of the ENABLED outputs, which is what KWin scales this absolute
+      // pointer across. A disabled output still lists its old geometry; counting it skewed
+      // every right-click onto another monitor.
       int deskW = cfg_.desktop_w, deskH = cfg_.desktop_h;
       if (deskW <= 0 || deskH <= 0) {
-        deskW = 0; deskH = 0;
-        for (const auto& o : after_outputs) {
-          if (o.geom.x + o.geom.w > deskW) deskW = o.geom.x + o.geom.w;
-          if (o.geom.y + o.geom.h > deskH) deskH = o.geom.y + o.geom.h;
-        }
+        const Rect b = desktop_bounds(after_outputs);
+        deskW = b.w; deskH = b.h;
       }
       injector.set_geometry(droppix.geom.x, droppix.geom.y, droppix.geom.w, droppix.geom.h,
                             deskW, deskH);

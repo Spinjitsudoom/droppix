@@ -162,3 +162,17 @@ TEST(ParseXrandr, PrimaryFlag) {
   ASSERT_EQ(o.size(), 2u);
   EXPECT_TRUE(o[0].primary);   EXPECT_FALSE(o[1].primary);
 }
+
+// A disabled output keeps its last geometry in kscreen-doctor's listing, but KWin's
+// workspace excludes it. Counting it made the right-click pointer's range 3840 wide on a
+// 2688-wide desktop, so two-finger right-clicks landed on a different monitor.
+TEST(MonitorGeometry, DesktopBoundsIgnoresDisabledOutputs) {
+  const char* layout =
+    "Output: 1 DVI-I-1 ef42\n\tenabled\n\tGeometry: 1920,900 768x480\n"
+    "Output: 2 DP-3 4925\n\tdisabled\n\tGeometry: 1920,900 1920x1080\n"
+    "Output: 3 DP-2 fef9\n\tenabled\n\tGeometry: 0,900 1920x1080\n"
+    "Output: 4 HDMI-A-3 3331\n\tenabled\n\tGeometry: 0,0 1600x900\n";
+  Rect b = desktop_bounds(parse_kscreen_outputs(layout));
+  EXPECT_EQ(b.w, 1920 + 768);   // 2688, not 3840
+  EXPECT_EQ(b.h, 900 + 1080);
+}
