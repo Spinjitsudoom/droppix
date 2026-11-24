@@ -1,21 +1,55 @@
 #include "desktop_backend.h"
+#include <algorithm>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
+#include <set>
+#include <dirent.h>
 #include <pwd.h>
 #include <unistd.h>
 
 namespace droppix {
+
+std::string pick_wayland_display(const std::vector<std::string>& entries) {
+  std::set<std::string> names(entries.begin(), entries.end());
+  long best = -1;
+  for (const std::string& e : names) {
+    if (e.rfind("wayland-", 0) != 0) continue;
+    const std::string num = e.substr(8);
+    if (num.empty() || num.size() > 6 ||
+        !std::all_of(num.begin(), num.end(), [](unsigned char c) { return std::isdigit(c); }))
+      continue;
+    if (!names.count(e + ".lock")) continue;   // stale socket from a dead compositor
+    const long n = std::stol(num);
+    if (best < 0 || n < best) best = n;
+  }
+  return best < 0 ? "wayland-0" : "wayland-" + std::to_string(best);
+}
+
+namespace {
+// Plasma does not always run on wayland-0 (wayland-1 is common), and a wrong name made
+// kscreen-doctor return nothing: the droppix output was never identified and touch was
+// disabled.
+std::string discover_wayland_display(const std::string& runtime_dir) {
+  std::vector<std::string> entries;
+  if (DIR* d = ::opendir(runtime_dir.c_str())) {
+    while (dirent* e = ::readdir(d)) entries.emplace_back(e->d_name);
+    ::closedir(d);
+  }
+  return pick_wayland_display(entries);
+}
+}  // namespace
 
 std::string user_session_prefix() {
   const char* uid = std::getenv("PKEXEC_UID");
   if (!uid || !*uid) uid = std::getenv("SUDO_UID");
   if (!uid || !*uid) return "env ";  // already in a user session
   const std::string u(uid);
+  const std::string runtime = "/run/user/" + u;
   const std::string env =
-      "env XDG_RUNTIME_DIR=/run/user/" + u + " "
-      "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/" + u + "/bus "
-      "WAYLAND_DISPLAY=wayland-0 "
+      "env XDG_RUNTIME_DIR=" + runtime + " "
+      "DBUS_SESSION_BUS_ADDRESS=unix:path=" + runtime + "/bus "
+      "WAYLAND_DISPLAY=" + discover_wayland_display(runtime) + " "
       "DISPLAY=:0 ";   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
   struct passwd* pw = getpwuid(static_cast<uid_t>(std::atoi(u.c_str())));
   if (pw && pw->pw_name) return std::string("runuser -u ") + pw->pw_name + " -- " + env;

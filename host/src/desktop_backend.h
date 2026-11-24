@@ -8,9 +8,14 @@ namespace droppix {
 
 // Session-command prefix so the root streamer can run user-session tools (kscreen,
 // KWin DBus, pw-record) AS THE INVOKING USER via runuser + a reconstructed env.
-// Returns "env " when already a user session. (Relocated from stream_daemon,
-// unchanged: keeps WAYLAND_DISPLAY=wayland-0 — real-socket discovery is M2's job.)
+// Returns "env " when already a user session. WAYLAND_DISPLAY is discovered from the
+// user's runtime dir (pick_wayland_display), not assumed.
 std::string user_session_prefix();
+
+// PURE (unit-tested). Given the entries of $XDG_RUNTIME_DIR, the live compositor socket:
+// the lowest-numbered "wayland-N" that also has its "wayland-N.lock" (a dead compositor
+// leaves a socket but no lock). "wayland-0" if none qualifies.
+std::string pick_wayland_display(const std::vector<std::string>& runtime_entries);
 
 // Validate a compositor output/connector name (connector-id chars only) before it is
 //  interpolated into a shell command or trusted as identified. Shared by the KWin backend

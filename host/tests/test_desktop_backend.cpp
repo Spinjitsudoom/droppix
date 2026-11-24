@@ -84,3 +84,22 @@ TEST(PlaceCommand, X11AndKwin) {
   EXPECT_TRUE(place_command(BackendKind::Generic, "X", 0, 0).empty());
   EXPECT_TRUE(place_command(BackendKind::X11, "bad;name", 0, 0).empty());   // safe_output_name
 }
+
+// The root streamer reaches the user's compositor by socket name. It was hardcoded to
+// wayland-0, but Plasma often runs on wayland-1, and then kscreen-doctor returned nothing,
+// the droppix output was never identified, and touch was disabled.
+TEST(DesktopBackend, PicksTheLiveWaylandSocket) {
+  EXPECT_EQ(pick_wayland_display({"bus", "wayland-1", "wayland-1.lock", "pipewire-0"}), "wayland-1");
+}
+TEST(DesktopBackend, IgnoresAWaylandSocketWithoutItsLock) {
+  // A socket left behind by a dead compositor has no lock file.
+  EXPECT_EQ(pick_wayland_display({"wayland-0", "wayland-2", "wayland-2.lock"}), "wayland-2");
+}
+TEST(DesktopBackend, PrefersTheLowestLiveWaylandSocket) {
+  EXPECT_EQ(pick_wayland_display({"wayland-3", "wayland-3.lock", "wayland-1", "wayland-1.lock"}),
+            "wayland-1");
+}
+TEST(DesktopBackend, FallsBackToWayland0) {
+  EXPECT_EQ(pick_wayland_display({"bus"}), "wayland-0");
+  EXPECT_EQ(pick_wayland_display({"wayland-x", "wayland-x.lock"}), "wayland-0");
+}
