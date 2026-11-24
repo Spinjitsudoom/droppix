@@ -194,6 +194,11 @@ void InputInjector::right_click(uint16_t x_norm, uint16_t y_norm) {
 void InputInjector::run_click() {
   for (ClickSchedule::Step st : click_.due(now_ms())) {
     switch (st) {
+      case ClickSchedule::Step::Wiggle: {
+        const int px = scale_x(click_.x());
+        emit(rc_fd_, EV_ABS, ABS_X, px > 0 ? px - 1 : px + 1);
+        break;
+      }
       case ClickSchedule::Step::Move:
         emit(rc_fd_, EV_ABS, ABS_X, scale_x(click_.x()));
         emit(rc_fd_, EV_ABS, ABS_Y, scale_y(click_.y()));

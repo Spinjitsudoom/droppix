@@ -29,18 +29,20 @@ class TwoFingerTap {
   uint16_t centroidX_ = 0, centroidY_ = 0;   // midpoint while exactly two contacts were down
 };
 
-// A mouse-like right-click spread over time: move, then press 30 ms later, release 80 ms
-// after that. Pure; the injector polls due() from the stream loop instead of sleeping, so
+// A mouse-like right-click spread over time: wiggle + move, then press 30 ms later, release
+// 80 ms after that. Wiggle puts the pointer 1 px off first: the kernel drops an ABS value
+// equal to the last one sent, so a repeat click on the same pixel would otherwise not move
+// the pointer back from wherever the real mouse went. Pure; the injector polls due() from the stream loop instead of sleeping, so
 // the video thread never blocks.
 class ClickSchedule {
  public:
-  enum class Step { Move, Press, Release };
+  enum class Step { Wiggle, Move, Press, Release };
   void start(int64_t now_ms, uint16_t x, uint16_t y) {
     t0_ = now_ms; x_ = x; y_ = y; next_ = 0;
   }
-  bool active() const { return next_ >= 0 && next_ < 3; }
+  bool active() const { return next_ >= 0 && next_ < 4; }
   std::vector<Step> due(int64_t now_ms) {
-    static constexpr int64_t kAt[3] = {0, 30, 110};
+    static constexpr int64_t kAt[4] = {0, 0, 30, 110};
     std::vector<Step> out;
     while (active() && now_ms - t0_ >= kAt[next_]) out.push_back(static_cast<Step>(next_++));
     return out;
@@ -51,7 +53,7 @@ class ClickSchedule {
  private:
   int64_t t0_ = 0;
   uint16_t x_ = 0, y_ = 0;
-  int next_ = -1;   // -1 idle, 0..2 the next step, 3 done
+  int next_ = -1;   // -1 idle, 0..3 the next step, 4 done
 };
 
 }  // namespace droppix

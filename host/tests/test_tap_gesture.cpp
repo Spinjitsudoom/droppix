@@ -53,7 +53,7 @@ TEST(ClickSchedule, SpacesMovePressAndRelease) {
   ClickSchedule s;
   s.start(1000, 111, 222);
   auto a = s.due(1000);
-  ASSERT_EQ(a.size(), 1u); EXPECT_EQ(a[0], ClickSchedule::Step::Move);
+  ASSERT_EQ(a.size(), 2u); EXPECT_EQ(a[1], ClickSchedule::Step::Move);
   EXPECT_TRUE(s.due(1029).empty());
   auto b = s.due(1030);
   ASSERT_EQ(b.size(), 1u); EXPECT_EQ(b[0], ClickSchedule::Step::Press);
@@ -67,13 +67,26 @@ TEST(ClickSchedule, LateTickDeliversEveryOverdueStepInOrder) {
   ClickSchedule s;
   s.start(0, 1, 2);
   auto all = s.due(500);
-  ASSERT_EQ(all.size(), 3u);
-  EXPECT_EQ(all[0], ClickSchedule::Step::Move);
-  EXPECT_EQ(all[1], ClickSchedule::Step::Press);
-  EXPECT_EQ(all[2], ClickSchedule::Step::Release);
+  ASSERT_EQ(all.size(), 4u);
+  EXPECT_EQ(all[0], ClickSchedule::Step::Wiggle);
+  EXPECT_EQ(all[1], ClickSchedule::Step::Move);
+  EXPECT_EQ(all[2], ClickSchedule::Step::Press);
+  EXPECT_EQ(all[3], ClickSchedule::Step::Release);
 }
 TEST(ClickSchedule, IdleHasNothingDue) {
   ClickSchedule s;
   EXPECT_FALSE(s.active());
   EXPECT_TRUE(s.due(123456).empty());
+}
+
+// The kernel drops an ABS value equal to the last one sent. Tapping the same desktop pixel
+// twice (with the real mouse moved in between) made the Move step a no-op and the press
+// landed at the mouse. A Wiggle (1 px off) always precedes Move so the position changes.
+TEST(ClickSchedule, WiggleAlwaysPrecedesMove) {
+  ClickSchedule s;
+  s.start(0, 5, 6);
+  auto a = s.due(0);
+  ASSERT_EQ(a.size(), 2u);
+  EXPECT_EQ(a[0], ClickSchedule::Step::Wiggle);
+  EXPECT_EQ(a[1], ClickSchedule::Step::Move);
 }
