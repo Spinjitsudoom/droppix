@@ -20,7 +20,10 @@ class InputInjector {
   // Records the droppix output rect within the desktop and creates the right-click pointer
   // (a desktop-ranged absolute device) used for two-finger-tap -> BTN_RIGHT. No-op when the
   // desktop bounds are unknown — right-click stays disabled; normal touch is unaffected.
-  void set_geometry(int out_x, int out_y, int out_w, int out_h, int desktop_w, int desktop_h);
+  // desk_* is the desktop's bounding rect, whose origin can be negative; the pointer device's
+  // 0..desk_w-1 range maps onto it.
+  void set_geometry(int out_x, int out_y, int out_w, int out_h,
+                    int desk_x, int desk_y, int desk_w, int desk_h);
   // Scroll wheel and extra mouse buttons on the same absolute pointer device used for
   // right-click. x_norm/y_norm are 0..65535 on the droppix output, same as right_click.
   void scroll(int dx, int dy, uint16_t x_norm, uint16_t y_norm);
@@ -49,6 +52,6 @@ class InputInjector {
   MtSlots slots_;
   bool anyDown_ = false;   // last BTN_TOUCH state
   TwoFingerTap tap_;
-  int outX_ = 0, outY_ = 0, outW_ = 0, outH_ = 0, deskW_ = 0, deskH_ = 0;
+  int outX_ = 0, outY_ = 0, outW_ = 0, outH_ = 0, deskX_ = 0, deskY_ = 0, deskW_ = 0, deskH_ = 0;
 };
 }  // namespace droppix

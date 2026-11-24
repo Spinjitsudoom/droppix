@@ -137,9 +137,9 @@ void InputInjector::inject(const std::vector<TouchContact>& contacts) {
 }
 
 void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
-                                 int desktop_w, int desktop_h) {
+                                 int desk_x, int desk_y, int desk_w, int desk_h) {
   outX_ = out_x; outY_ = out_y; outW_ = out_w; outH_ = out_h;
-  deskW_ = desktop_w; deskH_ = desktop_h;
+  deskX_ = desk_x; deskY_ = desk_y; deskW_ = desk_w; deskH_ = desk_h;
   if (rc_fd_ >= 0 || deskW_ <= 0 || deskH_ <= 0) return;   // created once; needs desktop bounds
 
   rc_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
@@ -173,11 +173,11 @@ void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
 // Extracted verbatim from right_click's original body so all aux-device injectors
 // (right_click, scroll, mouse_button) place the pointer identically.
 int InputInjector::scale_x(uint16_t x_norm) const {
-  int px = outX_ + static_cast<int>(static_cast<int64_t>(x_norm) * outW_ / 65535);
+  int px = outX_ - deskX_ + static_cast<int>(static_cast<int64_t>(x_norm) * outW_ / 65535);
   return std::clamp(px, 0, deskW_ - 1);
 }
 int InputInjector::scale_y(uint16_t y_norm) const {
-  int py = outY_ + static_cast<int>(static_cast<int64_t>(y_norm) * outH_ / 65535);
+  int py = outY_ - deskY_ + static_cast<int>(static_cast<int64_t>(y_norm) * outH_ / 65535);
   return std::clamp(py, 0, deskH_ - 1);
 }
 

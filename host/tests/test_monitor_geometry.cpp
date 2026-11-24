@@ -176,3 +176,14 @@ TEST(MonitorGeometry, DesktopBoundsIgnoresDisabledOutputs) {
   EXPECT_EQ(b.w, 1920 + 768);   // 2688, not 3840
   EXPECT_EQ(b.h, 900 + 1080);
 }
+
+// KWin's workspace starts at the top-left of the enabled outputs, which can be negative
+// (a monitor left of / above the primary). The pointer must be mapped relative to that.
+TEST(MonitorGeometry, DesktopBoundsHasRealOrigin) {
+  const char* layout =
+    "Output: 1 HDMI-A-1 a\n\tenabled\n\tGeometry: -1920,0 1920x1080\n"
+    "Output: 2 DVI-I-1 b\n\tenabled\n\tGeometry: 0,0 2560x1600\n";
+  Rect b = desktop_bounds(parse_kscreen_outputs(layout));
+  EXPECT_EQ(b.x, -1920); EXPECT_EQ(b.y, 0);
+  EXPECT_EQ(b.w, 1920 + 2560); EXPECT_EQ(b.h, 1600);
+}

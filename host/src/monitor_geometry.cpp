@@ -92,13 +92,22 @@ std::vector<OutputInfo> parse_xrandr_outputs(const std::string& text) {
 }
 
 Rect desktop_bounds(const std::vector<OutputInfo>& outs) {
-  int right = 0, bottom = 0;
+  bool any = false;
+  int left = 0, top = 0, right = 0, bottom = 0;
   for (const auto& o : outs) {
     if (!o.enabled) continue;
+    if (!any) {
+      left = o.geom.x; top = o.geom.y;
+      right = o.geom.x + o.geom.w; bottom = o.geom.y + o.geom.h;
+      any = true;
+      continue;
+    }
+    left = std::min(left, o.geom.x);
+    top = std::min(top, o.geom.y);
     right = std::max(right, o.geom.x + o.geom.w);
     bottom = std::max(bottom, o.geom.y + o.geom.h);
   }
-  return Rect{0, 0, right, bottom};
+  return Rect{left, top, right - left, bottom - top};
 }
 
 namespace {

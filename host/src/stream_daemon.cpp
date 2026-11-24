@@ -267,13 +267,10 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       // the bounding box of the ENABLED outputs, which is what KWin scales this absolute
       // pointer across. A disabled output still lists its old geometry; counting it skewed
       // every right-click onto another monitor.
-      int deskW = cfg_.desktop_w, deskH = cfg_.desktop_h;
-      if (deskW <= 0 || deskH <= 0) {
-        const Rect b = desktop_bounds(after_outputs);
-        deskW = b.w; deskH = b.h;
-      }
+      Rect desk{0, 0, cfg_.desktop_w, cfg_.desktop_h};
+      if (desk.w <= 0 || desk.h <= 0) desk = desktop_bounds(after_outputs);
       injector.set_geometry(droppix.geom.x, droppix.geom.y, droppix.geom.w, droppix.geom.h,
-                            deskW, deskH);
+                            desk.x, desk.y, desk.w, desk.h);
     } else {
       std::fprintf(stderr, "input: uinput unavailable (need root); input disabled\n");
     }
