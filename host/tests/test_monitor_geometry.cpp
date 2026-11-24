@@ -187,3 +187,30 @@ TEST(MonitorGeometry, DesktopBoundsHasRealOrigin) {
   EXPECT_EQ(b.x, -1920); EXPECT_EQ(b.y, 0);
   EXPECT_EQ(b.w, 1920 + 2560); EXPECT_EQ(b.h, 1600);
 }
+
+// Real kscreen-doctor output (colours included): a DISABLED output still lists
+// "HDR: enabled" / "Wide Color Gamut: enabled", which flipped it to enabled. Only the bare
+// "enabled"/"disabled" state line decides it. This made the right-click pointer 3840 wide on
+// a 2688-wide desktop, so two-finger right-clicks opened menus on another monitor.
+TEST(MonitorGeometry, DisabledOutputWithHdrLinesStaysDisabled) {
+  const char* real =
+    "\x1b[01;32mOutput: \x1b[0;0m1 DVI-I-1 c177\n"
+    "\t\x1b[01;32menabled\x1b[0;0m\n"
+    "\x1b[01;33m\tGeometry: \x1b[0;0m1920,900 768x480\n"
+    "\x1b[01;32mOutput: \x1b[0;0m2 DP-3 4925\n"
+    "\t\x1b[01;31mdisabled\x1b[0;0m\n"
+    "\x1b[01;33m\tGeometry: \x1b[0;0m1920,900 1920x1080\n"
+    "\x1b[01;33m\tHDR: \x1b[0;0menabled\n"
+    "\x1b[01;33m\tWide Color Gamut: \x1b[0;0menabled\n"
+    "\x1b[01;32mOutput: \x1b[0;0m3 DP-2 fef9\n"
+    "\t\x1b[01;32menabled\x1b[0;0m\n"
+    "\x1b[01;33m\tGeometry: \x1b[0;0m0,900 1920x1080\n"
+    "\x1b[01;33m\tHDR: \x1b[0;0menabled\n";
+  auto outs = parse_kscreen_outputs(real);
+  ASSERT_EQ(outs.size(), 3u);
+  EXPECT_TRUE(outs[0].enabled);
+  EXPECT_FALSE(outs[1].enabled);
+  EXPECT_TRUE(outs[2].enabled);
+  Rect b = desktop_bounds(outs);
+  EXPECT_EQ(b.w, 2688);
+}

@@ -38,10 +38,14 @@ std::vector<OutputInfo> parse_kscreen_outputs(const std::string& text) {
       continue;
     }
     if (outs.empty()) continue;
-    if (line.find("enabled") != std::string::npos &&
-        line.find("disabled") == std::string::npos) {
-      outs.back().enabled = true;
-    }
+    // The state is its own bare line. Other lines also say "enabled" ("HDR: enabled",
+    // "Wide Color Gamut: enabled") even for a DISABLED output, so substring matching
+    // turned disabled monitors back on.
+    const auto first = line.find_first_not_of(" \t");
+    const std::string bare = first == std::string::npos
+        ? std::string() : line.substr(first, line.find_last_not_of(" \t\r") + 1 - first);
+    if (bare == "enabled") outs.back().enabled = true;
+    else if (bare == "disabled") outs.back().enabled = false;
     auto gp = line.find("Geometry:");
     if (gp != std::string::npos) {
       int x, y, w, h;
