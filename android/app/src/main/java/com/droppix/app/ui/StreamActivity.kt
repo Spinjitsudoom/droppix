@@ -269,7 +269,12 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         setContentView(R.layout.activity_stream)
         // Don't let the IME resize/pan the window when it appears: the surface is a fixed-size
         // video sink, not scrollable content.
-        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING)
+        // STATE_ALWAYS_HIDDEN: the surface is a text editor (for the keyboard button), and on a
+        // large screen an unset state makes Android pop the IME open on every focus, covering
+        // half the stream so touches there typed instead of reaching the PC. The keyboard
+        // button's explicit showSoftInput still opens it.
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING or
+                                WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         surfaceView = findViewById(R.id.surface)
         // In-stream entry point to Settings. Must be a real overlay View (topmost FrameLayout
         // child) rather than a long-press on the surface: GlDisplayView.onTouchEvent
@@ -278,6 +283,17 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         overlay = findViewById(R.id.overlay)
         overlay.visibility = View.GONE   // shown only if the host asks (Settings → performance overlay)
         applyImmersive()
+        // Android drops the hide flags in some cases (e.g. around the soft keyboard) without a
+        // window-focus change, so onWindowFocusChanged never re-applies them: the nav bar then
+        // stays over the bottom of the stream and taps there hit Back/Home instead of the PC.
+        @Suppress("DEPRECATION")
+        window.decorView.setOnSystemUiVisibilityChangeListener { vis ->
+            Log.i(TAG, "system ui visibility 0x${Integer.toHexString(vis)}")
+            if (vis and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION == 0) {
+                uiHandler.removeCallbacks(reapplyImmersive)
+                uiHandler.postDelayed(reapplyImmersive, 2500)   // let a deliberate peek breathe
+            }
+        }
         orientationListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(angleDeg: Int) {
                 val code = orientationMapper.update(angleDeg, SystemClock.elapsedRealtime()) ?: return
@@ -286,6 +302,8 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             }
         }
     }
+
+    private val reapplyImmersive = Runnable { if (!imeShown) applyImmersive() }
 
     // Hide the status + navigation bars for a true full-screen monitor; a swipe from
     // the edge peeks them back, then they auto-hide again (immersive sticky).
@@ -307,6 +325,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         val imm = getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager
         if (imeShown) {
             imm.hideSoftInputFromWindow(surfaceView.windowToken, 0)
+            uiHandler.postDelayed(reapplyImmersive, 400)   // bars come back with the keyboard
         } else {
             surfaceView.requestFocus()
             imm.showSoftInput(surfaceView, 0)
@@ -374,6 +393,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     }
 
     override fun onDestroy() {
+        uiHandler.removeCallbacks(reapplyImmersive)
         if (aoaAccessory != null) aoaInstances.decrementAndGet()
         super.onDestroy()
     }
