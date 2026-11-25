@@ -1,5 +1,7 @@
 #include "desktop_backend.h"
 #include "mutter_state.h"
+#include "sway_state.h"
+#include <csignal>
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -27,17 +29,52 @@ std::string pick_wayland_display(const std::vector<std::string>& entries) {
   return best < 0 ? "wayland-0" : "wayland-" + std::to_string(best);
 }
 
+bool has_live_wayland_socket(const std::vector<std::string>& entries) {
+  std::set<std::string> names(entries.begin(), entries.end());
+  for (const std::string& e : names) {
+    if (e.rfind("wayland-", 0) != 0 || e.size() <= 8) continue;
+    const std::string num = e.substr(8);
+    if (num.size() > 6 || !std::all_of(num.begin(), num.end(),
+                                       [](unsigned char c) { return std::isdigit(c); }))
+      continue;
+    if (names.count(e + ".lock")) return true;
+  }
+  return false;
+}
+
+bool edid_serial_matches(const std::string& s, uint32_t serial) {
+  if (s.empty()) return false;
+  const bool hex = s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X');
+  const size_t start = hex ? 2 : 0;
+  if (start >= s.size()) return false;
+  for (size_t i = start; i < s.size(); ++i)
+    if (!(hex ? std::isxdigit(static_cast<unsigned char>(s[i]))
+              : std::isdigit(static_cast<unsigned char>(s[i]))))
+      return false;
+  if (s.size() - start > 10) return false;
+  return std::strtoul(s.c_str() + start, nullptr, hex ? 16 : 10) == serial;
+}
+
 namespace {
 // Plasma does not always run on wayland-0 (wayland-1 is common), and a wrong name made
 // kscreen-doctor return nothing: the droppix output was never identified and touch was
 // disabled.
-std::string discover_wayland_display(const std::string& runtime_dir) {
+std::vector<std::string> list_dir(const std::string& dir) {
   std::vector<std::string> entries;
-  if (DIR* d = ::opendir(runtime_dir.c_str())) {
+  if (DIR* d = ::opendir(dir.c_str())) {
     while (dirent* e = ::readdir(d)) entries.emplace_back(e->d_name);
     ::closedir(d);
   }
-  return pick_wayland_display(entries);
+  return entries;
+}
+std::string discover_wayland_display(const std::string& runtime_dir) {
+  return pick_wayland_display(list_dir(runtime_dir));
+}
+// The live Sway IPC socket in the user's runtime dir ("" when Sway isn't running).
+std::string discover_sway_socket(const std::string& runtime_dir, long uid) {
+  const std::string s = pick_sway_socket(list_dir(runtime_dir), uid,
+                                         [](long pid) { return ::kill(static_cast<pid_t>(pid), 0) == 0; });
+  return s.empty() ? s : runtime_dir + "/" + s;
 }
 }  // namespace
 
@@ -51,7 +88,9 @@ std::string user_session_prefix() {
       "env XDG_RUNTIME_DIR=" + runtime + " "
       "DBUS_SESSION_BUS_ADDRESS=unix:path=" + runtime + "/bus "
       "WAYLAND_DISPLAY=" + discover_wayland_display(runtime) + " "
-      "DISPLAY=:0 ";   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
+      "DISPLAY=:0 " +   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
+      [&]{ const std::string s = discover_sway_socket(runtime, std::atol(u.c_str()));
+           return s.empty() ? std::string{} : "SWAYSOCK=" + s + " "; }();
   struct passwd* pw = getpwuid(static_cast<uid_t>(std::atoi(u.c_str())));
   if (pw && pw->pw_name) return std::string("runuser -u ") + pw->pw_name + " -- " + env;
   return "sudo -u '#" + u + "' " + env;
@@ -452,6 +491,88 @@ bool GnomeBackend::revive_output(uint32_t edid_serial) {
   return apply_mutter(on_state, mutter_place_config(before, conn, at.x, at.y), "revive (on)");
 }
 
+// ---- Sway (wlroots) ----
+
+namespace {
+std::string swaymsg(const std::string& args) {
+  return capture("timeout 5 " + user_session_prefix() + "swaymsg " + args + " 2>&1");
+}
+
+bool sway_outputs(std::vector<SwayOutput>& outs) {
+  const std::string out = swaymsg("-t get_outputs -r");
+  if (parse_sway_outputs(out, outs)) return true;
+  std::fprintf(stderr, "[sway] could not read outputs: %.200s\n", out.c_str());
+  return false;
+}
+
+bool sway_map(const char* what, const std::string& output, const std::string& dev) {
+  if (!safe_output_name(output) || !safe_output_name(dev)) return false;
+  // The device appears a moment after the uinput create; retry for ~3 s like KWin's binder.
+  for (int i = 0; i < 15; ++i) {
+    const std::string id = sway_input_identifier(swaymsg("-t get_inputs -r"), dev);
+    if (!id.empty()) {
+      const std::string out = swaymsg("input '" + id + "' map_to_output " + output);
+      const bool ok = out.find("\"success\": true") != std::string::npos ||
+                      out.find("\"success\":true") != std::string::npos || out.empty();
+      std::fprintf(stderr, "[sway] %s %s -> %s%s%s\n", what, id.c_str(), output.c_str(),
+                   ok ? "" : ": ", ok ? "" : out.c_str());
+      return ok;
+    }
+    usleep(200000);
+  }
+  std::fprintf(stderr, "[sway] %s device %s not found\n", what, dev.c_str());
+  return false;
+}
+}  // namespace
+
+std::vector<OutputInfo> SwayBackend::outputs() {
+  std::vector<SwayOutput> outs;
+  if (!sway_outputs(outs)) return {};
+  std::vector<OutputInfo> r;
+  for (auto& o : outs) r.push_back(o.info);
+  return r;
+}
+
+std::string SwayBackend::find_output(uint32_t edid_serial) {
+  std::vector<SwayOutput> outs;
+  if (edid_serial == 0 || !sway_outputs(outs)) return {};
+  return sway_find_by_serial(outs, edid_serial);
+}
+
+void SwayBackend::map_touch(const std::string& output, const std::string& touch_dev) {
+  sway_map("touch", output, touch_dev);
+}
+
+bool SwayBackend::map_pen(const std::string& output, const std::string& pen_dev) {
+  return sway_map("pen", output, pen_dev);
+}
+
+bool SwayBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  if (mode == LayoutMode::Mirror)
+    std::fprintf(stderr, "[sway] mirror: Sway has no output mirroring; %s stays extended\n",
+                 evdi.c_str());
+  return false;
+}
+
+bool SwayBackend::place_output(const std::string& evdi, int x, int y) {
+  std::vector<SwayOutput> outs;
+  if (!sway_outputs(outs)) return false;
+  const std::string cmd = sway_place_command(outs, evdi, x, y);
+  if (cmd.empty()) return false;
+  const std::string out = swaymsg("'" + cmd + "'");
+  std::fprintf(stderr, "[sway] place %s at %d,%d: %s\n", evdi.c_str(), x, y, out.c_str());
+  return true;
+}
+
+// Sway never modes an evdi output when wlroots has no render device for it: say how to fix.
+bool SwayBackend::revive_output(uint32_t edid_serial) {
+  (void)edid_serial;
+  std::fprintf(stderr,
+      "[sway] the droppix screen has no mode yet. If it never appears, start Sway with "
+      "WLR_EVDI_RENDER_DEVICE=/dev/dri/renderD128 (your GPU's render node) in its environment\n");
+  return false;
+}
+
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
   std::fprintf(stderr, "input: touch-to-output mapping not supported on this desktop yet; "
@@ -459,7 +580,8 @@ void GenericBackend::map_touch(const std::string& output, const std::string& tou
 }
 
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
-                                bool x11_session, bool has_x11_tools, bool has_mutter) {
+                                bool x11_session, bool has_x11_tools, bool has_mutter,
+                                bool has_sway) {
   std::string d;
   for (char c : xdg_current_desktop) d.push_back(static_cast<char>(std::tolower((unsigned char)c)));
   if (d.find("kde") != std::string::npos || d.find("plasma") != std::string::npos)
@@ -467,6 +589,7 @@ BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has
   if (d.empty() && has_kscreen) return BackendKind::KWin;
   if (x11_session && has_x11_tools) return BackendKind::X11;
   if (d.find("gnome") != std::string::npos || has_mutter) return BackendKind::Gnome;
+  if (d.find("sway") != std::string::npos || has_sway) return BackendKind::Sway;
   return BackendKind::Generic;
 }
 
@@ -526,10 +649,10 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
       if (st && *st) return std::string(st) == "x11";
       const char* uid = std::getenv("PKEXEC_UID");
       if (!uid || !*uid) uid = std::getenv("SUDO_UID");
-      if (uid && *uid) {
-        const std::string wl = "/run/user/" + std::string(uid) + "/wayland-0";
-        if (access(wl.c_str(), F_OK) == 0) return false;
-      }
+      // Any live wayland-N, not just wayland-0: Sway/Plasma often run on wayland-1, and
+      // XWayland's X0 then made droppix pick the X11 backend (xinput can't see uinput there).
+      if (uid && *uid && has_live_wayland_socket(list_dir("/run/user/" + std::string(uid))))
+        return false;
       return access("/tmp/.X11-unix/X0", F_OK) == 0;
     }();
     const bool has_x11_tools =
@@ -543,10 +666,19 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
                 "--method org.freedesktop.DBus.NameHasOwner org.gnome.Mutter.DisplayConfig 2>/dev/null")
             .find("true") != std::string::npos;
     std::shared_ptr<DesktopBackend> b;
-    switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools, has_mutter)) {
+    const bool has_sway = [&]{
+      const char* uid = std::getenv("PKEXEC_UID");
+      if (!uid || !*uid) uid = std::getenv("SUDO_UID");
+      if (uid && *uid) return !discover_sway_socket("/run/user/" + std::string(uid), std::atol(uid)).empty();
+      const char* s = std::getenv("SWAYSOCK");
+      return s && *s;
+    }();
+    switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools, has_mutter,
+                                has_sway)) {
       case BackendKind::KWin:  b = std::make_shared<KWinBackend>();  break;
       case BackendKind::X11:   b = std::make_shared<X11Backend>();   break;
       case BackendKind::Gnome: b = std::make_shared<GnomeBackend>(); break;
+      case BackendKind::Sway:  b = std::make_shared<SwayBackend>();  break;
       default:                b = std::make_shared<GenericBackend>();
     }
     std::fprintf(stderr, "desktop backend: %s\n", b->name());

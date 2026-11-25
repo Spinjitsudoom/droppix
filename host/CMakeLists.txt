@@ -68,6 +68,8 @@ add_library(droppix_core
   src/gvariant_text.cpp
   src/mutter_state.cpp
   src/input_caps.cpp
+  src/json_value.cpp
+  src/sway_state.cpp
   src/session_params.cpp
   src/encoder_factory.cpp
   src/ws_channel.cpp
@@ -222,6 +224,7 @@ add_executable(droppix_tests
   tests/test_desktop_backend.cpp
   tests/test_mutter_state.cpp
   tests/test_input_caps.cpp
+  tests/test_sway.cpp
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp

@@ -1,5 +1,6 @@
 #include "mutter_state.h"
 #include "gvariant_text.h"
+#include "desktop_backend.h"   // edid_serial_matches
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -157,14 +158,8 @@ std::vector<OutputInfo> mutter_outputs(const MutterState& st) {
 }
 
 std::string mutter_find_by_serial(const MutterState& st, uint32_t session_serial) {
-  for (const auto& m : st.monitors) {
-    const std::string& s = m.serial;
-    if (s.empty()) continue;
-    char* end = nullptr;
-    const bool hex = s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X');
-    const unsigned long v = std::strtoul(s.c_str(), &end, hex ? 16 : 10);
-    if (end && *end == '\0' && v == session_serial) return m.connector;
-  }
+  for (const auto& m : st.monitors)
+    if (edid_serial_matches(m.serial, session_serial)) return m.connector;
   return {};
 }
 

@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-05
 **Type:** Multi-milestone roadmap (decomposition), not a single-feature spec.
-**Status:** Partial on master (2026-07-18): M1 DesktopBackend + KWin + X11 backends shipped; M3 GNOME Wayland shipped 2026-11-25 ([design](2026-11-25-gnome-wayland-backend-design.md)); M2 Sway still open. (Note: original text deferred X11; an X11Backend was added later.)
+**Status:** Partial on master (2026-07-18): M1 DesktopBackend + KWin + X11 backends shipped; M3 GNOME Wayland shipped 2026-11-25 ([design](2026-11-25-gnome-wayland-backend-design.md)); M2 Sway shipped 2026-11-25 ([design](2026-11-25-sway-backend-design.md)); Hyprland still open. (Note: original text deferred X11; an X11Backend was added later.)
 
 ## Goal
 

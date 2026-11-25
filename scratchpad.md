@@ -110,6 +110,8 @@ evdi → Capturer → Encoder → TransportServer
   - **Reconnect revive:** Mutter keeps the old monitor "on" and never modes a quick reconnect. `on_stalled` → `revive_output` (off/on). Identification is by EDID serial (lesson `gnome-reconnect-no-mode`).
   - **Pen was dead everywhere:** libinput rejected the device (no `BTN_STYLUS`/resolution). Fixed via `pen_device_caps()` (lesson `libinput-rejects-pen`).
   - **Packaging finding (open):** AppImage libs need glibc 2.43, and its GUI needs Qt ≥ 6.11. It only runs on the newest Fedora/Arch-class distros. The Flatpak's host-staged streamer has the same glibc problem. Needs an old-baseline build.
+  - **Sway backend shipped** (`SwayBackend`, `sway_state.*`, `json_value.*`). Needs `WLR_EVDI_RENDER_DEVICE` in Sway's env (user setup), plus `WLR_RENDERER_ALLOW_SOFTWARE=1` in the VM only. Detection fix: any live `wayland-N` = Wayland (lesson `xwayland-mistaken-for-x11`). Placement pins the other outputs (Sway re-arranged the unpinned main screen).
+  - **Sway VM:** GDM disabled; getty autologin on tty1 plus `~/.bash_profile` starts whatever `~/.session` names (`sway`/`hyprland`). Use `stdbuf -oL wev` to see delivered input. The GTK probe's `Gtk.Application` hangs under Sway.
   - **VM rig:** `~/droppix-vms/` (`ubuntu/run.sh` with `virtio-vga-gl` + `egl-headless` on the i915 render node; `vm` runs stdin scripts over ssh; `spike/*.sh`). The streamer exits on stdin EOF, so run it as `systemd-run ... sh -c "sleep infinity | exec droppix_stream"`. Software rendering (no virgl) gave a mode but no frames.
 
 - **2026-11-24 (polish pass):**

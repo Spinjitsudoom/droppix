@@ -30,7 +30,7 @@ Do not treat a spec header that still says "implementation plan pending" as auth
 
 ## Open roadmap (high level)
 
-1. **Cross-desktop M2** — Sway/wlroots backend (`2026-07-05-cross-desktop-portability-design.md`). M1 seam, X11 and GNOME (M3, 2026-11-25) backends already shipped.
+1. **Cross-desktop** — Hyprland backend, Plasma 5 check, COSMIC (`2026-07-05-cross-desktop-portability-design.md`). M1 seam, X11, GNOME and Sway backends shipped (GNOME/Sway 2026-11-25).
 2. **Web PWA client** — host-served HTTPS shell + WSS; video/audio/input/fullscreen (`2026-07-18-web-pwa-client-design.md`). Partial on `feat/web-pwa-client`.
 3. **macOS host (research only)** — CGVirtualDisplay OSS survey and ownership model (`2026-07-18-cgvirtualdisplay-oss-research.md`). Archived code under `macos/`; not scheduled.
 4. **Optional polish** — expose `--encoder` in the host GUI; further latency work (zero-copy capture remains out of scope for now).

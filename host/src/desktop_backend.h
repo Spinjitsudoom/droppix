@@ -18,6 +18,15 @@ std::string user_session_prefix();
 // leaves a socket but no lock). "wayland-0" if none qualifies.
 std::string pick_wayland_display(const std::vector<std::string>& runtime_entries);
 
+// PURE (unit-tested). Is any wayland-N socket in $XDG_RUNTIME_DIR live (has its .lock)? Then the
+// session is Wayland even if XWayland's /tmp/.X11-unix/X0 exists. Same rule as
+// pick_wayland_display, without its wayland-0 fallback.
+bool has_live_wayland_socket(const std::vector<std::string>& runtime_entries);
+
+// PURE (unit-tested). Does EDID serial text from a compositor ("27000", "0x00006978")
+// equal the session's numeric serial?
+bool edid_serial_matches(const std::string& text, uint32_t serial);
+
 // Validate a compositor output/connector name (connector-id chars only) before it is
 //  interpolated into a shell command or trusted as identified. Shared by the KWin backend
 //  and StreamDaemon's output-identification gate.
@@ -119,6 +128,21 @@ class GnomeBackend : public DesktopBackend {
   bool revive_output(uint32_t edid_serial) override;
 };
 
+// Sway (wlroots): swaymsg JSON for outputs/placement, `input <id> map_to_output` for touch
+// and pen. Sway has no output mirroring, so mirror stays extended. Sway only adopts an evdi
+// output when its environment has WLR_EVDI_RENDER_DEVICE (a user setup step).
+class SwayBackend : public DesktopBackend {
+ public:
+  const char* name() const override { return "sway"; }
+  std::vector<OutputInfo> outputs() override;
+  void map_touch(const std::string& output, const std::string& touch_dev) override;
+  bool map_pen(const std::string& output, const std::string& pen_dev) override;
+  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool place_output(const std::string& evdi_output, int x, int y) override;
+  std::string find_output(uint32_t edid_serial) override;
+  bool revive_output(uint32_t edid_serial) override;
+};
+
 // Unknown/unsupported compositor: display still works (evdi is compositor-driven);
 // outputs() returns {} and map_touch() logs a warning and no-ops.
 class GenericBackend : public DesktopBackend {
@@ -128,15 +152,17 @@ class GenericBackend : public DesktopBackend {
   void map_touch(const std::string& output, const std::string& touch_dev) override;
 };
 
-enum class BackendKind { KWin, X11, Gnome, Generic };
+enum class BackendKind { KWin, X11, Gnome, Sway, Generic };
 
 // PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
 // (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
 // xrandr+xinput available -> X11; else "gnome" in the desktop string OR Mutter's
 // DisplayConfig on the session bus (has_mutter; the only signal under pkexec) -> Gnome;
+// else "sway" in the desktop string OR a live Sway IPC socket (has_sway) -> Sway;
 // otherwise Generic.
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
-                                bool x11_session, bool has_x11_tools, bool has_mutter = false);
+                                bool x11_session, bool has_x11_tools, bool has_mutter = false,
+                                bool has_sway = false);
 
 // PURE (unit-tested). USB product id for one session's uinput device. GNOME binds a
 // touchscreen/tablet to a monitor by vendor:product, so concurrent sessions need distinct

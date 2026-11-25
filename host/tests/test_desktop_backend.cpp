@@ -31,9 +31,10 @@ TEST(DesktopBackend, KdeBeatsMutter) {
   EXPECT_EQ(select_backend_kind("KDE", true, false, false, true), BackendKind::KWin);
 }
 TEST(DesktopBackend, NonKdeDesktopIgnoresKscreenPresence) {
-  // A named non-KDE desktop is Generic even if kscreen-doctor happens to be installed;
+  // A named non-KDE desktop never becomes KWin just because kscreen-doctor is installed;
   // the tool only promotes an UNKNOWN desktop.
-  EXPECT_EQ(select_backend_kind("sway", true, false, false), BackendKind::Generic);
+  EXPECT_EQ(select_backend_kind("sway", true, false, false), BackendKind::Sway);
+  EXPECT_EQ(select_backend_kind("Hyprland", true, false, false), BackendKind::Generic);
 }
 
 TEST(DesktopBackend, X11SessionWithToolsSelectsX11) {
@@ -50,7 +51,7 @@ TEST(DesktopBackend, KdeOnX11StillSelectsKWin) {
 TEST(DesktopBackend, WaylandNonKdeWithToolsSelectsGeneric) {
   // xrandr/xinput being installed doesn't matter on a Wayland session (XWayland's view
   // of outputs/input isn't the compositor's).
-  EXPECT_EQ(select_backend_kind("sway", false, false, true), BackendKind::Generic);
+  EXPECT_EQ(select_backend_kind("river", false, false, true), BackendKind::Generic);
 }
 TEST(DesktopBackend, UnknownDesktopOnX11WithToolsSelectsX11) {
   EXPECT_EQ(select_backend_kind("", false, true, true), BackendKind::X11);
