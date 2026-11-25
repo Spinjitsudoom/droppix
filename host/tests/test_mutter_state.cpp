@@ -162,26 +162,6 @@ TEST(MutterApply, PlacingAnUnknownOutputGivesNothing) {
   EXPECT_EQ(mutter_place_config(st, "HDMI-9", 0, 0), "");
 }
 
-TEST(MutterApply, MirrorNeedsACommonMode) {
-  MutterState st;
-  ASSERT_TRUE(parse_mutter_state(kTwoMonitors, st));
-  EXPECT_EQ(mutter_mirror_config(st, "DVI-I-1"), "");   // no shared resolution
-}
-
-TEST(MutterApply, MirrorJoinsBothIntoThePrimaryLogicalMonitor) {
-  std::string t = kTwoMonitors;
-  // give the tablet a 1920x1080 mode too
-  const std::string needle = "{'is-current': <true>})], {'is-builtin': <false>";
-  t.replace(t.find(needle), needle.size(),
-            "{'is-current': <true>}), ('1920x1080@60.000', 1920, 1080, 60.0, 1.0, [1.0], @a{sv} {})], "
-            "{'is-builtin': <false>");
-  MutterState st;
-  ASSERT_TRUE(parse_mutter_state(t, st));
-  EXPECT_EQ(mutter_mirror_config(st, "DVI-I-1"),
-    "[(0, 0, 1.0, uint32 0, true, [('eDP-1', '1920x1080@60.000', @a{sv} {}), "
-    "('DVI-I-1', '1920x1080@60.000', @a{sv} {})])]");
-}
-
 // ---- touch / stylus -> monitor (GNOME per-device gsettings) ----
 
 TEST(GnomeMapCommand, TouchscreenPathUsesLowercaseHexIds) {

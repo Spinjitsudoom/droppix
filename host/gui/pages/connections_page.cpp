@@ -34,7 +34,7 @@ void wireEmptyState(QListWidget* list, QLabel* empty, QObject* context) {
 
 ConnectionsPage::ConnectionsPage(QListWidget* devices, QPushButton* connectBtn,
                                   QListWidget* monitors, QPushButton* stopBtn,
-                                  QPushButton* mirrorBtn, QWidget* parent)
+                                  QWidget* parent)
     : QWidget(parent) {
   // --- Discovered devices card: header + list + empty state + connect button ---
   auto* devicesCard = new QFrame(this);
@@ -52,7 +52,7 @@ ConnectionsPage::ConnectionsPage(QListWidget* devices, QPushButton* connectBtn,
   devicesCard->setLayout(devicesCardLayout);
   wireEmptyState(devices, devicesEmpty, this);
 
-  // --- Active monitors card: header + list + empty state + stop/mirror button row ---
+  // --- Active monitors card: header + list + empty state + stop button row ---
   auto* monitorsCard = new QFrame(this);
   monitorsCard->setObjectName("card");
   auto* monitorsHeader = new QLabel("Active monitors", monitorsCard);
@@ -64,7 +64,6 @@ ConnectionsPage::ConnectionsPage(QListWidget* devices, QPushButton* connectBtn,
   monitorsEmpty->setWordWrap(true);
   auto* monitorsBtnRow = new QHBoxLayout;
   monitorsBtnRow->addWidget(stopBtn);
-  monitorsBtnRow->addWidget(mirrorBtn);
   auto* monitorsCardLayout = new QVBoxLayout;
   monitorsCardLayout->addWidget(monitorsHeader);
   monitorsCardLayout->addWidget(monitors);

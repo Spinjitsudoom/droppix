@@ -25,15 +25,9 @@ std::string hypr_find_by_serial(const std::vector<HyprMonitor>& mons, uint32_t s
 // current mode, scale and transform. "" if unknown/unsafe.
 std::string hypr_place_rule(const std::vector<HyprMonitor>& mons, const std::string& name, int x, int y);
 
-// PURE (unit-tested). The rule mirroring `name` onto `primary`. "" if unknown/unsafe.
-std::string hypr_mirror_rule(const std::vector<HyprMonitor>& mons, const std::string& name,
-                             const std::string& primary);
-
-// PURE (unit-tested). The same rules as Lua for `hyprctl eval`: Hyprland 0.5x configs are Lua
+// PURE (unit-tested). The same rule as Lua for `hyprctl eval`: Hyprland 0.5x configs are Lua
 // (hyprland.lua), where `keyword` answers "unknown request". "" if unknown/unsafe.
 std::string hypr_place_lua(const std::vector<HyprMonitor>& mons, const std::string& name, int x, int y);
-std::string hypr_mirror_lua(const std::vector<HyprMonitor>& mons, const std::string& name,
-                            const std::string& primary);
 std::string hypr_device_lua(const std::string& device, const std::string& output);
 
 // PURE (unit-tested). The live Hyprland instance signature among `signatures` (directory names

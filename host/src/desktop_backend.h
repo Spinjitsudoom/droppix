@@ -43,8 +43,6 @@ bool edid_serial_matches(const std::string& text, uint32_t serial);
 //  and StreamDaemon's output-identification gate.
 bool safe_output_name(const std::string& s);
 
-enum class LayoutMode { Extend, Mirror };
-
 // Per-desktop operations droppix needs beyond creating the evdi output. Compositing
 // the virtual display, encode, and stream are compositor-agnostic and not here.
 struct DesktopBackend {
@@ -71,10 +69,11 @@ struct DesktopBackend {
   // link + placement, or the desktop shows black). Returns true if the layout may have
   // changed so the caller re-queries geometry.
   virtual bool adopt_output(const std::string& output) { (void)output; return false; }
-  // Apply mirror/extend layout for the droppix output relative to the primary display.
-  // Default no-op (Generic); KWin/X11 override. Returns true if the command was issued.
-  virtual bool apply_layout(const std::string& evdi_output, LayoutMode mode) {
-    (void)evdi_output; (void)mode; return false;
+  // Make the droppix output extend the desktop to the right of the primary (undoing any
+  // mirror a compositor restored or a previous session left). Default no-op; KWin/X11/COSMIC
+  // override. Returns true if the layout may have changed.
+  virtual bool apply_layout(const std::string& evdi_output) {
+    (void)evdi_output; return false;
   }
   // Place the droppix output at an absolute pixel position (client-declared monitor-grid
   // wall_col/wall_row -> pixel offset, computed by grid_position). Default no-op (Generic);
@@ -108,7 +107,7 @@ class KWinBackend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool apply_layout(const std::string& evdi_output) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
 };
 
@@ -123,7 +122,7 @@ class X11Backend : public DesktopBackend {
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
   bool link_providers() override;
   bool adopt_output(const std::string& output) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool apply_layout(const std::string& evdi_output) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
 
  private:
@@ -137,8 +136,8 @@ class X11Backend : public DesktopBackend {
                       bool children = false);
 };
 
-// GNOME on Wayland (Mutter): org.gnome.Mutter.DisplayConfig over gdbus for outputs,
-// placement and mirror; GNOME's per-device gsettings to pin touch/pen to the droppix
+// GNOME on Wayland (Mutter): org.gnome.Mutter.DisplayConfig over gdbus for outputs and
+// placement; GNOME's per-device gsettings to pin touch/pen to the droppix
 // monitor. Layout changes are applied as temporary, so the user's saved monitors.xml
 // is never rewritten.
 class GnomeBackend : public DesktopBackend {
@@ -147,14 +146,13 @@ class GnomeBackend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
   std::string find_output(uint32_t edid_serial) override;
   bool revive_output(uint32_t edid_serial) override;
 };
 
 // Sway (wlroots): swaymsg JSON for outputs/placement, `input <id> map_to_output` for touch
-// and pen. Sway has no output mirroring, so mirror stays extended. Sway only adopts an evdi
+// and pen. Sway only adopts an evdi
 // output when its environment has WLR_EVDI_RENDER_DEVICE (a user setup step).
 class SwayBackend : public DesktopBackend {
  public:
@@ -162,13 +160,12 @@ class SwayBackend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
   std::string find_output(uint32_t edid_serial) override;
   bool revive_output(uint32_t edid_serial) override;
 };
 
-// Hyprland: `hyprctl -j` for outputs, `keyword monitor` rules for placement and mirror,
+// Hyprland: `hyprctl -j` for outputs, `keyword monitor` rules for placement,
 // per-device `device[<name>]:output` for touch and pen.
 class HyprlandBackend : public DesktopBackend {
  public:
@@ -176,12 +173,11 @@ class HyprlandBackend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
   std::string find_output(uint32_t edid_serial) override;
 };
 
-// COSMIC (cosmic-comp): `cosmic-randr` for outputs/placement/mirror; touch and pen pinned with
+// COSMIC (cosmic-comp): `cosmic-randr` for outputs/placement (and undoing a restored mirror); touch and pen pinned with
 // `map_to_output` in cosmic-comp's per-device input config (only droppix's own entries are
 // rewritten in the user's file).
 class CosmicBackend : public DesktopBackend {
@@ -192,7 +188,7 @@ class CosmicBackend : public DesktopBackend {
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
-  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool apply_layout(const std::string& evdi_output) override;
   bool place_output(const std::string& evdi_output, int x, int y) override;
   std::string find_output(uint32_t edid_serial) override;
 };
@@ -226,11 +222,11 @@ BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has
 // apart). A name without a number keeps `base`.
 uint16_t session_device_id(uint16_t base, const std::string& touch_name);
 
-// PURE (unit-tested). Returns the compositor command (no user_session_prefix/timeout wrapper;
-// the caller adds those). Empty string when unsupported (Generic) or when output names are
-// unsafe.
+// PURE (unit-tested). The compositor command that makes evdi_output extend the desktop (no
+// user_session_prefix/timeout wrapper; the caller adds those). Empty when unsupported or when
+// output names are unsafe.
 std::string layout_command(BackendKind kind, const std::string& evdi_output,
-                          const std::string& primary_output, int primary_id, LayoutMode mode);
+                          const std::string& primary_output);
 
 // Absolute pixel position of a cell in the client-declared monitor grid (wall_col/wall_row),
 // anchored at (anchor_x, anchor_y) -- typically the primary output's top-left corner.

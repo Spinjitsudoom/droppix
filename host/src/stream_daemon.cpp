@@ -79,25 +79,6 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   if (cver >= 4 && cfg_.live_orientation) *cfg_.live_orientation = sp.orientation;
   int ocode = cfg_.live_orientation ? *cfg_.live_orientation : sp.orientation;
   orient_dims(ocode, w, h);
-  // Mirror mode: the evdi output must match the PRIMARY's resolution (not the tablet's),
-  // so the compositor's mirror command can present identical content at matching size.
-  // Prefer the output explicitly flagged primary; fall back to the first enabled output
-  // with real geometry if none is flagged (e.g. a backend that never fills .primary).
-  if (cfg_.mirror) {
-    const OutputInfo* prim = nullptr;
-    for (const auto& o : before_outputs)
-      if (o.enabled && o.primary) { prim = &o; break; }
-    if (!prim)
-      for (const auto& o : before_outputs)
-        if (o.enabled && o.geom.w > 0 && o.geom.h > 0) { prim = &o; break; }
-    if (prim) {
-      std::fprintf(stderr, "mirror: overriding source dims %dx%d -> primary %s %dx%d\n",
-                   w, h, prim->name.c_str(), prim->geom.w, prim->geom.h);
-      w = prim->geom.w; h = prim->geom.h;
-    } else {
-      std::fprintf(stderr, "mirror: no primary/enabled output found; keeping tablet dims %dx%d\n", w, h);
-    }
-  }
   src_ = make_source_(w, h, sp.fps);
   // X11 (reverse-PRIME evdi) must link + bare-enable the new output before the compositor
   // will ever assign it a mode; Wayland backends' link_providers() is a no-op. Passed as a
@@ -184,14 +165,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       for (const auto& o : after_outputs)
         if (o.name == droppix.name) { droppix = o; break; }
     }
-    // Apply mirror/extend layout for the droppix output relative to the primary. Runs
-    // unconditionally (not gated on `adopted`): KWin's apply_layout is the mirror/extend
-    // command itself and never overrides adopt_output, so `adopted` is always false there.
-    // For X11 this repeats the extend placement adopt_output already made — harmless and
-    // idempotent. Re-query so touch/encode geometry follow the (possibly new) layout.
-    serviced([this, out_name]{
-      return desktop_->apply_layout(out_name, cfg_.mirror ? LayoutMode::Mirror : LayoutMode::Extend);
-    });
+    // Make sure the droppix output EXTENDS the desktop (droppix has no mirror mode). Runs
+    // unconditionally (not gated on `adopted`): KWin clears any replication a previous mirror
+    // left, COSMIC un-mirrors an arrangement it restored, X11 repeats adopt_output's
+    // right-of placement (idempotent). Re-query so touch/encode geometry follow the layout.
+    serviced([this, out_name]{ return desktop_->apply_layout(out_name); });
     after_outputs = query_outputs();
     for (const auto& o : after_outputs)
       if (o.name == droppix.name) { droppix = o; break; }
@@ -201,16 +179,13 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     // At (0,0) grid_position resolves to the primary's right edge -- today's single-tablet
     // placement is unchanged. Prefer the flagged primary; fall back to the first enabled
     // non-droppix output if none is flagged.
-    // EXTEND ONLY: in mirror mode apply_layout already overlaid the output on the primary
-    // (X11 --same-as); repositioning it would silently convert mirror back into extend, so
-    // the wall cell is meaningless there and must not run.
     const OutputInfo* prim = nullptr;
     for (const auto& o : after_outputs)
       if (o.enabled && o.primary && o.name != droppix.name) { prim = &o; break; }
     if (!prim)
       for (const auto& o : after_outputs)
         if (o.enabled && o.name != droppix.name) { prim = &o; break; }
-    if (prim && !cfg_.mirror) {
+    if (prim) {
       GridPoint pos = grid_position(hwall_col, hwall_row, droppix.geom.w, droppix.geom.h,
                                     prim->geom.x + prim->geom.w, prim->geom.y);
       serviced([this, out_name, pos]{ return desktop_->place_output(out_name, pos.x, pos.y); });
@@ -230,8 +205,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   const bool cur_portrait = h > w;
   tx_.set_orientation_handler([this, &restart_for_orientation, cur_portrait](uint8_t code) {
     if (cfg_.live_orientation) *cfg_.live_orientation = code;
-    // mirror tracks the primary, not the tablet — never restart on tablet orientation
-    if (!cfg_.mirror && orientation_is_portrait(code) != cur_portrait) {
+    if (orientation_is_portrait(code) != cur_portrait) {
       std::fprintf(stderr, "orientation: tablet -> %s; restarting stream at new dims\n",
                    orientation_is_portrait(code) ? "portrait" : "landscape");
       restart_for_orientation = true;

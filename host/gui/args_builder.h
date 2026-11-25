@@ -13,6 +13,5 @@ struct Command {
 // (the cable is the trust boundary); each concurrent monitor targets its own serial.
 Command build_command(const Settings& s, const std::string& stream_bin,
                       int port = -1, const std::string& touch_name = "",
-                      const std::string& usb_aoa_serial = "",
-                      bool mirror = false);
+                      const std::string& usb_aoa_serial = "");
 }  // namespace droppix

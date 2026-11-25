@@ -57,30 +57,25 @@ TEST(DesktopBackend, UnknownDesktopOnX11WithToolsSelectsX11) {
   EXPECT_EQ(select_backend_kind("", false, true, true), BackendKind::X11);
 }
 
-using droppix::BackendKind; using droppix::LayoutMode; using droppix::layout_command;
-TEST(LayoutCommand, KWinMirrorReplicates) {
-  auto c = layout_command(BackendKind::KWin, "DVI-I-1", "DP-3", 1, LayoutMode::Mirror);
-  EXPECT_NE(c.find("replicationSource.1"), std::string::npos);
+using droppix::BackendKind; using droppix::layout_command;
+// droppix always extends (mirror mode was removed 2026-11-25): the layout command only
+// ever makes the output extend the desktop.
+TEST(LayoutCommand, KWinExtendClearsAnyReplication) {
+  auto c = layout_command(BackendKind::KWin, "DVI-I-1", "DP-3");
+  EXPECT_NE(c.find("replicationSource.0"), std::string::npos);
   EXPECT_NE(c.find("DVI-I-1"), std::string::npos);
 }
-TEST(LayoutCommand, KWinExtendClears) {
-  auto c = layout_command(BackendKind::KWin, "DVI-I-1", "DP-3", 1, LayoutMode::Extend);
-  EXPECT_NE(c.find("replicationSource.0"), std::string::npos);
-}
-TEST(LayoutCommand, X11MirrorSameAs) {
-  auto c = layout_command(BackendKind::X11, "DVI-I-1", "eDP-1", 0, LayoutMode::Mirror);
-  EXPECT_NE(c.find("--same-as"), std::string::npos);
-  EXPECT_NE(c.find("eDP-1"), std::string::npos);
-}
 TEST(LayoutCommand, X11ExtendRightOf) {
-  auto c = layout_command(BackendKind::X11, "DVI-I-1", "eDP-1", 0, LayoutMode::Extend);
-  EXPECT_NE(c.find("--right-of"), std::string::npos);
+  auto c = layout_command(BackendKind::X11, "DVI-I-1", "eDP-1");
+  EXPECT_NE(c.find("--right-of eDP-1"), std::string::npos);
+  EXPECT_EQ(c.find("--same-as"), std::string::npos);
 }
-TEST(LayoutCommand, GenericEmpty) {
-  EXPECT_TRUE(layout_command(BackendKind::Generic, "X", "Y", 0, LayoutMode::Mirror).empty());
+TEST(LayoutCommand, OtherBackendsHaveNone) {
+  EXPECT_TRUE(layout_command(BackendKind::Generic, "X", "Y").empty());
+  EXPECT_TRUE(layout_command(BackendKind::Gnome, "X", "Y").empty());
 }
 TEST(LayoutCommand, UnsafeNameRejected) {
-  EXPECT_TRUE(layout_command(BackendKind::X11, "X; rm -rf /", "Y", 0, LayoutMode::Mirror).empty());
+  EXPECT_TRUE(layout_command(BackendKind::X11, "X; rm -rf /", "Y").empty());
 }
 
 using droppix::grid_position; using droppix::place_command; using droppix::BackendKind;

@@ -1,7 +1,7 @@
 # Mirror mode (host-side screen duplication)
 
 **Date:** 2026-07-13
-**Status:** Shipped on master.
+**Status:** Shipped, then **removed on master (2026-11-25)**: the user saw little use for it. droppix always extends.
 **Roadmap:** tier T2 "Mirror mode (duplication)" (HOST).
 
 ## Summary

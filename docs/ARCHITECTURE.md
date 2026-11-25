@@ -2,7 +2,7 @@
 
 **Last verified:** 2026-07-18 against local/fork `master`.
 
-Living overview of how droppix turns a client (Android tablet or Linux receive app) into an extended (or mirrored) monitor for a Linux host. Feature ship-state: [`STATUS.md`](STATUS.md). Wire details: [`WIRE.md`](WIRE.md).
+Living overview of how droppix turns a client (Android tablet or Linux receive app) into an extended monitor for a Linux host. Feature ship-state: [`STATUS.md`](STATUS.md). Wire details: [`WIRE.md`](WIRE.md).
 
 ## System at a glance
 
@@ -209,7 +209,7 @@ flowchart TB
 
 ## DesktopBackend seam
 
-Compositor-specific work is behind one interface (`host/src/desktop_backend.*`). Display creation itself is evdi; backends handle geometry, touch/pen binding, and mirror/extend layout.
+Compositor-specific work is behind one interface (`host/src/desktop_backend.*`). Display creation itself is evdi; backends handle geometry, touch/pen binding, and extend placement (droppix has no mirror mode since 2026-11-25).
 
 ```mermaid
 graph TB
@@ -227,11 +227,11 @@ graph TB
 |---|---|---|
 | `KWinBackend` | Yes | `kscreen-doctor` + KWin InputDevice DBus |
 | `X11Backend` | Yes | `xrandr` + `xinput map-to-output` |
-| `GnomeBackend` | Yes (2026-11-25) | Mutter `DisplayConfig` via `gdbus` (outputs, placement, mirror; temporary configs only); touch/pen bound by per-device gsettings keyed on the per-session uinput product id; finds its output by EDID serial; revives a monitor Mutter left "on" after a quick reconnect |
-| `SwayBackend` | Yes (2026-11-25) | `swaymsg -r` JSON (outputs, placement pinning the other outputs); `input <identifier> map_to_output` for touch/pen; `SWAYSOCK` discovered from the live `sway-ipc.<uid>.<pid>.sock`; no mirror (Sway has none); evdi needs `WLR_EVDI_RENDER_DEVICE` in Sway's env |
+| `GnomeBackend` | Yes (2026-11-25) | Mutter `DisplayConfig` via `gdbus` (outputs, placement; temporary configs only); touch/pen bound by per-device gsettings keyed on the per-session uinput product id; finds its output by EDID serial; revives a monitor Mutter left "on" after a quick reconnect |
+| `SwayBackend` | Yes (2026-11-25) | `swaymsg -r` JSON (outputs, placement pinning the other outputs); `input <identifier> map_to_output` for touch/pen; `SWAYSOCK` discovered from the live `sway-ipc.<uid>.<pid>.sock`; evdi needs `WLR_EVDI_RENDER_DEVICE` in Sway's env |
 | `GenericBackend` | Yes | Display may work; touch map is a no-op |
 | `HyprlandBackend` | Yes (2026-11-25, Hyprland ≥ 0.42) | `hyprctl -j monitors all`; `keyword monitor` / `device[<name>]:output`, falling back to `hyprctl eval` with `hl.monitor` / `hl.device` on Lua configs; instance found via `$XDG_RUNTIME_DIR/hypr/<sig>/hyprland.lock`. Hyprland 0.41 can't commit evdi outputs |
-| `CosmicBackend` | Yes (2026-11-25) | `cosmic-randr list --kdl` / `position` / `mirror` / `enable` (undoes a restored mirror); touch, pen and the right-click pointer bound with `map_to_output` in `~/.config/cosmic/com.system76.CosmicComp/v1/input_devices` (only droppix entries rewritten); the pointer is scaled per output (`pointer_maps_per_output`) |
+| `CosmicBackend` | Yes (2026-11-25) | `cosmic-randr list --kdl` / `position` / `enable` (undoes a restored mirror); touch, pen and the right-click pointer bound with `map_to_output` in `~/.config/cosmic/com.system76.CosmicComp/v1/input_devices` (only droppix entries rewritten); the pointer is scaled per output (`pointer_maps_per_output`) |
 | Other wlroots (river, labwc, Wayfire) | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
 
 Roadmap (not shipped): Hyprland / other wlroots backends - see [`superpowers/specs/2026-07-05-cross-desktop-portability-design.md`](superpowers/specs/2026-07-05-cross-desktop-portability-design.md).

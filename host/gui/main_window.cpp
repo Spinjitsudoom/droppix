@@ -262,7 +262,6 @@ MainWindow::MainWindow(QWidget* parent)
   monitorsList_ = new QListWidget;
   monitorsList_->setMaximumHeight(96);
   stopMonBtn_ = new QPushButton("Stop selected");
-  mirrorBtn_ = new QPushButton("Toggle mirror");
   webUrlLabel_ = new QLabel; webUrlLabel_->setObjectName("caption");
   webUrlLabel_->setTextInteractionFlags(Qt::TextSelectableByMouse);
   webUrlLabel_->hide();
@@ -281,7 +280,6 @@ MainWindow::MainWindow(QWidget* parent)
   pairingScanCaption_->hide();
   pairingScanQr_ = new QLabel; pairingScanQr_->setAlignment(Qt::AlignCenter); pairingScanQr_->hide();
   connect(stopMonBtn_, &QPushButton::clicked, this, &MainWindow::stopSelectedMonitor);
-  connect(mirrorBtn_, &QPushButton::clicked, this, &MainWindow::toggleSelectedMonitorMirror);
 
   // --- Devices on network (mDNS-discovered tablets) ---
   devicesList_ = new QListWidget;
@@ -307,7 +305,7 @@ MainWindow::MainWindow(QWidget* parent)
   for (int i = 0; i < 5; ++i) stack_->addWidget(new QWidget);   // 0..4 placeholders
 
   auto* connPage = new ConnectionsPage(devicesList_, connectBtn_, monitorsList_,
-                                        stopMonBtn_, mirrorBtn_);
+                                        stopMonBtn_);
   stack_->removeWidget(stack_->widget(1));
   stack_->insertWidget(1, connPage);
 
@@ -983,8 +981,7 @@ void MainWindow::startServerSession() {
   // a real device is approved (see the approvalRequested handler in wireSession()), so
   // the Active-monitors list only ever shows actually-connecting devices, never a
   // permanent "waiting" placeholder.
-  startSession(serverKey_, "Server", QString(), port, QString(), {}, /*mirror=*/false,
-               /*addRowNow=*/false);
+  startSession(serverKey_, "Server", QString(), port, QString(), {}, /*addRowNow=*/false);
 }
 
 void MainWindow::stopServerSession() {
@@ -1025,25 +1022,24 @@ void MainWindow::refreshServer() {
 }
 
 void MainWindow::addMonitorRow(const QString& key, const QString& label, const QString& transport,
-                               int port, bool mirror) {
+                               int port) {
   for (int i = 0; i < monitorsList_->count(); ++i)
     if (monitorsList_->item(i)->data(Qt::UserRole).toString() == key) return;   // already shown
   auto* row = new QListWidgetItem(
-      QString("%1  ·  %2  ·  :%3%4").arg(label, transport.isEmpty() ? "—" : transport)
-          .arg(port).arg(mirror ? " — Mirror" : ""));
+      QString("%1  ·  %2  ·  :%3").arg(label, transport.isEmpty() ? "—" : transport).arg(port));
   row->setData(Qt::UserRole, key);
   monitorsList_->addItem(row);
 }
 
 void MainWindow::startSession(const QString& key, const QString& label, const QString& transport,
                               int port, const QString& id, std::function<void()> directTablet,
-                              bool mirror, bool addRowNow) {
+                              bool addRowNow) {
   auto* c = new StreamController(this);
   wireSession(c, key);
   Settings s = collectSettings();
   const std::string tname = ("droppix-touch-" + QString::number(port)).toStdString();
   const std::string aoaSerial = (transport == "usb-aoa") ? id.toStdString() : std::string();
-  Command cmd = build_command(s, streamBin_, port, tname, aoaSerial, mirror);
+  Command cmd = build_command(s, streamBin_, port, tname, aoaSerial);
   qInfo("$ %s ... (:%d)", cmd.program.c_str(), port);
   if (s.webClient && aoaSerial.empty() && s.tls && !s.certPath.empty() && s.webRoot.empty())
     qWarning("web client is enabled but web/dist assets were not found — starting WITHOUT the web "
@@ -1053,10 +1049,9 @@ void MainWindow::startSession(const QString& key, const QString& label, const QS
   Session sess;
   sess.controller = c; sess.port = port; sess.key = key; sess.label = label;
   sess.transport = transport; sess.id = id; sess.touchName = QString::fromStdString(tname);
-  sess.mirror = mirror;
   sessions_.add(sess);
 
-  if (addRowNow) addMonitorRow(key, label, transport, port, mirror);
+  if (addRowNow) addMonitorRow(key, label, transport, port);
   // (monitors list is always visible now — Task 9 adds an empty-state)
   refreshWebClientUi();
   refreshPairingUi();
@@ -1318,7 +1313,7 @@ void MainWindow::wireSession(StreamController* c, const QString& key) {
         if (Session* s = sessions_.find(key)) {
           const QString devLabel = name.isEmpty() ? ip : name;
           s->label = devLabel;
-          addMonitorRow(key, devLabel, s->transport, s->port, s->mirror);
+          addMonitorRow(key, devLabel, s->transport, s->port);
           updateStatus();   // header text ("Listening…" -> "N monitor(s) · waiting") follows the row
         }
       };
@@ -1349,66 +1344,6 @@ void MainWindow::stopSelectedMonitor() {
   if (!item) return;
   if (Session* s = sessions_.find(item->data(Qt::UserRole).toString()))
     if (s->controller) s->controller->stop();   // runningChanged(false) removes the row + session
-}
-
-void MainWindow::toggleSelectedMonitorMirror() {
-  // Selected-row -> Session lookup, exactly like stopSelectedMonitor().
-  auto* item = monitorsList_->currentItem();
-  if (!item) return;
-  const QString key = item->data(Qt::UserRole).toString();
-  Session* s = sessions_.find(key);
-  if (!s) return;
-
-  // Capture identity fields before the session is torn down.
-  const QString label = s->label;
-  const QString transport = s->transport;
-  const int port = s->port;
-  const QString id = s->id;
-  const bool newMirror = !s->mirror;
-  StreamController* c = s->controller;
-  if (!c) { startSession(key, label, transport, port, id, {}, newMirror); return; }
-
-  // Respawn on the same key/port with the flipped mode, but only AFTER the old
-  // controller's teardown has actually run — not immediately after stop(). The
-  // teardown lambda wired in wireSession() (connected back when this session was
-  // started) removes sessions_[key] and every monitorsList_ row matching key when
-  // runningChanged(false) fires. If we respawned synchronously here instead, a
-  // slow streamer that needs kill() (>3s) would fire that teardown asynchronously
-  // *after* the respawn already inserted a new session+row under the same key —
-  // and the old teardown would then delete the brand-new row, orphaning the live
-  // session (still streaming, but ungovernable from the GUI).
-  //
-  // A one-shot connection on the same signal, connected here (i.e. after
-  // wireSession's), is guaranteed to run after the teardown lambda — Qt fires
-  // same-signal handlers in connection order. So by the time this fires, the old
-  // key/row is already gone and startSession() can't collide with it. This holds
-  // for both exit paths: graceful exit (<3s) runs teardown synchronously inside
-  // stop()'s waitForFinished, so both lambdas fire before stop() even returns;
-  // kill() (>3s) fires runningChanged(false) asynchronously later, and this
-  // handler simply waits for it.
-  // The Server listener's own session: its teardown would re-arm a second listener, and the
-  // respawn below would no longer be tracked as the Server. Suppress the re-arm (as
-  // refreshServer does) and hand the Server role to the respawned session.
-  const bool isServer = (key == serverKey_);
-  if (isServer) serverRefreshing_ = true;
-  connect(c, &StreamController::runningChanged, this,
-      [this, key, label, transport, port, id, newMirror, isServer](bool r) {
-        // Safe one-shot: the session is already running when we connect this (c->stop()
-        // is called below, after this connect), so the next runningChanged edge is always
-        // false (stopped) — this guard never eats the single shot on a spurious `true`.
-        if (r) return;   // only act on the stopped (false) edge
-        if (isServer) {
-          serverRefreshing_ = false;
-          if (!serverEnabled_) return;   // Server switched off meanwhile: don't resurrect it
-          serverKey_ = key;
-          serverStartMs_ = QDateTime::currentMSecsSinceEpoch();
-        }
-        startSession(key, label, transport, port, id, {}, newMirror);
-      }, Qt::SingleShotConnection);
-
-  // Stop path: same as stopSelectedMonitor() — this just triggers the streamer's
-  // exit; the respawn happens in the one-shot handler above once teardown completes.
-  c->stop();
 }
 
 void MainWindow::updateStatus() {

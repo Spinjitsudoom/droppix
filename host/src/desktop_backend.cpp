@@ -361,7 +361,7 @@ bool X11Backend::adopt_output(const std::string& output_name) {
 // Shared apply_layout body for KWin/X11: find the primary output (preferring the
 // compositor-reported primary, else the first other enabled output), build the
 // compositor command via layout_command, and run it the same way adopt_output does.
-static bool run_layout(BackendKind kind, const std::string& evdi, LayoutMode mode,
+static bool run_layout(BackendKind kind, const std::string& evdi,
                        const std::vector<OutputInfo>& outs) {
   // find the primary output (skip the evdi output itself)
   const OutputInfo* p = nullptr;
@@ -371,26 +371,25 @@ static bool run_layout(BackendKind kind, const std::string& evdi, LayoutMode mod
     if (!p) p = &o;                        // fallback: first other enabled output
   }
   if (!p) { std::fprintf(stderr, "[layout] no primary output found\n"); return false; }
-  std::string base = layout_command(kind, evdi, p->name, p->id, mode);
+  std::string base = layout_command(kind, evdi, p->name);
   if (base.empty()) {
-    std::fprintf(stderr, "[layout] mirror/extend unsupported on this compositor\n");
+    std::fprintf(stderr, "[layout] extend command unsupported on this compositor\n");
     return false;
   }
   std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + base + "'";
   std::system(cmd.c_str());
-  std::fprintf(stderr, "[layout] applied %s for %s\n",
-               mode == LayoutMode::Mirror ? "mirror" : "extend", evdi.c_str());
+  std::fprintf(stderr, "[layout] applied extend for %s\n", evdi.c_str());
   return true;
 }
 
-bool KWinBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+bool KWinBackend::apply_layout(const std::string& evdi) {
   if (!safe_output_name(evdi)) return false;
-  return run_layout(BackendKind::KWin, evdi, mode, outputs());
+  return run_layout(BackendKind::KWin, evdi, outputs());
 }
 
-bool X11Backend::apply_layout(const std::string& evdi, LayoutMode mode) {
+bool X11Backend::apply_layout(const std::string& evdi) {
   if (!safe_output_name(evdi)) return false;
-  return run_layout(BackendKind::X11, evdi, mode, outputs());
+  return run_layout(BackendKind::X11, evdi, outputs());
 }
 
 bool KWinBackend::place_output(const std::string& evdi, int x, int y) {
@@ -492,20 +491,6 @@ bool GnomeBackend::map_pen(const std::string& output, const std::string& pen_dev
   return gnome_map(true, output, session_device_id(0xd704, touch));
 }
 
-bool GnomeBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
-  // Mutter extends a new monitor to the right on its own; only mirror needs a change.
-  if (mode != LayoutMode::Mirror || !safe_output_name(evdi)) return false;
-  MutterState st;
-  if (!read_mutter(st)) return false;
-  const std::string cfg = mutter_mirror_config(st, evdi);
-  if (cfg.empty()) {
-    std::fprintf(stderr, "[gnome] mirror: %s and the primary share no resolution; "
-                         "staying extended\n", evdi.c_str());
-    return false;
-  }
-  return apply_mutter(st, cfg, "mirror");
-}
-
 bool GnomeBackend::place_output(const std::string& evdi, int x, int y) {
   if (!safe_output_name(evdi)) return false;
   MutterState st;
@@ -603,13 +588,6 @@ bool SwayBackend::map_pen(const std::string& output, const std::string& pen_dev)
   return sway_map("pen", output, pen_dev);
 }
 
-bool SwayBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
-  if (mode == LayoutMode::Mirror)
-    std::fprintf(stderr, "[sway] mirror: Sway has no output mirroring; %s stays extended\n",
-                 evdi.c_str());
-  return false;
-}
-
 bool SwayBackend::place_output(const std::string& evdi, int x, int y) {
   std::vector<SwayOutput> outs;
   if (!sway_outputs(outs)) return false;
@@ -679,16 +657,6 @@ void HyprlandBackend::map_touch(const std::string& output, const std::string& to
 }
 bool HyprlandBackend::map_pen(const std::string& output, const std::string& pen_dev) {
   return hypr_map("pen", output, pen_dev);
-}
-bool HyprlandBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
-  if (mode != LayoutMode::Mirror) return false;
-  std::vector<HyprMonitor> mons;
-  if (!hypr_monitors(mons)) return false;
-  std::string primary;
-  for (const auto& m : mons)
-    if (m.info.name != evdi && m.info.enabled && (primary.empty() || m.info.primary)) primary = m.info.name;
-  const std::string rule = hypr_mirror_rule(mons, evdi, primary);
-  return !rule.empty() && hypr_set("mirror", "monitor", rule, hypr_mirror_lua(mons, evdi, primary));
 }
 bool HyprlandBackend::place_output(const std::string& evdi, int x, int y) {
   std::vector<HyprMonitor> mons;
@@ -786,30 +754,20 @@ bool CosmicBackend::map_pen(const std::string& output, const std::string& pen_de
 void CosmicBackend::map_pointer(const std::string& output, const std::string& pointer_dev) {
   cosmic_map("right-click pointer", output, pointer_dev);
 }
-bool CosmicBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+bool CosmicBackend::apply_layout(const std::string& evdi) {
   if (!safe_output_name(evdi)) return false;
   std::vector<CosmicOutput> outs;
   if (!cosmic_outputs(outs)) return false;
-  if (mode == LayoutMode::Extend) {
-    // COSMIC restores saved arrangements: after a mirror session the droppix output comes
-    // back mirroring. `enable` makes it a normal extended output again.
-    for (const auto& o : outs)
-      if (o.info.name == evdi && !o.mirroring.empty()) {
-        const std::string out = cosmic_randr("enable " + evdi);
-        std::fprintf(stderr, "[cosmic] %s was restored mirroring %s; extending it%s%s\n",
-                     evdi.c_str(), o.mirroring.c_str(), out.empty() ? "" : ": ", out.c_str());
-        return true;
-      }
-    return false;
-  }
-  std::string primary;
+  // COSMIC restores saved arrangements: if the droppix output comes back mirroring (set up in
+  // COSMIC Settings, or by an older droppix), `enable` makes it a normal extended output.
   for (const auto& o : outs)
-    if (o.info.name != evdi && o.info.enabled && (primary.empty() || o.info.primary)) primary = o.info.name;
-  if (!safe_output_name(primary)) return false;
-  const std::string out = cosmic_randr("mirror " + evdi + " " + primary);
-  std::fprintf(stderr, "[cosmic] mirror %s from %s%s%s\n", evdi.c_str(), primary.c_str(),
-               out.empty() ? "" : ": ", out.c_str());
-  return true;
+    if (o.info.name == evdi && !o.mirroring.empty()) {
+      const std::string out = cosmic_randr("enable " + evdi);
+      std::fprintf(stderr, "[cosmic] %s was restored mirroring %s; extending it%s%s\n",
+                   evdi.c_str(), o.mirroring.c_str(), out.empty() ? "" : ": ", out.c_str());
+      return true;
+    }
+  return false;
 }
 bool CosmicBackend::place_output(const std::string& evdi, int x, int y) {
   if (!safe_output_name(evdi)) return false;
@@ -862,19 +820,14 @@ uint16_t session_device_id(uint16_t base, const std::string& touch_name) {
   return static_cast<uint16_t>(base + ((n % 255) + 1) * 0x10);
 }
 
-std::string layout_command(BackendKind kind, const std::string& evdi,
-                           const std::string& primary, int primary_id, LayoutMode mode) {
+std::string layout_command(BackendKind kind, const std::string& evdi, const std::string& primary) {
   if (!safe_output_name(evdi) || !safe_output_name(primary)) return {};
   switch (kind) {
-    case BackendKind::KWin:
-      return mode == LayoutMode::Mirror
-        ? "kscreen-doctor \"output." + evdi + ".replicationSource." + std::to_string(primary_id) + "\""
-        : "kscreen-doctor \"output." + evdi + ".replicationSource.0\"";
+    case BackendKind::KWin:   // clears any replication (mirror) a previous session left
+      return "kscreen-doctor \"output." + evdi + ".replicationSource.0\"";
     case BackendKind::X11:
-      return mode == LayoutMode::Mirror
-        ? "xrandr --output " + evdi + " --same-as " + primary
-        : "xrandr --output " + evdi + " --auto --right-of " + primary;
-    case BackendKind::Generic: default:
+      return "xrandr --output " + evdi + " --auto --right-of " + primary;
+    default:
       return {};
   }
 }

@@ -177,42 +177,6 @@ std::string mutter_place_config(const MutterState& st, const std::string& connec
   return found ? "[" + out + "]" : std::string{};
 }
 
-std::string mutter_mirror_config(const MutterState& st, const std::string& connector) {
-  const MutterLogical* prim = nullptr;
-  for (const auto& l : st.logical) if (l.primary) { prim = &l; break; }
-  const MutterMonitor* mine = monitor(st, connector);
-  if (!prim || !mine || prim->connectors.empty()) return {};
-  const MutterMonitor* pm = monitor(st, prim->connectors[0]);
-  if (!pm || pm->connector == connector) return {};
-
-  // Largest resolution both monitors offer.
-  const MutterMode *best_p = nullptr, *best_m = nullptr;
-  for (const auto& a : pm->modes)
-    for (const auto& b : mine->modes)
-      if (a.w == b.w && a.h == b.h &&
-          (!best_p || static_cast<long>(a.w) * a.h > static_cast<long>(best_p->w) * best_p->h ||
-           (a.w == best_p->w && a.h == best_p->h && a.current))) {
-        best_p = &a; best_m = &b;
-      }
-  if (!best_p) return {};
-
-  std::string out;
-  for (const auto& l : st.logical) {
-    bool has_mine = false;
-    for (const auto& c : l.connectors) has_mine = has_mine || c == connector;
-    if (&l == prim) {
-      const std::string mons = monitor_arg(st, pm->connector, best_p->id) + ", " +
-                               monitor_arg(st, connector, best_m->id);
-      out += (out.empty() ? "" : ", ") + logical_arg(l, l.x, l.y, mons);
-    } else if (!has_mine) {
-      const std::string mons = monitors_of(st, l);
-      if (mons.empty()) return {};
-      out += (out.empty() ? "" : ", ") + logical_arg(l, l.x, l.y, mons);
-    }
-  }
-  return "[" + out + "]";
-}
-
 std::string mutter_disable_config(const MutterState& st, const std::string& connector) {
   std::string out;
   bool found = false;

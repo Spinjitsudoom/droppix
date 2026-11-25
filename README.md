@@ -1,6 +1,6 @@
 # droppix
 
-Use an Android tablet (or a second Linux machine) as a **true extended monitor** for a Linux PC — with touch, stylus pressure, keyboard, auto-rotation, mirror/extend, and audio out. A Spacedesk-like setup, built first for KDE Plasma / KWin, with an X11 backend and a desktop-agnostic seam for further ports.
+Use an Android tablet (or a second Linux machine) as a **true extended monitor** for a Linux PC — with touch, stylus pressure, keyboard, auto-rotation, and audio out. A Spacedesk-like setup, built first for KDE Plasma / KWin, with an X11 backend and a desktop-agnostic seam for further ports.
 
 > **Status (2026-07-21):** early but working end-to-end. Verified on a Nexus 10 (Android 5.1.1 / API 22) driving Plasma 6 / KWin over USB and WiFi. Hardware H.264 encode (NVENC → VAAPI → software x264), multi-monitor sessions, TLS PIN pairing, USB tether, AOA, stylus, keyboard, a host-served web PWA client, and an in-GUI F12 debug console are on `master`. Living feature list: [`docs/STATUS.md`](docs/STATUS.md).
 
@@ -8,7 +8,6 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 
 - **Extended display** — a virtual monitor via [`evdi`](https://github.com/DisplayLink/evdi) is captured, H.264-encoded, and streamed to the client. Encode preference is **auto**: NVENC → VAAPI → libx264 (`--encoder auto|nvenc|vaapi|software`). Android decodes with hardware MediaCodec; the Linux desktop client uses FFmpeg.
 - **Touch + stylus + mouse + keyboard** — absolute touch (incl. multi-touch and two-finger right-click), pen pressure / eraser, scroll / mouse buttons, and key events via uinput devices bound to the droppix output.
-- **Mirror or extend** — per-session layout toggle on compositors that support it (KWin / X11 backends).
 - **Auto-rotation** — the tablet reports orientation; the host re-streams portrait/landscape-shaped pixels.
 - **Audio sink** — route app audio to a dedicated PipeWire sink; it plays on the tablet.
 - **Transports** — USB (`adb reverse`), USB tethering, AOA accessory mode, or WiFi (mDNS discovery + 6-digit PIN over TLS).
@@ -23,7 +22,7 @@ Use an Android tablet (or a second Linux machine) as a **true extended monitor**
 
 droppix is deeply integrated with the host, so some things can't ship inside the AppImage and must be present on the machine:
 
-- **A supported desktop session** — **KDE Plasma 6 or 5.27 / KWin** (Wayland), **GNOME** (Wayland; Ubuntu, Fedora Workstation, Debian, Zorin, …), or any **X11** session (`xrandr` / `xinput`: Cinnamon, Xfce, MATE, …), or **Sway**. Sway needs one line of setup, because wlroots can only drive the evdi screen when told which GPU renders for it: start Sway with `WLR_EVDI_RENDER_DEVICE=/dev/dri/renderD128` (your GPU's render node; `ls /dev/dri`) in its environment. Sway can't mirror screens, so droppix extends there. **Hyprland** 0.42 or newer works with no setup (older Hyprland can't drive the evdi screen). **COSMIC** (Pop!_OS 24.04+, Fedora COSMIC) works with no setup. Other wlroots compositors (river, labwc, Wayfire) are on the [cross-desktop roadmap](docs/superpowers/specs/2026-07-05-cross-desktop-portability-design.md); without a backend, the display may still appear but touch is disabled.
+- **A supported desktop session** — **KDE Plasma 6 or 5.27 / KWin** (Wayland), **GNOME** (Wayland; Ubuntu, Fedora Workstation, Debian, Zorin, …), or any **X11** session (`xrandr` / `xinput`: Cinnamon, Xfce, MATE, …), or **Sway**. Sway needs one line of setup, because wlroots can only drive the evdi screen when told which GPU renders for it: start Sway with `WLR_EVDI_RENDER_DEVICE=/dev/dri/renderD128` (your GPU's render node; `ls /dev/dri`) in its environment. **Hyprland** 0.42 or newer works with no setup (older Hyprland can't drive the evdi screen). **COSMIC** (Pop!_OS 24.04+, Fedora COSMIC) works with no setup. Other wlroots compositors (river, labwc, Wayfire) are on the [cross-desktop roadmap](docs/superpowers/specs/2026-07-05-cross-desktop-portability-design.md); without a backend, the display may still appear but touch is disabled.
 - **The `evdi` kernel module** — via distro / DKMS (cannot live in an AppImage). Required for the extended-monitor feature; test-pattern streaming works without it. It only has to be installed: the streamer loads it (`modprobe evdi`) when it isn't loaded.
 - **polkit / `pkexec`** — the streamer runs as root for uinput + evdi.
 - **PipeWire** (`parec` / `pw-record`) — for the audio-to-tablet sink.

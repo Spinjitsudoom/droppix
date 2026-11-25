@@ -90,12 +90,11 @@ TEST(ArgsBuilder, TestPatternNeverHasOrientation) {
   EXPECT_FALSE(has(c.args, "--orientation"));   // evdi-only
 }
 
-TEST(ArgsBuilder, MirrorFlag) {
+TEST(ArgsBuilder, NeverAsksForMirror) {
+  // Mirror mode was removed (2026-11-25): droppix always extends the desktop.
   Settings s; s.source = Settings::Source::Evdi; s.width = 1280; s.height = 800;
-  auto with = build_command(s, "/bin/streamer", 5000, "droppix-touch", "", /*mirror=*/true);
-  EXPECT_TRUE(has(with.args, "--mirror"));
-  auto without = build_command(s, "/bin/streamer", 5000, "droppix-touch", "", /*mirror=*/false);
-  EXPECT_FALSE(has(without.args, "--mirror"));
+  auto c = build_command(s, "/bin/streamer", 5000, "droppix-touch", "");
+  EXPECT_FALSE(has(c.args, "--mirror"));
 }
 
 TEST(ArgsBuilder, EvdiHasApproveFlag) {

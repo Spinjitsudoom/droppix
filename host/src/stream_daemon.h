@@ -15,7 +15,6 @@ namespace droppix {
 struct StreamConfig {
   int fps = 30; int bitrate_kbps = 8000; bool stats_json = false;
   bool touch = false;          // enable uinput injection (off by default)
-  bool mirror = false;         // mirror mode: evdi at the primary's resolution + apply_layout(Mirror)
   std::string touch_name = "droppix-touch";  // uinput device name (unique per session for multi-monitor)
   Rect monitor{};              // droppix monitor rect (from --monitor); 0 => query kscreen
   int desktop_w = 0, desktop_h = 0;  // desktop bounds (from --desktop); 0 => query kscreen

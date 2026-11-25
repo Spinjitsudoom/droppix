@@ -44,12 +44,6 @@ TEST(HyprState, MonitorRuleKeepsModeAndScale) {
   EXPECT_EQ(hypr_place_rule(mons, "DVI-I-1", 1600, 0), "DVI-I-1,1280x800@59.91,1600x0,1,transform,1");
   EXPECT_EQ(hypr_place_rule(mons, "HDMI-9", 0, 0), "");
 }
-TEST(HyprState, MirrorRuleNamesThePrimary) {
-  std::vector<HyprMonitor> mons;
-  ASSERT_TRUE(parse_hypr_monitors(kMonitors, mons));
-  EXPECT_EQ(hypr_mirror_rule(mons, "DVI-I-1", "eDP-1"), "DVI-I-1,1280x800@59.91,auto,1,mirror,eDP-1");
-  EXPECT_EQ(hypr_mirror_rule(mons, "DVI-I-1", "x;y"), "");
-}
 TEST(HyprState, PicksTheLiveInstance) {
   // $XDG_RUNTIME_DIR/hypr/<signature>/hyprland.lock holds the compositor's pid.
   const std::vector<std::string> sigs = {"0aa_1700000000_111", "0bb_1700000500_222"};
@@ -82,12 +76,6 @@ TEST(HyprState, LuaMonitorRuleForPlacement) {
   EXPECT_EQ(hypr_place_lua(mons, "DVI-I-1", 1600, 0),
             R"(hl.monitor({output="DVI-I-1", mode="1280x800@59.91", position="1600x0", scale=1, transform=1}))");
   EXPECT_EQ(hypr_place_lua(mons, "HDMI-9", 0, 0), "");
-}
-TEST(HyprState, LuaMonitorRuleForMirror) {
-  std::vector<HyprMonitor> mons;
-  ASSERT_TRUE(parse_hypr_monitors(kMonitors, mons));
-  EXPECT_EQ(hypr_mirror_lua(mons, "DVI-I-1", "eDP-1"),
-            R"(hl.monitor({output="DVI-I-1", mode="1280x800@59.91", position="auto", scale=1, mirror="eDP-1"}))");
 }
 TEST(HyprState, LuaDeviceOutput) {
   EXPECT_EQ(hypr_device_lua("droppix-touch-27000", "DVI-I-1"),

@@ -48,10 +48,6 @@ std::string mutter_find_by_serial(const MutterState& st, uint32_t session_serial
 // active. Each monitor keeps its current mode, scale, transform and primary flag.
 std::string mutter_place_config(const MutterState& st, const std::string& connector, int x, int y);
 
-// PURE (unit-tested). Same, but `connector` joins the primary's logical monitor (GNOME's
-// mirror), both at the largest resolution they share. "" if there is no shared mode.
-std::string mutter_mirror_config(const MutterState& st, const std::string& connector);
-
 // PURE (unit-tested). The current layout without `connector` (dropped from a mirrored
 // logical monitor, or its own logical monitor removed). "" if it is not active, or if
 // nothing would be left on.

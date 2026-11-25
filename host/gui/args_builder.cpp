@@ -5,7 +5,7 @@ namespace droppix {
 
 Command build_command(const Settings& s, const std::string& stream_bin,
                       int port, const std::string& touch_name,
-                      const std::string& usb_aoa_serial, bool mirror) {
+                      const std::string& usb_aoa_serial) {
   const int use_port = (port >= 0) ? port : s.port;
   const std::string tname = touch_name.empty() ? "droppix-touch" : touch_name;
   std::vector<std::string> a;  // droppix_stream's own arguments
@@ -24,7 +24,6 @@ Command build_command(const Settings& s, const std::string& stream_bin,
     if (s.orientation != 0) {              // rotate the droppix output (evdi only)
       a.push_back("--orientation"); a.push_back(std::to_string(s.orientation));
     }
-    if (mirror) a.push_back("--mirror");   // mirror an existing display instead of a virtual one (evdi only)
     if (usb_aoa_serial.empty())
       a.push_back("--approve");  // gates non-localhost Wi-Fi peers; AOA (cable) is trusted, no approval
   }
