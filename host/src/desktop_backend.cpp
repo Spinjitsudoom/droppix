@@ -1,6 +1,8 @@
 #include "desktop_backend.h"
 #include "mutter_state.h"
 #include "sway_state.h"
+#include "hypr_state.h"
+#include <fstream>
 #include <csignal>
 #include <algorithm>
 #include <cctype>
@@ -76,6 +78,18 @@ std::string discover_wayland_display(const std::string& runtime_dir) {
   return pick_wayland_display(list_dir(runtime_dir));
 }
 // The live Sway IPC socket in the user's runtime dir ("" when Sway isn't running).
+// The live Hyprland instance signature under $XDG_RUNTIME_DIR/hypr ("" if none).
+std::string discover_hypr_instance(const std::string& runtime_dir) {
+  std::vector<std::string> sigs;
+  for (const auto& e : list_dir(runtime_dir + "/hypr")) if (e != "." && e != "..") sigs.push_back(e);
+  return pick_hypr_instance(sigs,
+      [&](const std::string& sig) -> long {
+        std::ifstream f(runtime_dir + "/hypr/" + sig + "/hyprland.lock");
+        long pid = 0;
+        return (f >> pid) ? pid : 0;
+      },
+      [](long pid) { return ::kill(static_cast<pid_t>(pid), 0) == 0; });
+}
 std::string discover_sway_socket(const std::string& runtime_dir, long uid) {
   const std::string s = pick_sway_socket(list_dir(runtime_dir), uid,
                                          [](long pid) { return ::kill(static_cast<pid_t>(pid), 0) == 0; });
@@ -96,7 +110,9 @@ std::string user_session_prefix() {
       wayland_session_env(list_dir(runtime)) +
       "DISPLAY=:0 " +   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
       [&]{ const std::string s = discover_sway_socket(runtime, std::atol(u.c_str()));
-           return s.empty() ? std::string{} : "SWAYSOCK=" + s + " "; }();
+           return s.empty() ? std::string{} : "SWAYSOCK=" + s + " "; }() +
+      [&]{ const std::string h = discover_hypr_instance(runtime);
+           return h.empty() ? std::string{} : "HYPRLAND_INSTANCE_SIGNATURE=" + h + " "; }();
   struct passwd* pw = getpwuid(static_cast<uid_t>(std::atoi(u.c_str())));
   if (pw && pw->pw_name) return std::string("runuser -u ") + pw->pw_name + " -- " + env;
   return "sudo -u '#" + u + "' " + env;
@@ -581,6 +597,66 @@ bool SwayBackend::revive_output(uint32_t edid_serial) {
   return false;
 }
 
+// ---- Hyprland ----
+
+namespace {
+std::string hyprctl(const std::string& args) {
+  return capture("timeout 5 " + user_session_prefix() + "hyprctl " + args + " 2>&1");
+}
+bool hypr_monitors(std::vector<HyprMonitor>& mons) {
+  const std::string out = hyprctl("-j monitors all");
+  if (parse_hypr_monitors(out, mons)) return true;
+  std::fprintf(stderr, "[hyprland] could not read monitors: %.200s\n", out.c_str());
+  return false;
+}
+bool hypr_keyword(const std::string& what, const std::string& key, const std::string& value) {
+  const std::string out = hyprctl("keyword '" + key + "' '" + value + "'");
+  const bool ok = out == "ok";
+  std::fprintf(stderr, "[hyprland] %s: %s %s%s%s\n", what.c_str(), key.c_str(), value.c_str(),
+               ok ? "" : ": ", ok ? "" : out.c_str());
+  return ok;
+}
+bool hypr_map(const char* what, const std::string& output, const std::string& dev) {
+  if (!safe_output_name(output) || !safe_output_name(dev)) return false;
+  return hypr_keyword(what, "device[" + dev + "]:output", output);
+}
+}  // namespace
+
+std::vector<OutputInfo> HyprlandBackend::outputs() {
+  std::vector<HyprMonitor> mons;
+  if (!hypr_monitors(mons)) return {};
+  std::vector<OutputInfo> r;
+  for (auto& m : mons) r.push_back(m.info);
+  return r;
+}
+std::string HyprlandBackend::find_output(uint32_t edid_serial) {
+  std::vector<HyprMonitor> mons;
+  if (edid_serial == 0 || !hypr_monitors(mons)) return {};
+  return hypr_find_by_serial(mons, edid_serial);
+}
+void HyprlandBackend::map_touch(const std::string& output, const std::string& touch_dev) {
+  hypr_map("touch", output, touch_dev);
+}
+bool HyprlandBackend::map_pen(const std::string& output, const std::string& pen_dev) {
+  return hypr_map("pen", output, pen_dev);
+}
+bool HyprlandBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  if (mode != LayoutMode::Mirror) return false;
+  std::vector<HyprMonitor> mons;
+  if (!hypr_monitors(mons)) return false;
+  std::string primary;
+  for (const auto& m : mons)
+    if (m.info.name != evdi && m.info.enabled && (primary.empty() || m.info.primary)) primary = m.info.name;
+  const std::string rule = hypr_mirror_rule(mons, evdi, primary);
+  return !rule.empty() && hypr_keyword("mirror", "monitor", rule);
+}
+bool HyprlandBackend::place_output(const std::string& evdi, int x, int y) {
+  std::vector<HyprMonitor> mons;
+  if (!hypr_monitors(mons)) return false;
+  const std::string rule = hypr_place_rule(mons, evdi, x, y);
+  return !rule.empty() && hypr_keyword("placement", "monitor", rule);
+}
+
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
   std::fprintf(stderr, "input: touch-to-output mapping not supported on this desktop yet; "
@@ -589,15 +665,27 @@ void GenericBackend::map_touch(const std::string& output, const std::string& tou
 
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
                                 bool x11_session, bool has_x11_tools, bool has_mutter,
-                                bool has_sway) {
+                                bool has_sway, bool has_hypr) {
   std::string d;
   for (char c : xdg_current_desktop) d.push_back(static_cast<char>(std::tolower((unsigned char)c)));
+  const bool gnome = d.find("gnome") != std::string::npos || has_mutter;
+  const bool sway = d.find("sway") != std::string::npos || has_sway;
+  const bool hypr = d.find("hyprland") != std::string::npos || has_hypr;
   if (d.find("kde") != std::string::npos || d.find("plasma") != std::string::npos)
     return BackendKind::KWin;
+  // A live Wayland compositor wins over "kscreen-doctor happens to be installed": under
+  // pkexec the desktop name is gone, and a GNOME/Sway/Hyprland box with Plasma's tools
+  // installed was driven as KWin.
+  if (!x11_session) {
+    if (gnome) return BackendKind::Gnome;
+    if (sway) return BackendKind::Sway;
+    if (hypr) return BackendKind::Hyprland;
+  }
   if (d.empty() && has_kscreen) return BackendKind::KWin;
   if (x11_session && has_x11_tools) return BackendKind::X11;
-  if (d.find("gnome") != std::string::npos || has_mutter) return BackendKind::Gnome;
-  if (d.find("sway") != std::string::npos || has_sway) return BackendKind::Sway;
+  if (gnome) return BackendKind::Gnome;
+  if (sway) return BackendKind::Sway;
+  if (hypr) return BackendKind::Hyprland;
   return BackendKind::Generic;
 }
 
@@ -668,7 +756,6 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
     // Under pkexec XDG_CURRENT_DESKTOP is gone: ask the user's session bus whether Mutter's
     // display service is there (GNOME and its derivatives: Ubuntu, Zorin, Pop 22.04, ...).
     const bool has_mutter =
-        !has_kscreen &&
         capture("timeout 3 " + user_session_prefix() +
                 "gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus "
                 "--method org.freedesktop.DBus.NameHasOwner org.gnome.Mutter.DisplayConfig 2>/dev/null")
@@ -681,12 +768,20 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
       const char* s = std::getenv("SWAYSOCK");
       return s && *s;
     }();
+    const bool has_hypr = [&]{
+      const char* uid = std::getenv("PKEXEC_UID");
+      if (!uid || !*uid) uid = std::getenv("SUDO_UID");
+      if (uid && *uid) return !discover_hypr_instance("/run/user/" + std::string(uid)).empty();
+      const char* s = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
+      return s && *s;
+    }();
     switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools, has_mutter,
-                                has_sway)) {
+                                has_sway, has_hypr)) {
       case BackendKind::KWin:  b = std::make_shared<KWinBackend>();  break;
       case BackendKind::X11:   b = std::make_shared<X11Backend>();   break;
       case BackendKind::Gnome: b = std::make_shared<GnomeBackend>(); break;
       case BackendKind::Sway:  b = std::make_shared<SwayBackend>();  break;
+      case BackendKind::Hyprland: b = std::make_shared<HyprlandBackend>(); break;
       default:                b = std::make_shared<GenericBackend>();
     }
     std::fprintf(stderr, "desktop backend: %s\n", b->name());

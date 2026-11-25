@@ -34,7 +34,7 @@ TEST(DesktopBackend, NonKdeDesktopIgnoresKscreenPresence) {
   // A named non-KDE desktop never becomes KWin just because kscreen-doctor is installed;
   // the tool only promotes an UNKNOWN desktop.
   EXPECT_EQ(select_backend_kind("sway", true, false, false), BackendKind::Sway);
-  EXPECT_EQ(select_backend_kind("Hyprland", true, false, false), BackendKind::Generic);
+  EXPECT_EQ(select_backend_kind("Hyprland", true, false, false), BackendKind::Hyprland);
 }
 
 TEST(DesktopBackend, X11SessionWithToolsSelectsX11) {

@@ -218,6 +218,7 @@ graph TB
     IFACE --> X11["X11Backend<br/>xrandr + xinput map-to-output"]
     IFACE --> GNOME["GnomeBackend<br/>Mutter DisplayConfig + gsettings"]
     IFACE --> SWAY["SwayBackend<br/>swaymsg JSON + map_to_output"]
+    IFACE --> HYPR["HyprlandBackend<br/>hyprctl JSON + device output"]
     IFACE --> GEN["GenericBackend<br/>display may work - touch map no-op"]
 ```
 
@@ -228,7 +229,8 @@ graph TB
 | `GnomeBackend` | Yes (2026-11-25) | Mutter `DisplayConfig` via `gdbus` (outputs, placement, mirror; temporary configs only); touch/pen bound by per-device gsettings keyed on the per-session uinput product id; finds its output by EDID serial; revives a monitor Mutter left "on" after a quick reconnect |
 | `SwayBackend` | Yes (2026-11-25) | `swaymsg -r` JSON (outputs, placement pinning the other outputs); `input <identifier> map_to_output` for touch/pen; `SWAYSOCK` discovered from the live `sway-ipc.<uid>.<pid>.sock`; no mirror (Sway has none); evdi needs `WLR_EVDI_RENDER_DEVICE` in Sway's env |
 | `GenericBackend` | Yes | Display may work; touch map is a no-op |
-| Hyprland / other wlroots | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
+| `HyprlandBackend` | Partial (2026-11-25) | `hyprctl -j monitors all`, `keyword monitor` rules (place/mirror), `device[<name>]:output` for touch/pen; instance found via `$XDG_RUNTIME_DIR/hypr/<sig>/hyprland.lock`. Hyprland 0.41 fails to commit the evdi output; unverified on current Hyprland |
+| Other wlroots (river, labwc, Wayfire) | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
 
 Roadmap (not shipped): Hyprland / other wlroots backends - see [`superpowers/specs/2026-07-05-cross-desktop-portability-design.md`](superpowers/specs/2026-07-05-cross-desktop-portability-design.md).
 

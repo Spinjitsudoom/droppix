@@ -149,6 +149,19 @@ class SwayBackend : public DesktopBackend {
   bool revive_output(uint32_t edid_serial) override;
 };
 
+// Hyprland: `hyprctl -j` for outputs, `keyword monitor` rules for placement and mirror,
+// per-device `device[<name>]:output` for touch and pen.
+class HyprlandBackend : public DesktopBackend {
+ public:
+  const char* name() const override { return "hyprland"; }
+  std::vector<OutputInfo> outputs() override;
+  void map_touch(const std::string& output, const std::string& touch_dev) override;
+  bool map_pen(const std::string& output, const std::string& pen_dev) override;
+  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool place_output(const std::string& evdi_output, int x, int y) override;
+  std::string find_output(uint32_t edid_serial) override;
+};
+
 // Unknown/unsupported compositor: display still works (evdi is compositor-driven);
 // outputs() returns {} and map_touch() logs a warning and no-ops.
 class GenericBackend : public DesktopBackend {
@@ -158,17 +171,16 @@ class GenericBackend : public DesktopBackend {
   void map_touch(const std::string& output, const std::string& touch_dev) override;
 };
 
-enum class BackendKind { KWin, X11, Gnome, Sway, Generic };
+enum class BackendKind { KWin, X11, Gnome, Sway, Hyprland, Generic };
 
-// PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
-// (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
-// xrandr+xinput available -> X11; else "gnome" in the desktop string OR Mutter's
-// DisplayConfig on the session bus (has_mutter; the only signal under pkexec) -> Gnome;
-// else "sway" in the desktop string OR a live Sway IPC socket (has_sway) -> Sway;
-// otherwise Generic.
+// PURE (unit-tested). In order: "kde"/"plasma" in the desktop string -> KWin. On a Wayland
+// session, GNOME ("gnome" or Mutter's DisplayConfig on the bus), Sway ("sway" or a live IPC
+// socket), Hyprland ("hyprland" or a live instance) -> that backend; these live signals beat
+// the next rule. Empty desktop AND kscreen-doctor present -> KWin. X11 session with
+// xrandr+xinput -> X11. Then GNOME/Sway/Hyprland by name, else Generic.
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
                                 bool x11_session, bool has_x11_tools, bool has_mutter = false,
-                                bool has_sway = false);
+                                bool has_sway = false, bool has_hypr = false);
 
 // PURE (unit-tested). USB product id for one session's uinput device. GNOME binds a
 // touchscreen/tablet to a monitor by vendor:product, so concurrent sessions need distinct
