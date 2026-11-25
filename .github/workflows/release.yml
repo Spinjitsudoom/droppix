@@ -125,8 +125,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: { ref: '${{ env.TAG }}' }
+      # Only the packages: `portable-host` is an internal hand-off to the flatpaks job (a bin/
+      # and lib/ tree), and uploading its folders failed the v0.4.0 publish.
       - uses: actions/download-artifact@v4
-        with: { path: dist, merge-multiple: true }
+        with: { name: appimages, path: dist }
+      - uses: actions/download-artifact@v4
+        with: { name: flatpaks, path: dist }
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
@@ -140,9 +144,10 @@ jobs:
           else
             echo "droppix $VER" > "$RUNNER_TEMP/notes.md"
           fi
-          ls -la dist
+          mapfile -t FILES < <(find dist -maxdepth 1 -type f | sort)
+          printf '%s\n' "${FILES[@]}"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" dist/* --clobber
+            gh release upload "$TAG" "${FILES[@]}" --clobber
           else
-            gh release create "$TAG" dist/* --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" --latest
+            gh release create "$TAG" "${FILES[@]}" --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" --latest
           fi
