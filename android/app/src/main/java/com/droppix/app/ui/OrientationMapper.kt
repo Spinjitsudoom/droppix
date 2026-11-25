@@ -33,6 +33,19 @@ class OrientationMapper(
     private var candidateQuarter = 0
     private var candidateSinceMs = 0L
 
+    /**
+     * Take the current orientation from the display's rotation ([rotation] = Surface.ROTATION_0..270
+     * as 0..3) instead of waiting for the sensor. The listener reports only *changes* from the last
+     * settled quarter, which starts at "natural", so without this a tablet already held in portrait
+     * reported landscape at connect, and one lying flat (sensor: unknown) never corrected.
+     * Display ROTATION_90 is the device turned counter-clockwise, i.e. sensor angle ~270.
+     */
+    fun seedFromDisplayRotation(rotation: Int) {
+        val quarter = (4 - (rotation and 3)) % 4
+        currentQuarter = quarter
+        candidateQuarter = quarter
+    }
+
     /** ORIENTATION code for the current settled orientation (0/1/2/3). */
     fun currentCode(): Int = codeFor(currentQuarter)
 

@@ -299,9 +299,13 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         }
         orientationListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(angleDeg: Int) {
+                // Rotation lock: the display stays put, so the stream must keep ITS shape. Feeding
+                // the sensor anyway left the mapper on the physical orientation, and the next
+                // reconnect's HELLO reported a shape the tablet wasn't showing.
+                if (rotationLocked) return
                 val code = orientationMapper.update(angleDeg, SystemClock.elapsedRealtime()) ?: return
                 Log.i(TAG, "orientation -> $code")
-                if (!rotationLocked) client?.sendOrientation(code)
+                client?.sendOrientation(code)
             }
         }
     }
@@ -435,6 +439,10 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
         else
             android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        // The HELLO below reports orientationMapper.currentCode(): start it from how the display
+        // is actually rotated right now (portrait, flat on a table, or rotation-locked).
+        @Suppress("DEPRECATION")
+        orientationMapper.seedFromDisplayRotation(windowManager.defaultDisplay.rotation)
         localOverlayWanted = settings.showOverlay
         overlay.visibility = if (settings.showOverlay) View.VISIBLE else View.GONE
         netThread = thread(name = "droppix-net") {

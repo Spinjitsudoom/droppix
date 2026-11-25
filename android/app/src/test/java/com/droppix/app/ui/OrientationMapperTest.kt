@@ -105,4 +105,38 @@ class OrientationMapperTest {
         tablet.update(0, 0L); tablet.update(0, 1000L)
         assertNotEquals(isPortraitCode(phone.currentCode()), isPortraitCode(tablet.currentCode()))
     }
+
+    // At connect the app reported the last SETTLED sensor quarter, which starts at "natural":
+    // a tablet already held in portrait said landscape (costing a session restart once the
+    // sensor caught up), and one lying FLAT (sensor reports unknown) never corrected at all.
+    // Seeding from the display's current rotation makes the first report right.
+    @Test fun seedFromDisplayRotationSetsTheCurrentShape() {
+        // Surface.ROTATION_0..270 = 0..3. A landscape-natural tablet turned a quarter is portrait.
+        for ((rotation, wantPortrait) in listOf(0 to false, 1 to true, 2 to false, 3 to true)) {
+            val m = OrientationMapper(naturalIsPortrait = false)
+            m.seedFromDisplayRotation(rotation)
+            assertEquals("tablet rotation $rotation", wantPortrait, isPortraitCode(m.currentCode()))
+        }
+        for ((rotation, wantPortrait) in listOf(0 to true, 1 to false, 2 to true, 3 to false)) {
+            val m = OrientationMapper(naturalIsPortrait = true)
+            m.seedFromDisplayRotation(rotation)
+            assertEquals("phone rotation $rotation", wantPortrait, isPortraitCode(m.currentCode()))
+        }
+    }
+
+    @Test fun seedMatchesWhatTheSensorWouldSettleOn() {
+        // Display ROTATION_90 is the device turned counter-clockwise: sensor angle ~270.
+        for ((rotation, angle) in listOf(0 to 0, 1 to 270, 2 to 180, 3 to 90)) {
+            val seeded = OrientationMapper(naturalIsPortrait = false).apply { seedFromDisplayRotation(rotation) }
+            val sensed = OrientationMapper(naturalIsPortrait = false).apply { update(angle, 0L); update(angle, 1000L) }
+            assertEquals("rotation $rotation vs angle $angle", sensed.currentCode(), seeded.currentCode())
+        }
+    }
+
+    @Test fun afterSeedingTheSameQuarterIsNotReportedAgain() {
+        val m = OrientationMapper(naturalIsPortrait = false)
+        m.seedFromDisplayRotation(1)   // held at angle ~270
+        assertNull(m.update(270, 0L))
+        assertNull(m.update(270, 1000L))
+    }
 }
