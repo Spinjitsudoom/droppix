@@ -80,7 +80,7 @@ bash packaging/appimage/build-appimage.sh          # host, from ~/droppix-build 
 bash packaging/appimage/build-client-appimage.sh   # desktop client
 ```
 
-**Flatpak** — full-function on the KDE runtime (`org.kde.Platform//6.10`). Because a sandbox can't run droppix's root/evdi streamer or reach host KWin/PipeWire/adb, the app reaches the host via `flatpak-spawn --host` (effectively the same trust model as the AppImage). Same host [Requirements](#requirements-host) apply.
+**Flatpak** — full-function on the KDE runtime (`org.kde.Platform//6.10`). The streamer it stages onto the host is the portable one (`build-flatpak.sh` runs the portable build first), so it also runs on glibc ≥ 2.35 hosts. `DROPPIX_FLATPAK_NO_INSTALL=1` builds the bundle without installing it. Because a sandbox can't run droppix's root/evdi streamer or reach host KWin/PipeWire/adb, the app reaches the host via `flatpak-spawn --host` (effectively the same trust model as the AppImage). Same host [Requirements](#requirements-host) apply.
 
 ```bash
 bash packaging/flatpak/build-flatpak.sh            # host → flatpak run org.droppix.Droppix

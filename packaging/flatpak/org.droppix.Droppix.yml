@@ -68,8 +68,18 @@ modules:
       # (via flatpak-spawn) so the root evdi streamer can run there — flatpak-spawn --host
       # can't see /app, and pkexec strips LD_LIBRARY_PATH, so the wrapper sets it itself.
       - mkdir -p _stage/bin _stage/lib _stage/web
-      - cp _build/droppix_stream _stage/bin/droppix_stream
-      - ldd _build/droppix_stream | awk '/=> \/app\/lib/ {print $3}' | xargs -r -I@ cp -L @ _stage/lib/
+      # Prefer the PORTABLE streamer (built on Ubuntu 22.04 by packaging/portable/, staged here by
+      # build-flatpak.sh): it runs on the HOST, so it must not need the runtime's newer glibc.
+      # The runtime-built one only runs on hosts at least as new as the KDE runtime.
+      - ls -la portable-host/bin || true
+      - if [ -f portable-host/bin/droppix_stream ]; then
+          echo "staging the PORTABLE host streamer" &&
+          install -m755 portable-host/bin/droppix_stream _stage/bin/ && cp -a portable-host/lib/. _stage/lib/;
+        else
+          echo "staging the RUNTIME host streamer (no portable build)" &&
+          cp _build/droppix_stream _stage/bin/droppix_stream &&
+          ldd _build/droppix_stream | awk '/=> \/app\/lib/ {print $3}' | xargs -r -I@ cp -L @ _stage/lib/;
+        fi
       - mkdir -p /app/share/droppix/web
       - if [ -f web-dist/index.html ]; then cp -a web-dist/. _stage/web/; cp -a web-dist/. /app/share/droppix/web/; fi
       - printf '#!/bin/sh\nd=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\nexport LD_LIBRARY_PATH="$d/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec "$d/bin/droppix_stream" "$@"\n' > _stage/bin/droppix_stream_host
@@ -94,6 +104,9 @@ modules:
       - type: dir
         path: ../../web/dist
         dest: web-dist
+      - type: dir
+        path: portable-host
+        dest: portable-host
       - type: file
         path: host-shim
       - type: file

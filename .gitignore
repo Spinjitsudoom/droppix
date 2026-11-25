@@ -19,3 +19,4 @@ tools/spacedesk-re/*.bin
 tools/spacedesk-re/*.jpg
 tools/spacedesk-re/*.log
 tools/spacedesk-re/*.stdout
+packaging/flatpak/portable-host/

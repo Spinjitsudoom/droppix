@@ -21,11 +21,27 @@ MANIFEST="$REPO/packaging/flatpak/org.droppix.Droppix.yml"
 WORK="${DROPPIX_FLATPAK_WORK:-$HOME/droppix-flatpak-build}"
 mkdir -p "$WORK"
 
+# The streamer the Flatpak stages onto the HOST comes from the portable (Ubuntu 22.04) build,
+# so it runs on any glibc >= 2.35 host instead of needing the KDE runtime's glibc.
+# DROPPIX_SKIP_PORTABLE=1 reuses an existing portable build.
+PORTABLE_BUILD="${DROPPIX_PORTABLE_BUILD:-$HOME/droppix-build-portable}"
+[ "${DROPPIX_SKIP_PORTABLE:-0}" = 1 ] || bash "$REPO/packaging/portable/build-portable.sh"
+PH="$REPO/packaging/flatpak/portable-host"
+rm -rf "$PH"; mkdir -p "$PH/bin" "$PH/lib"
+if [ -x "$PORTABLE_BUILD/AppDir/usr/bin/droppix_stream" ]; then
+  cp "$PORTABLE_BUILD/AppDir/usr/bin/droppix_stream" "$PH/bin/"
+  cp -a "$PORTABLE_BUILD/AppDir/usr/lib/." "$PH/lib/"
+else
+  echo "warning: no portable build; the staged streamer will need the runtime's glibc" >&2
+fi
+
 # flatpak-builder caches git sources as bare repos; a git safe.bareRepository=explicit
 # setting blocks that, so override it just for this process.
 export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=all
 
-flatpak-builder --user --force-clean --install \
+# DROPPIX_FLATPAK_NO_INSTALL=1 builds the repo + bundle without (re)installing the app.
+INSTALL=--install; [ "${DROPPIX_FLATPAK_NO_INSTALL:-0}" = 1 ] && INSTALL=
+flatpak-builder --user --force-clean $INSTALL \
   --state-dir "$WORK/state" --repo "$WORK/repo" "$WORK/build" "$MANIFEST"
 
 # Deliver a single-file bundle into the repo's "complete builds/" (git-ignored).
@@ -41,4 +57,4 @@ flatpak build-bundle "$WORK/repo" "$STAGE" org.droppix.Droppix
 cp -f "$STAGE" "$BUNDLE"
 
 echo "delivered: $BUNDLE"
-echo "installed to --user; run with:  flatpak run org.droppix.Droppix"
+[ -n "$INSTALL" ] && echo "installed to --user; run with:  flatpak run org.droppix.Droppix" || echo "not installed (DROPPIX_FLATPAK_NO_INSTALL=1); install with: flatpak install --user \"$BUNDLE\""
