@@ -26,6 +26,7 @@ void emit(int fd, int type, int code, int val) {
 }  // namespace
 
 bool InputInjector::open(const std::string& name) {
+  name_ = name;
   fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (fd_ < 0) { std::fprintf(stderr, "uinput open failed (need root); input disabled\n"); return false; }
 
@@ -170,7 +171,8 @@ void InputInjector::set_geometry(int out_x, int out_y, int out_w, int out_h,
   ioctl(rc_fd_, UI_ABS_SETUP, &ry);
   uinput_setup us{};
   us.id.bustype = BUS_USB; us.id.vendor = 0x1209; us.id.product = 0xd702;
-  std::strncpy(us.name, "droppix-rightclick", sizeof(us.name) - 1);
+  const std::string rc_name = pointer_name();
+  std::strncpy(us.name, rc_name.c_str(), sizeof(us.name) - 1);
   if (ioctl(rc_fd_, UI_DEV_SETUP, &us) < 0 || ioctl(rc_fd_, UI_DEV_CREATE) < 0) {
     std::fprintf(stderr, "right-click: uinput device create failed; disabled\n");
     ::close(rc_fd_); rc_fd_ = -1;

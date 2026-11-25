@@ -219,6 +219,7 @@ graph TB
     IFACE --> GNOME["GnomeBackend<br/>Mutter DisplayConfig + gsettings"]
     IFACE --> SWAY["SwayBackend<br/>swaymsg JSON + map_to_output"]
     IFACE --> HYPR["HyprlandBackend<br/>hyprctl JSON + device output"]
+    IFACE --> COSMIC["CosmicBackend<br/>cosmic-randr + input_devices"]
     IFACE --> GEN["GenericBackend<br/>display may work - touch map no-op"]
 ```
 
@@ -230,6 +231,7 @@ graph TB
 | `SwayBackend` | Yes (2026-11-25) | `swaymsg -r` JSON (outputs, placement pinning the other outputs); `input <identifier> map_to_output` for touch/pen; `SWAYSOCK` discovered from the live `sway-ipc.<uid>.<pid>.sock`; no mirror (Sway has none); evdi needs `WLR_EVDI_RENDER_DEVICE` in Sway's env |
 | `GenericBackend` | Yes | Display may work; touch map is a no-op |
 | `HyprlandBackend` | Yes (2026-11-25, Hyprland ≥ 0.42) | `hyprctl -j monitors all`; `keyword monitor` / `device[<name>]:output`, falling back to `hyprctl eval` with `hl.monitor` / `hl.device` on Lua configs; instance found via `$XDG_RUNTIME_DIR/hypr/<sig>/hyprland.lock`. Hyprland 0.41 can't commit evdi outputs |
+| `CosmicBackend` | Yes (2026-11-25) | `cosmic-randr list --kdl` / `position` / `mirror` / `enable` (undoes a restored mirror); touch, pen and the right-click pointer bound with `map_to_output` in `~/.config/cosmic/com.system76.CosmicComp/v1/input_devices` (only droppix entries rewritten); the pointer is scaled per output (`pointer_maps_per_output`) |
 | Other wlroots (river, labwc, Wayfire) | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
 
 Roadmap (not shipped): Hyprland / other wlroots backends - see [`superpowers/specs/2026-07-05-cross-desktop-portability-design.md`](superpowers/specs/2026-07-05-cross-desktop-portability-design.md).

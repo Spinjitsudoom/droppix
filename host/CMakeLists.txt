@@ -71,6 +71,7 @@ add_library(droppix_core
   src/json_value.cpp
   src/sway_state.cpp
   src/hypr_state.cpp
+  src/cosmic_state.cpp
   src/session_params.cpp
   src/encoder_factory.cpp
   src/ws_channel.cpp
@@ -227,6 +228,7 @@ add_executable(droppix_tests
   tests/test_input_caps.cpp
   tests/test_sway.cpp
   tests/test_hyprland.cpp
+  tests/test_cosmic.cpp
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp

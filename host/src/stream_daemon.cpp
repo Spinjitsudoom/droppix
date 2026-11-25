@@ -283,8 +283,16 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       // every right-click onto another monitor.
       Rect desk{0, 0, cfg_.desktop_w, cfg_.desktop_h};
       if (desk.w <= 0 || desk.h <= 0) desk = desktop_bounds(after_outputs);
+      // Some compositors (COSMIC) map an absolute pointer onto one output: scale it to the
+      // droppix output alone and bind it there.
+      const bool per_output = desktop_->pointer_maps_per_output();
+      if (per_output) desk = droppix.geom;
       injector.set_geometry(droppix.geom.x, droppix.geom.y, droppix.geom.w, droppix.geom.h,
                             desk.x, desk.y, desk.w, desk.h);
+      if (per_output) {
+        std::string rc = injector.pointer_name();
+        std::thread([backend, out_name, rc]{ backend->map_pointer(out_name, rc); }).detach();
+      }
     } else {
       std::fprintf(stderr, "input: uinput unavailable (need root); input disabled\n");
     }

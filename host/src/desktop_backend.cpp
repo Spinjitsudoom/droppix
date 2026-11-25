@@ -2,6 +2,11 @@
 #include "mutter_state.h"
 #include "sway_state.h"
 #include "hypr_state.h"
+#include "cosmic_state.h"
+#include <fcntl.h>
+#include <mutex>
+#include <sys/file.h>
+#include <sys/stat.h>
 #include <fstream>
 #include <csignal>
 #include <algorithm>
@@ -665,6 +670,128 @@ bool HyprlandBackend::place_output(const std::string& evdi, int x, int y) {
   return !rule.empty() && hypr_set("placement", "monitor", rule, hypr_place_lua(mons, evdi, x, y));
 }
 
+// ---- COSMIC ----
+
+namespace {
+std::string cosmic_randr(const std::string& args) {
+  return capture("timeout 5 " + user_session_prefix() + "cosmic-randr " + args + " 2>&1");
+}
+bool cosmic_outputs(std::vector<CosmicOutput>& outs) {
+  const std::string out = cosmic_randr("list --kdl");
+  if (parse_cosmic_outputs(out, outs)) return true;
+  std::fprintf(stderr, "[cosmic] could not read outputs: %.200s\n", out.c_str());
+  return false;
+}
+
+// The session user's uid/gid/home (the invoking user under pkexec/sudo, else ourselves).
+bool session_user(uid_t& uid, gid_t& gid, std::string& home) {
+  const char* u = std::getenv("PKEXEC_UID");
+  if (!u || !*u) u = std::getenv("SUDO_UID");
+  struct passwd* pw = getpwuid(u && *u ? static_cast<uid_t>(std::atol(u)) : getuid());
+  if (!pw || !pw->pw_dir) return false;
+  uid = pw->pw_uid; gid = pw->pw_gid; home = pw->pw_dir;
+  return true;
+}
+
+// Rewrite droppix's entry in cosmic-comp's input_devices. Touch and pen (and other sessions'
+// streamers) write concurrently: serialise on a lock file, then replace the file atomically,
+// owned by the user. cosmic-comp watches the file and applies the change live.
+bool cosmic_map(const char* what, const std::string& droppix_output, const std::string& dev) {
+  std::vector<CosmicOutput> outs;
+  const std::string output = cosmic_outputs(outs) ? cosmic_touch_target(outs, droppix_output)
+                                                  : droppix_output;
+  static std::mutex mu;
+  std::lock_guard<std::mutex> lk(mu);
+  uid_t uid; gid_t gid; std::string home;
+  if (!session_user(uid, gid, home)) return false;
+  const std::string dir = home + "/.config/cosmic/com.system76.CosmicComp/v1";
+  const std::string path = dir + "/input_devices";
+  const std::string lock_path = "/tmp/droppix-cosmic-input-" + std::to_string(uid) + ".lock";
+  const int lock = ::open(lock_path.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+  if (lock >= 0) ::flock(lock, LOCK_EX);
+  std::string existing;
+  if (std::FILE* f = std::fopen(path.c_str(), "r")) {
+    char buf[4096]; size_t n;
+    while ((n = std::fread(buf, 1, sizeof buf, f)) > 0) existing.append(buf, n);
+    std::fclose(f);
+  }
+  const std::string next = cosmic_input_devices(existing, dev, output);
+  bool ok = false;
+  if (next.empty()) {
+    std::fprintf(stderr, "[cosmic] %s: can't safely update %s; left it alone\n", what, path.c_str());
+  } else {
+    const std::string tmp = path + ".droppix-tmp";
+    if (std::FILE* f = std::fopen(tmp.c_str(), "w")) {
+      ok = std::fwrite(next.data(), 1, next.size(), f) == next.size();
+      ok = (std::fclose(f) == 0) && ok;
+      if (ok && getuid() == 0) ok = ::chown(tmp.c_str(), uid, gid) == 0;
+      ok = ok && std::rename(tmp.c_str(), path.c_str()) == 0;
+      if (!ok) std::remove(tmp.c_str());
+    }
+    std::fprintf(stderr, "[cosmic] %s %s -> %s%s\n", what, dev.c_str(), output.c_str(),
+                 ok ? "" : " (write failed)");
+  }
+  if (lock >= 0) ::close(lock);
+  return ok;
+}
+}  // namespace
+
+std::vector<OutputInfo> CosmicBackend::outputs() {
+  std::vector<CosmicOutput> outs;
+  if (!cosmic_outputs(outs)) return {};
+  std::vector<OutputInfo> r;
+  for (auto& o : outs) r.push_back(o.info);
+  return r;
+}
+std::string CosmicBackend::find_output(uint32_t edid_serial) {
+  std::vector<CosmicOutput> outs;
+  if (edid_serial == 0 || !cosmic_outputs(outs)) return {};
+  return cosmic_find_by_serial(outs, edid_serial);
+}
+void CosmicBackend::map_touch(const std::string& output, const std::string& touch_dev) {
+  cosmic_map("touch", output, touch_dev);
+}
+bool CosmicBackend::map_pen(const std::string& output, const std::string& pen_dev) {
+  return cosmic_map("pen", output, pen_dev);
+}
+// cosmic-comp maps an absolute pointer onto one output (VM-verified: a pointer scaled across
+// the desktop landed at half the intended x), so bind droppix's onto the droppix output.
+void CosmicBackend::map_pointer(const std::string& output, const std::string& pointer_dev) {
+  cosmic_map("right-click pointer", output, pointer_dev);
+}
+bool CosmicBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  if (!safe_output_name(evdi)) return false;
+  std::vector<CosmicOutput> outs;
+  if (!cosmic_outputs(outs)) return false;
+  if (mode == LayoutMode::Extend) {
+    // COSMIC restores saved arrangements: after a mirror session the droppix output comes
+    // back mirroring. `enable` makes it a normal extended output again.
+    for (const auto& o : outs)
+      if (o.info.name == evdi && !o.mirroring.empty()) {
+        const std::string out = cosmic_randr("enable " + evdi);
+        std::fprintf(stderr, "[cosmic] %s was restored mirroring %s; extending it%s%s\n",
+                     evdi.c_str(), o.mirroring.c_str(), out.empty() ? "" : ": ", out.c_str());
+        return true;
+      }
+    return false;
+  }
+  std::string primary;
+  for (const auto& o : outs)
+    if (o.info.name != evdi && o.info.enabled && (primary.empty() || o.info.primary)) primary = o.info.name;
+  if (!safe_output_name(primary)) return false;
+  const std::string out = cosmic_randr("mirror " + evdi + " " + primary);
+  std::fprintf(stderr, "[cosmic] mirror %s from %s%s%s\n", evdi.c_str(), primary.c_str(),
+               out.empty() ? "" : ": ", out.c_str());
+  return true;
+}
+bool CosmicBackend::place_output(const std::string& evdi, int x, int y) {
+  if (!safe_output_name(evdi)) return false;
+  const std::string out = cosmic_randr("position " + evdi + " " + std::to_string(x) + " " + std::to_string(y));
+  std::fprintf(stderr, "[cosmic] place %s at %d,%d%s%s\n", evdi.c_str(), x, y,
+               out.empty() ? "" : ": ", out.c_str());
+  return true;
+}
+
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
   std::fprintf(stderr, "input: touch-to-output mapping not supported on this desktop yet; "
@@ -673,12 +800,13 @@ void GenericBackend::map_touch(const std::string& output, const std::string& tou
 
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
                                 bool x11_session, bool has_x11_tools, bool has_mutter,
-                                bool has_sway, bool has_hypr) {
+                                bool has_sway, bool has_hypr, bool has_cosmic) {
   std::string d;
   for (char c : xdg_current_desktop) d.push_back(static_cast<char>(std::tolower((unsigned char)c)));
   const bool gnome = d.find("gnome") != std::string::npos || has_mutter;
   const bool sway = d.find("sway") != std::string::npos || has_sway;
   const bool hypr = d.find("hyprland") != std::string::npos || has_hypr;
+  const bool cosmic = d.find("cosmic") != std::string::npos || has_cosmic;
   if (d.find("kde") != std::string::npos || d.find("plasma") != std::string::npos)
     return BackendKind::KWin;
   // A live Wayland compositor wins over "kscreen-doctor happens to be installed": under
@@ -688,12 +816,14 @@ BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has
     if (gnome) return BackendKind::Gnome;
     if (sway) return BackendKind::Sway;
     if (hypr) return BackendKind::Hyprland;
+    if (cosmic) return BackendKind::Cosmic;
   }
   if (d.empty() && has_kscreen) return BackendKind::KWin;
   if (x11_session && has_x11_tools) return BackendKind::X11;
   if (gnome) return BackendKind::Gnome;
   if (sway) return BackendKind::Sway;
   if (hypr) return BackendKind::Hyprland;
+  if (cosmic) return BackendKind::Cosmic;
   return BackendKind::Generic;
 }
 
@@ -783,13 +913,24 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
       const char* s = std::getenv("HYPRLAND_INSTANCE_SIGNATURE");
       return s && *s;
     }();
+    // COSMIC has no IPC socket to look for; its compositor process is the signal.
+    const bool has_cosmic = [&]{
+      for (const auto& e : list_dir("/proc")) {
+        if (e.empty() || !std::isdigit(static_cast<unsigned char>(e[0]))) continue;
+        std::ifstream f("/proc/" + e + "/comm");
+        std::string comm;
+        if (std::getline(f, comm) && comm == "cosmic-comp") return true;
+      }
+      return false;
+    }();
     switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools, has_mutter,
-                                has_sway, has_hypr)) {
+                                has_sway, has_hypr, has_cosmic)) {
       case BackendKind::KWin:  b = std::make_shared<KWinBackend>();  break;
       case BackendKind::X11:   b = std::make_shared<X11Backend>();   break;
       case BackendKind::Gnome: b = std::make_shared<GnomeBackend>(); break;
       case BackendKind::Sway:  b = std::make_shared<SwayBackend>();  break;
       case BackendKind::Hyprland: b = std::make_shared<HyprlandBackend>(); break;
+      case BackendKind::Cosmic:   b = std::make_shared<CosmicBackend>();   break;
       default:                b = std::make_shared<GenericBackend>();
     }
     std::fprintf(stderr, "desktop backend: %s\n", b->name());

@@ -39,6 +39,9 @@ class InputInjector {
   // BTN_TOOL_PEN vs BTN_TOOL_RUBBER proximity edges. No-op if the pen device failed to create
   // (pen_fd_ < 0) — pen input is optional, touch stays primary.
   void pen(uint16_t x, uint16_t y, uint16_t pressure, bool touching, bool eraser);
+  // Name of the right-click/scroll pointer device ("<touch name>-rc"), per session so a
+  // compositor that maps devices by name (COSMIC) can map each tablet's pointer separately.
+  std::string pointer_name() const { return name_ + "-rc"; }
 
  private:
   void right_click(uint16_t x_norm, uint16_t y_norm);
@@ -48,6 +51,7 @@ class InputInjector {
   // Shared 0..65535 -> desktop-pixel scaling used by right_click/scroll/mouse_button.
   int scale_x(uint16_t x_norm) const;
   int scale_y(uint16_t y_norm) const;
+  std::string name_ = "droppix-touch";
   int fd_ = -1;        // multi-touch touchscreen
   int rc_fd_ = -1;     // right-click absolute pointer
   int kb_fd_ = -1;     // keyboard
