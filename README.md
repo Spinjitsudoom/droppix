@@ -71,10 +71,12 @@ cd web && npm ci && npm run build && npm test
 # then start a TLS session; open https://<lan-ip>:<port>/
 ```
 
-**AppImage** — host bundles `droppix_gui` + `droppix_stream` and codec/streaming libs (ffmpeg, x264, OpenSSL, libevdi), using the host's Qt6. On launch the streamer is relocated to `~/.local/share/droppix/runtime/` so the root (evdi) path works despite the AppImage's read-only mount. A separate client AppImage script is also available.
+**AppImage (portable, the one to ship)** — built on Ubuntu 22.04, so it runs on any distro with **glibc 2.35 or newer**: Ubuntu 22.04+, Debian 12+, current Fedora, Arch, openSUSE, … It bundles `droppix_gui` + `droppix_stream` plus only FFmpeg, x264 and libevdi. It uses the **host's Qt 6** (6.2 or newer) when there is one, and otherwise a bundled Qt fallback (stock GNOME or Sway installs have no Qt). On launch the streamer is relocated to `~/.local/share/droppix/runtime/` so the root (evdi) path works despite the AppImage's read-only mount. Verified: Ubuntu 22.04/24.04 and Debian 12 (bundled Qt), Fedora 44 (host Qt 6.11).
 
 ```bash
-bash packaging/appimage/build-appimage.sh          # host
+# one-time: distrobox create --name droppix-oldbase --image docker.io/library/ubuntu:22.04
+bash packaging/portable/build-portable.sh          # host, portable (recommended)
+bash packaging/appimage/build-appimage.sh          # host, from ~/droppix-build (needs that distro's glibc/Qt or newer)
 bash packaging/appimage/build-client-appimage.sh   # desktop client
 ```
 

@@ -23,7 +23,11 @@
 #   distrobox enter droppix-dev -- bash -lc 'cmake --build "$HOME/droppix-build" -j'
 #   bash packaging/appimage/build-appimage.sh
 #
-# Env overrides: DROPPIX_BUILD_DIR (default ~/droppix-build), OUT, APPIMAGETOOL.
+# Env overrides: DROPPIX_BUILD_DIR (default ~/droppix-build), OUT, APPIMAGETOOL,
+# DROPPIX_DISTROBOX, DROPPIX_DEPS_LIB (extra lib dir for linuxdeploy, e.g. the old-base
+# /opt/droppix-deps/lib), QT_FALLBACK=1 (also bundle Qt under usr/qt-fallback, used ONLY when
+# the host has no Qt 6; see packaging/portable/). For portable builds use
+# packaging/portable/build-portable.sh, which sets these.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -50,7 +54,7 @@ if [ ! -x "$LD" ]; then
   curl -fsSL -o "$LD" "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
   chmod +x "$LD"
 fi
-distrobox enter "$DISTROBOX" -- bash -lc 'command -v patchelf >/dev/null || sudo dnf install -y patchelf'
+distrobox enter "$DISTROBOX" -- bash -lc 'command -v patchelf >/dev/null || sudo dnf install -y patchelf || sudo apt-get install -y patchelf'
 
 # --- stage icon + desktop ---
 cp "$ICON" "$BUILD_DIR/droppix.png"
@@ -69,6 +73,7 @@ EOF
 rm -rf "$APPDIR"; mkdir -p "$APPDIR"
 distrobox enter "$DISTROBOX" -- bash -lc "
   export APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1
+  export LD_LIBRARY_PATH='${DROPPIX_DEPS_LIB:-}'\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}
   cd '$BUILD_DIR'
   '$LD' --appimage-extract-and-run --appdir AppDir \
     -e droppix_gui -e droppix_stream -i droppix.png -d droppix.desktop
@@ -108,7 +113,41 @@ for pat in 'libQt6*' \
            'libffi*' 'libpcre.so*' 'libicu*' 'libmd4c*' 'libdouble-conversion*'; do
   rm -f "$LIBDIR"/$pat
 done
-echo "bundled libs kept: $(ls "$LIBDIR" | wc -l)"
+# Portable builds keep ONLY an allowlist (KEEP_LIBS: space-separated soname prefixes). Built
+# on an old base, every other library here is an OLDER copy of something the host has; loaded
+# first through our rpath, it would shadow the host's newer one and break the host's Qt.
+if [ -n "${KEEP_LIBS:-}" ]; then
+  for f in "$LIBDIR"/*; do
+    base="$(basename "$f")"; keep=0
+    for k in $KEEP_LIBS; do case "$base" in "$k".so*) keep=1 ;; esac; done
+    [ $keep = 1 ] || rm -f "$f"
+  done
+fi
+echo "bundled libs kept: $(ls "$LIBDIR" | wc -l) ($(ls "$LIBDIR" | tr '\n' ' '))"
+
+# --- optional Qt fallback for hosts with no Qt 6 at all (stock GNOME/Sway installs) ---
+# Kept OUT of usr/lib (the GUI relocates usr/lib/*.so* for the root streamer) and only put on
+# the library path by AppRun when the host lacks libQt6Widgets: a KDE host keeps using its own
+# Qt, which is what avoided the double-loaded glib/xcb crash in the first place.
+if [ "${QT_FALLBACK:-0}" = 1 ]; then
+  distrobox enter "$DISTROBOX" -- bash "$REPO/packaging/portable/bundle-qt-fallback.sh" "$APPDIR/usr/qt-fallback"
+  rm -f "$APPDIR/AppRun"
+  cat > "$APPDIR/AppRun" <<'APPRUN'
+#!/bin/sh
+# droppix AppRun: the host's Qt 6 when it has one, else the bundled fallback.
+HERE="$(dirname "$(readlink -f "$0")")"
+if ! { /sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null; } | grep -q 'libQt6Widgets\.so\.6 '; then
+  export LD_LIBRARY_PATH="$HERE/usr/qt-fallback/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  export QT_PLUGIN_PATH="$HERE/usr/qt-fallback/plugins"
+  export DROPPIX_QT_FALLBACK=1
+  { /sbin/ldconfig -p 2>/dev/null || ldconfig -p 2>/dev/null; } | grep -q 'libOpenGL\.so\.0 ' ||
+    export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$HERE/usr/qt-fallback/gl"
+fi
+exec "$HERE/usr/bin/droppix_gui" "$@"
+APPRUN
+  chmod +x "$APPDIR/AppRun"
+  echo "bundled Qt fallback: $(du -sh "$APPDIR/usr/qt-fallback" | cut -f1)"
+fi
 
 # --- package (host: appimagetool needs `file`; use a cached runtime if present) ---
 RT="$CACHE/runtime-x86_64"
