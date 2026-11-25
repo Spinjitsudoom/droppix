@@ -29,20 +29,25 @@ class TwoFingerTap {
   uint16_t centroidX_ = 0, centroidY_ = 0;   // midpoint while exactly two contacts were down
 };
 
-// A mouse-like right-click spread over time: wiggle + move, then press 30 ms later, release
-// 80 ms after that. Wiggle puts the pointer 1 px off first: the kernel drops an ABS value
-// equal to the last one sent, so a repeat click on the same pixel would otherwise not move
-// the pointer back from wherever the real mouse went. Pure; the injector polls due() from the stream loop instead of sleeping, so
-// the video thread never blocks.
+// A mouse-like right-click spread over time: land mid-tablet, then wiggle + move 15 ms later,
+// press 30 ms after that, release 80 ms after that.
+// - Land: Plasma 6's edge barrier holds a pointer back 100 px when it crosses onto another
+//   screen, so jumping straight from the main screen to the target fell 100 px short (and a
+//   target near the tablet's edge never left the main screen). Landing mid-tablet first takes
+//   that loss on the tablet; the move to the target then stays on one screen.
+// - Wiggle puts the pointer 1 px off: the kernel drops an ABS value equal to the last one
+//   sent, so a repeat click on the same pixel would otherwise not move the pointer back.
+// Pure; the injector polls due() from the stream loop instead of sleeping, so the video
+// thread never blocks.
 class ClickSchedule {
  public:
-  enum class Step { Wiggle, Move, Press, Release };
+  enum class Step { Land, Wiggle, Move, Press, Release };
   void start(int64_t now_ms, uint16_t x, uint16_t y) {
     t0_ = now_ms; x_ = x; y_ = y; next_ = 0;
   }
-  bool active() const { return next_ >= 0 && next_ < 4; }
+  bool active() const { return next_ >= 0 && next_ < 5; }
   std::vector<Step> due(int64_t now_ms) {
-    static constexpr int64_t kAt[4] = {0, 0, 30, 110};
+    static constexpr int64_t kAt[5] = {0, 15, 15, 45, 125};
     std::vector<Step> out;
     while (active() && now_ms - t0_ >= kAt[next_]) out.push_back(static_cast<Step>(next_++));
     return out;
@@ -60,7 +65,7 @@ class ClickSchedule {
  private:
   int64_t t0_ = 0;
   uint16_t x_ = 0, y_ = 0;
-  int next_ = -1;   // -1 idle, 0..3 the next step, 4 done
+  int next_ = -1;   // -1 idle, 0..4 the next step, 5 done
 };
 
 }  // namespace droppix

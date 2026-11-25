@@ -206,6 +206,10 @@ void InputInjector::end_click() {
 void InputInjector::send_click_steps(const std::vector<ClickSchedule::Step>& steps) {
   for (ClickSchedule::Step st : steps) {
     switch (st) {
+      case ClickSchedule::Step::Land:   // the droppix output's centre (see ClickSchedule)
+        emit(rc_fd_, EV_ABS, ABS_X, scale_x(32768));
+        emit(rc_fd_, EV_ABS, ABS_Y, scale_y(32768));
+        break;
       case ClickSchedule::Step::Wiggle: {
         const int px = scale_x(click_.x());
         emit(rc_fd_, EV_ABS, ABS_X, px > 0 ? px - 1 : px + 1);
