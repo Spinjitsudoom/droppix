@@ -214,3 +214,30 @@ TEST(MonitorGeometry, DisabledOutputWithHdrLinesStaysDisabled) {
   Rect b = desktop_bounds(outs);
   EXPECT_EQ(b.w, 2688);
 }
+
+// Plasma 5.27's kscreen-doctor prints each output on ONE line (with colour codes even when
+// piped); Plasma 6 spreads it over several. The single-line form lost state, geometry and
+// priority, so droppix never found its output on Plasma 5 (Kubuntu 24.04, Debian 12).
+TEST(KscreenParse, Plasma5SingleLineOutputs) {
+  const std::string t =
+    "\x1b[01;32mOutput: \x1b[0;0m1 Virtual-1 \x1b[01;32menabled\x1b[0;0m \x1b[01;32mconnected\x1b[0;0m "
+    "\x1b[01;32mpriority 1\x1b[0;0m \x1b[01;33mUnknown\x1b[01;34m Modes: \x1b[0;0m0:\x1b[01;32m1280x800@75*\x1b[0;0m! "
+    "1:5120x2160@50 \x1b[01;33mGeometry: \x1b[0;0m0,0 1280x800 \x1b[01;33mScale: \x1b[0;0m1 "
+    "\x1b[01;33mRotation: \x1b[0;0m1 \x1b[01;33mOverscan: \x1b[0;0m0\n"
+    "\x1b[01;32mOutput: \x1b[0;0m2 DVI-I-1 \x1b[01;32menabled\x1b[0;0m \x1b[01;32mconnected\x1b[0;0m "
+    "\x1b[01;32mpriority 2\x1b[0;0m \x1b[01;33mDVI\x1b[01;34m Modes: \x1b[0;0m0:\x1b[01;32m1280x800@60*\x1b[0;0m! "
+    "\x1b[01;33mGeometry: \x1b[0;0m1280,0 1280x800 \x1b[01;33mScale: \x1b[0;0m1\n"
+    "\x1b[01;31mOutput: \x1b[0;0m3 HDMI-A-1 \x1b[01;31mdisabled\x1b[0;0m \x1b[01;31mdisconnected\x1b[0;0m "
+    "\x1b[01;31mpriority 0\x1b[0;0m HDMI \x1b[01;34m Modes: \x1b[0;0m\n";
+  const auto outs = droppix::parse_kscreen_outputs(t);
+  ASSERT_EQ(outs.size(), 3u);
+  EXPECT_EQ(outs[0].name, "Virtual-1");
+  EXPECT_TRUE(outs[0].enabled);
+  EXPECT_TRUE(outs[0].primary);
+  EXPECT_EQ(outs[1].name, "DVI-I-1");
+  EXPECT_TRUE(outs[1].enabled);
+  EXPECT_FALSE(outs[1].primary);
+  EXPECT_EQ(outs[1].geom.x, 1280);
+  EXPECT_EQ(outs[1].geom.w, 1280);
+  EXPECT_FALSE(outs[2].enabled);
+}

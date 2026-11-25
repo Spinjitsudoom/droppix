@@ -32,10 +32,15 @@ std::vector<OutputInfo> parse_kscreen_outputs(const std::string& text) {
     if (pos != std::string::npos) {
       // "Output: <num> <name> ..."
       std::istringstream ls(line.substr(pos + 7));
-      int num; std::string name;
-      ls >> num >> name;
-      OutputInfo o; o.name = name; o.id = num; outs.push_back(o);
-      continue;
+      int num; std::string name, state;
+      ls >> num >> name >> state;
+      OutputInfo o; o.name = name; o.id = num;
+      // Plasma 5 prints the whole output on this one line ("... DVI-I-1 enabled connected
+      // priority 2 ... Geometry: 1280,0 1280x800 ..."): the word after the name is the state,
+      // and geometry/priority below are read from this same line. Plasma 6 puts each on its
+      // own line, so nothing more matches here.
+      o.enabled = state == "enabled";
+      outs.push_back(o);
     }
     if (outs.empty()) continue;
     // The state is its own bare line. Other lines also say "enabled" ("HDR: enabled",

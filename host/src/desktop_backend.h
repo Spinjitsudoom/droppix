@@ -23,6 +23,12 @@ std::string pick_wayland_display(const std::vector<std::string>& runtime_entries
 // pick_wayland_display, without its wayland-0 fallback.
 bool has_live_wayland_socket(const std::vector<std::string>& runtime_entries);
 
+// PURE (unit-tested). Extra environment for user-session tools when the session is Wayland:
+// without it Qt 5 tools (Plasma 5's kscreen-doctor) default to xcb, fail to open XWayland
+// under the root streamer, and print nothing. "" for an X11 session. Shell-quoted for a
+// command line (never inside another single-quoted string).
+std::string wayland_session_env(const std::vector<std::string>& runtime_entries);
+
 // PURE (unit-tested). Does EDID serial text from a compositor ("27000", "0x00006978")
 // equal the session's numeric serial?
 bool edid_serial_matches(const std::string& text, uint32_t serial);

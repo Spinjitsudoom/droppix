@@ -42,6 +42,11 @@ bool has_live_wayland_socket(const std::vector<std::string>& entries) {
   return false;
 }
 
+std::string wayland_session_env(const std::vector<std::string>& entries) {
+  return has_live_wayland_socket(entries) ? "XDG_SESSION_TYPE=wayland QT_QPA_PLATFORM='wayland;xcb' "
+                                          : std::string{};
+}
+
 bool edid_serial_matches(const std::string& s, uint32_t serial) {
   if (s.empty()) return false;
   const bool hex = s.size() > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X');
@@ -87,7 +92,8 @@ std::string user_session_prefix() {
   const std::string env =
       "env XDG_RUNTIME_DIR=" + runtime + " "
       "DBUS_SESSION_BUS_ADDRESS=unix:path=" + runtime + "/bus "
-      "WAYLAND_DISPLAY=" + discover_wayland_display(runtime) + " "
+      "WAYLAND_DISPLAY=" + discover_wayland_display(runtime) + " " +
+      wayland_session_env(list_dir(runtime)) +
       "DISPLAY=:0 " +   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
       [&]{ const std::string s = discover_sway_socket(runtime, std::atol(u.c_str()));
            return s.empty() ? std::string{} : "SWAYSOCK=" + s + " "; }();
@@ -129,8 +135,10 @@ void KWinBackend::map_touch(const std::string& output_name, const std::string& t
       "[ -z \"$QD\" ] && { echo \"[touch-bind] no qdbus available\" >&2; exit 0; }; "
       "I=org.kde.KWin.InputDevice; PG=org.freedesktop.DBus.Properties.Get; PS=org.freedesktop.DBus.Properties.Set; "
       "for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do "
-      "for d in $(\"$QD\" org.kde.KWin /org/kde/KWin/InputDevice "
-      "org.kde.KWin.InputDeviceManager.ListTouch 2>/dev/null); do "
+      // devicesSysNames, not ListTouch: Plasma 5.27 has no ListTouch, so touch was never bound
+      // there. Both Plasma 5 and 6 have the property; the name check below picks our device.
+      "for d in $(\"$QD\" org.kde.KWin /org/kde/KWin/InputDevice $PG "
+      "org.kde.KWin.InputDeviceManager devicesSysNames 2>/dev/null); do "
       "P=/org/kde/KWin/InputDevice/$d; "
       "n=$(\"$QD\" org.kde.KWin \"$P\" $PG $I name 2>/dev/null); "
       "if [ \"$n\" = " + touch_name + " ]; then "
@@ -141,7 +149,7 @@ void KWinBackend::map_touch(const std::string& output_name, const std::string& t
       " 2>&1 | sed \"s/^/[touch-bind] set outputName: /\" >&2; "
       "echo \"[touch-bind] after mapToWorkspace=$(\"$QD\" org.kde.KWin \"$P\" $PG $I mapToWorkspace 2>/dev/null) outputName=[$(\"$QD\" org.kde.KWin \"$P\" $PG $I outputName 2>/dev/null)]\" >&2; "
       "exit 0; fi; done; sleep 0.2; done; "
-      "echo \"[touch-bind] droppix-touch not found via ListTouch after retries\" >&2";
+      "echo \"[touch-bind] droppix-touch not found via devicesSysNames after retries\" >&2";
   std::string cmd = "timeout 10 " + user_session_prefix() + "sh -c '" + inner + "'";
   std::system(cmd.c_str());
 }

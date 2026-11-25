@@ -123,3 +123,11 @@ TEST(SwayState, PlacingAnUnknownOrUnsafeOutputGivesNothing) {
   EXPECT_EQ(sway_place_command(outs, "HDMI-A-9", 0, 0), "");
   EXPECT_EQ(sway_place_command(outs, "DVI;exit", 0, 0), "");
 }
+
+TEST(WaylandSession, SessionEnvDeclaresWaylandToQtTools) {
+  // Plasma 5's Qt 5 kscreen-doctor defaulted to xcb under the root streamer, couldn't open
+  // XWayland (no Xauthority) and printed nothing: droppix never found its output there.
+  EXPECT_EQ(wayland_session_env({"wayland-0", "wayland-0.lock"}),
+            "XDG_SESSION_TYPE=wayland QT_QPA_PLATFORM='wayland;xcb' ");
+  EXPECT_EQ(wayland_session_env({"bus"}), "");   // X11 session: leave Qt's default alone
+}
