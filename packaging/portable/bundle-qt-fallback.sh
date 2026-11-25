@@ -10,7 +10,7 @@ QTLIB="$(dirname "$(readlink -f "$(ldconfig -p | awk '/libQt6Core.so.6 /{print $
 QTPLUG="$(qtpaths6 --plugin-dir 2>/dev/null || echo /usr/lib/x86_64-linux-gnu/qt6/plugins)"
 rm -rf "$DEST"; mkdir -p "$DEST/lib" "$DEST/plugins"
 for d in wayland-shell-integration wayland-decoration-client wayland-graphics-integration-client \
-         xcbglintegrations imageformats iconengines tls; do
+         xcbglintegrations imageformats iconengines tls multimedia; do
   [ -d "$QTPLUG/$d" ] && cp -a "$QTPLUG/$d" "$DEST/plugins/"
 done
 # Desktop platform plugins only: no eglfs/linuxfb/vnc (they drag in libinput, libwacom, ...)

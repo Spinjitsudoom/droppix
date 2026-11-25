@@ -79,6 +79,8 @@ bash packaging/appimage/build-appimage.sh          # host, from ~/droppix-build 
 bash packaging/appimage/build-client-appimage.sh   # desktop client
 ```
 
+**Releases** — pushing a `v*` tag runs `.github/workflows/release.yml`. It builds and tests on Ubuntu 22.04, then publishes the host and client AppImages and Flatpaks, with notes from `docs/releases/<tag>.md`. The APK is signed with the maintainer's own keystore, so it is built locally (`packaging/android/build-apk.sh`) and attached with `gh release upload`.
+
 **Flatpak** — full-function on the KDE runtime (`org.kde.Platform//6.10`). The streamer it stages onto the host is the portable one (`build-flatpak.sh` runs the portable build first), so it also runs on glibc ≥ 2.35 hosts. `DROPPIX_FLATPAK_NO_INSTALL=1` builds the bundle without installing it. Because a sandbox can't run droppix's root/evdi streamer or reach host KWin/PipeWire/adb, the app reaches the host via `flatpak-spawn --host` (effectively the same trust model as the AppImage). Same host [Requirements](#requirements-host) apply.
 
 ```bash

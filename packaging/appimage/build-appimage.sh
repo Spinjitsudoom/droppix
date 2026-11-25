@@ -46,6 +46,8 @@ ICON="$REPO/host/icons/droppix-256.png"
 [ -x "$STREAM_BIN" ] || { echo "error: $STREAM_BIN missing — build it first" >&2; exit 1; }
 [ -x "$APPIMAGETOOL" ] || { echo "error: appimagetool not found at $APPIMAGETOOL" >&2; exit 1; }
 mkdir -p "$CACHE"
+# DROPPIX_DISTROBOX=none runs every step directly (CI on an ubuntu-22.04 runner).
+inbox() { if [ "$DISTROBOX" = none ]; then bash -lc "$1"; else distrobox enter "$DISTROBOX" -- bash -lc "$1"; fi; }
 
 # --- tooling: linuxdeploy (bundles ldd deps + sets $ORIGIN rpaths) + patchelf ---
 LD="$CACHE/linuxdeploy-x86_64.AppImage"
@@ -54,7 +56,7 @@ if [ ! -x "$LD" ]; then
   curl -fsSL -o "$LD" "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage"
   chmod +x "$LD"
 fi
-distrobox enter "$DISTROBOX" -- bash -lc 'command -v patchelf >/dev/null || sudo dnf install -y patchelf || sudo apt-get install -y patchelf'
+inbox 'command -v patchelf >/dev/null || sudo dnf install -y patchelf || sudo apt-get install -y patchelf'
 
 # --- stage icon + desktop ---
 cp "$ICON" "$BUILD_DIR/droppix.png"
@@ -71,7 +73,7 @@ EOF
 
 # --- populate the AppDir (inside the distrobox: has patchelf) ---
 rm -rf "$APPDIR"; mkdir -p "$APPDIR"
-distrobox enter "$DISTROBOX" -- bash -lc "
+inbox "
   export APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1
   export LD_LIBRARY_PATH='${DROPPIX_DEPS_LIB:-}'\${LD_LIBRARY_PATH:+:\$LD_LIBRARY_PATH}
   cd '$BUILD_DIR'
@@ -130,7 +132,7 @@ echo "bundled libs kept: $(ls "$LIBDIR" | wc -l) ($(ls "$LIBDIR" | tr '\n' ' '))
 # the library path by AppRun when the host lacks libQt6Widgets: a KDE host keeps using its own
 # Qt, which is what avoided the double-loaded glib/xcb crash in the first place.
 if [ "${QT_FALLBACK:-0}" = 1 ]; then
-  distrobox enter "$DISTROBOX" -- bash "$REPO/packaging/portable/bundle-qt-fallback.sh" "$APPDIR/usr/qt-fallback"
+  inbox "bash '$REPO/packaging/portable/bundle-qt-fallback.sh' '$APPDIR/usr/qt-fallback'"
   rm -f "$APPDIR/AppRun"
   cat > "$APPDIR/AppRun" <<'APPRUN'
 #!/bin/sh

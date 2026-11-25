@@ -1,0 +1,148 @@
+# Build droppix's release packages and publish a GitHub release.
+#
+# Triggered by pushing a version tag (git tag v0.4.0 && git push origin v0.4.0), or by hand
+# from the Actions tab with a tag that already exists.
+#
+#   appimages  Ubuntu 22.04 runner (glibc 2.35, Qt 6.2), the same base as
+#              packaging/portable/build-portable.sh. Runs the full test suite, then builds the
+#              host and client AppImages. They run on any glibc >= 2.35 distro, using the host's
+#              Qt 6 when present, else a bundled fallback.
+#   flatpaks   Host + client bundles on the KDE 6.10 runtime. The host bundle stages the portable
+#              streamer from the appimages job onto the host.
+#   release    Publishes the tag with every package, notes from docs/releases/<tag>.md.
+#
+# The Android APK is NOT built here: it is signed with the maintainer's own keystore, which never
+# leaves their machine. Build it with packaging/android/build-apk.sh and attach it:
+#   gh release upload <tag> droppix-<version>.apk
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build and release (e.g. v0.4.0)'
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  appimages:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0          # git describe -> the version shown in the apps
+
+      - name: Prepare the dependency prefix
+        run: sudo mkdir -p /opt/droppix-deps && sudo chown "$(id -u):$(id -g)" /opt/droppix-deps
+
+      - name: Cache FFmpeg / x264 / libevdi builds
+        uses: actions/cache@v4
+        with:
+          path: /opt/droppix-deps
+          key: oldbase-${{ runner.os }}-${{ hashFiles('packaging/portable/setup-oldbase.sh') }}
+
+      - name: AppImage tooling
+        run: |
+          mkdir -p "$HOME/bin"
+          curl -fsSL -o "$HOME/bin/appimagetool" \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x "$HOME/bin/appimagetool"
+
+      - name: Build, test and package (host + client)
+        env:
+          DROPPIX_DISTROBOX: none
+          DROPPIX_WITH_CLIENT: '1'
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        run: bash packaging/portable/build-portable.sh
+
+      - name: Collect
+        run: |
+          VER="${TAG#v}"
+          mkdir -p out portable-host/bin portable-host/lib
+          cp "$HOME/droppix-build-portable/droppix-x86_64.AppImage" "out/droppix-host-$VER-x86_64.AppImage"
+          cp "$HOME/droppix-client-build-portable/droppix-client-x86_64.AppImage" "out/droppix-client-$VER-x86_64.AppImage"
+          cp "$HOME/droppix-build-portable/AppDir/usr/bin/droppix_stream" portable-host/bin/
+          cp -a "$HOME/droppix-build-portable/AppDir/usr/lib/." portable-host/lib/
+          ls -la out portable-host/lib
+
+      - uses: actions/upload-artifact@v4
+        with: { name: appimages, path: out/ }
+      - uses: actions/upload-artifact@v4
+        with: { name: portable-host, path: portable-host/ }
+
+  flatpaks:
+    needs: appimages
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with: { name: portable-host, path: packaging/flatpak/portable-host }
+
+      - name: flatpak-builder + KDE 6.10 runtime
+        run: |
+          # Ubuntu 24.04 blocks the unprivileged user namespaces bubblewrap needs.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo apt-get update -q
+          sudo apt-get install -y -q flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y --noninteractive flathub org.kde.Platform//6.10 org.kde.Sdk//6.10
+
+      - name: Build the host and client bundles
+        env:
+          GIT_CONFIG_COUNT: '1'
+          GIT_CONFIG_KEY_0: safe.bareRepository
+          GIT_CONFIG_VALUE_0: all
+        run: |
+          VER="${TAG#v}"
+          mkdir -p out
+          for app in org.droppix.Droppix:host org.droppix.Client:client; do
+            id="${app%%:*}"; name="${app##*:}"
+            flatpak-builder --user --force-clean --disable-rofiles-fuse \
+              --state-dir "$RUNNER_TEMP/state" --repo "$RUNNER_TEMP/repo" \
+              "$RUNNER_TEMP/build-$name" "packaging/flatpak/$id.yml"
+            flatpak build-bundle "$RUNNER_TEMP/repo" "out/droppix-$name-$VER.flatpak" "$id"
+          done
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with: { name: flatpaks, path: out/ }
+
+  release:
+    needs: [appimages, flatpaks]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: '${{ env.TAG }}' }
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="${TAG#v}"
+          NOTES="docs/releases/$TAG.md"
+          TITLE="droppix $TAG"
+          if [ -f "$NOTES" ]; then
+            TITLE="$(head -1 "$NOTES" | sed 's/^# *//')"
+            tail -n +2 "$NOTES" > "$RUNNER_TEMP/notes.md"
+          else
+            echo "droppix $VER" > "$RUNNER_TEMP/notes.md"
+          fi
+          ls -la dist
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md" --latest
+          fi

@@ -22,12 +22,12 @@ FFMPEG_VER=7.1
 EVDI_VER=v1.14.7
 mkdir -p "$SRC"
 
-if ! command -v cmake >/dev/null || ! dpkg -s qt6-base-dev >/dev/null 2>&1; then
+if ! command -v cmake >/dev/null || ! dpkg -s qt6-base-dev qt6-multimedia-dev >/dev/null 2>&1; then
   sudo apt-get update -q
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -q \
     build-essential cmake pkg-config git curl ca-certificates nasm file patchelf \
     qt6-base-dev qt6-base-dev-tools libqt6opengl6-dev libgl-dev libglx-dev \
-    qt6-wayland libqt6svg6 \
+    qt6-wayland libqt6svg6 qt6-multimedia-dev \
     libssl-dev libusb-1.0-0-dev libva-dev libdrm-dev libgtest-dev
 fi
 sudo mkdir -p "$PREFIX" && sudo chown "$(id -u):$(id -g)" "$PREFIX"
