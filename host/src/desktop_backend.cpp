@@ -609,16 +609,24 @@ bool hypr_monitors(std::vector<HyprMonitor>& mons) {
   std::fprintf(stderr, "[hyprland] could not read monitors: %.200s\n", out.c_str());
   return false;
 }
-bool hypr_keyword(const std::string& what, const std::string& key, const std::string& value) {
-  const std::string out = hyprctl("keyword '" + key + "' '" + value + "'");
+// A hyprlang config takes `keyword`; Hyprland 0.5x's Lua config (hyprland.lua) answers that
+// with "unknown request" and takes the same change as Lua through `eval`.
+bool hypr_set(const std::string& what, const std::string& key, const std::string& value,
+              const std::string& lua) {
+  std::string out = hyprctl("keyword '" + key + "' '" + value + "'");
+  const char* via = "keyword";
+  if (out == "unknown request" && !lua.empty()) {
+    out = hyprctl("eval '" + lua + "'");
+    via = "eval";
+  }
   const bool ok = out == "ok";
-  std::fprintf(stderr, "[hyprland] %s: %s %s%s%s\n", what.c_str(), key.c_str(), value.c_str(),
-               ok ? "" : ": ", ok ? "" : out.c_str());
+  std::fprintf(stderr, "[hyprland] %s (%s): %s %s%s%s\n", what.c_str(), via, key.c_str(),
+               value.c_str(), ok ? "" : ": ", ok ? "" : out.c_str());
   return ok;
 }
 bool hypr_map(const char* what, const std::string& output, const std::string& dev) {
   if (!safe_output_name(output) || !safe_output_name(dev)) return false;
-  return hypr_keyword(what, "device[" + dev + "]:output", output);
+  return hypr_set(what, "device[" + dev + "]:output", output, hypr_device_lua(dev, output));
 }
 }  // namespace
 
@@ -648,13 +656,13 @@ bool HyprlandBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
   for (const auto& m : mons)
     if (m.info.name != evdi && m.info.enabled && (primary.empty() || m.info.primary)) primary = m.info.name;
   const std::string rule = hypr_mirror_rule(mons, evdi, primary);
-  return !rule.empty() && hypr_keyword("mirror", "monitor", rule);
+  return !rule.empty() && hypr_set("mirror", "monitor", rule, hypr_mirror_lua(mons, evdi, primary));
 }
 bool HyprlandBackend::place_output(const std::string& evdi, int x, int y) {
   std::vector<HyprMonitor> mons;
   if (!hypr_monitors(mons)) return false;
   const std::string rule = hypr_place_rule(mons, evdi, x, y);
-  return !rule.empty() && hypr_keyword("placement", "monitor", rule);
+  return !rule.empty() && hypr_set("placement", "monitor", rule, hypr_place_lua(mons, evdi, x, y));
 }
 
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {

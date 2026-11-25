@@ -73,6 +73,28 @@ std::string hypr_mirror_rule(const std::vector<HyprMonitor>& mons, const std::st
   return name + "," + mode(*m) + ",auto,1,mirror," + primary;
 }
 
+std::string hypr_place_lua(const std::vector<HyprMonitor>& mons, const std::string& name, int x, int y) {
+  const HyprMonitor* m = find(mons, name);
+  if (!m || !safe_output_name(name)) return {};
+  std::string r = "hl.monitor({output=\"" + name + "\", mode=\"" + mode(*m) + "\", position=\"" +
+                  std::to_string(x) + "x" + std::to_string(y) + "\", scale=" + num(m->scale);
+  if (m->transform) r += ", transform=" + std::to_string(m->transform);
+  return r + "})";
+}
+
+std::string hypr_mirror_lua(const std::vector<HyprMonitor>& mons, const std::string& name,
+                            const std::string& primary) {
+  const HyprMonitor* m = find(mons, name);
+  if (!m || !safe_output_name(name) || !safe_output_name(primary)) return {};
+  return "hl.monitor({output=\"" + name + "\", mode=\"" + mode(*m) + "\", position=\"auto\", scale=" +
+         num(m->scale) + ", mirror=\"" + primary + "\"})";
+}
+
+std::string hypr_device_lua(const std::string& device, const std::string& output) {
+  if (!safe_output_name(device) || !safe_output_name(output)) return {};
+  return "hl.device({name=\"" + device + "\", output=\"" + output + "\"})";
+}
+
 std::string pick_hypr_instance(const std::vector<std::string>& signatures,
                                const std::function<long(const std::string&)>& pid_of,
                                const std::function<bool(long)>& alive) {

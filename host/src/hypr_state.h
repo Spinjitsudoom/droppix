@@ -29,6 +29,13 @@ std::string hypr_place_rule(const std::vector<HyprMonitor>& mons, const std::str
 std::string hypr_mirror_rule(const std::vector<HyprMonitor>& mons, const std::string& name,
                              const std::string& primary);
 
+// PURE (unit-tested). The same rules as Lua for `hyprctl eval`: Hyprland 0.5x configs are Lua
+// (hyprland.lua), where `keyword` answers "unknown request". "" if unknown/unsafe.
+std::string hypr_place_lua(const std::vector<HyprMonitor>& mons, const std::string& name, int x, int y);
+std::string hypr_mirror_lua(const std::vector<HyprMonitor>& mons, const std::string& name,
+                            const std::string& primary);
+std::string hypr_device_lua(const std::string& device, const std::string& output);
+
 // PURE (unit-tested). The live Hyprland instance signature among `signatures` (directory names
 // under $XDG_RUNTIME_DIR/hypr): the one whose lock-file pid (`pid_of`) `alive` says is running.
 std::string pick_hypr_instance(const std::vector<std::string>& signatures,
