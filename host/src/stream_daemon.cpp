@@ -105,7 +105,9 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // EvdiFrameSource::start / frame_source.h) — running it only after start() returns would
   // deadlock, since the wait needs the mode this callback produces.
   auto on_connected = [this]{ desktop_->link_providers(); };
-  if (!src_ || !src_->start(w, h, on_connected)) {
+  FrameSource* src_raw = src_.get();
+  auto on_stalled = [this, src_raw]{ desktop_->revive_output(src_raw->edid_serial()); };
+  if (!src_ || !src_->start(w, h, on_connected, on_stalled)) {
     std::fprintf(stderr, "source start failed\n");
     // Without this, a preconnected (web/AOA) channel is never accepted again by this
     // process — WebFrontend::serve_until_stream only waits for a NEW /ws upgrade — so the
@@ -148,12 +150,24 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   // evdi mode-set the desktop can be mid-reconfigure (X11 GPU hotplug) — retry briefly.
   auto after_outputs = query_outputs();
   OutputInfo droppix;
-  bool found_output = select_new_output(before_outputs, after_outputs, droppix) ||
+  // By identity first (this session's EDID serial), where the backend supports it: the
+  // "newly appeared" rule fails when the previous session's output is still listed.
+  auto by_serial = [&]() {
+    const uint32_t serial = src_->edid_serial();
+    const std::string name =
+        serial ? serviced([this, serial]{ return desktop_->find_output(serial); }) : std::string{};
+    for (const auto& o : after_outputs)
+      if (!name.empty() && o.name == name && o.enabled) { droppix = o; return true; }
+    return false;
+  };
+  bool found_output = by_serial() ||
+                      select_new_output(before_outputs, after_outputs, droppix) ||
                       select_droppix(after_outputs, before_outputs, w, h, droppix);
   for (int tries = 0; !found_output && !before_outputs.empty() && tries < 10; ++tries) {
     src_->next(500);
     after_outputs = query_outputs();
-    found_output = select_new_output(before_outputs, after_outputs, droppix) ||
+    found_output = by_serial() ||
+                   select_new_output(before_outputs, after_outputs, droppix) ||
                    select_droppix(after_outputs, before_outputs, w, h, droppix);
   }
   const bool have_output = found_output && safe_output_name(droppix.name);

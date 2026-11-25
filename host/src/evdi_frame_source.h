@@ -13,7 +13,9 @@ class EvdiFrameSource : public FrameSource {
   EvdiFrameSource(int width, int height, int refresh_hz, uint32_t serial = 0)
       : width_(width), height_(height), refresh_hz_(refresh_hz), serial_(serial) {}
   bool start(int& width, int& height,
-             const std::function<void()>& on_connected = {}) override;
+             const std::function<void()>& on_connected = {},
+             const std::function<void()>& on_stalled = {}) override;
+  uint32_t edid_serial() const override { return serial_; }
   Frame next(int timeout_ms) override;
  private:
   int width_, height_, refresh_hz_;

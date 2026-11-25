@@ -7,10 +7,11 @@ TestPatternSource::TestPatternSource(int width, int height, int fps)
     : width_(width), height_(height), fps_(fps) {}
 
 bool TestPatternSource::start(int& width, int& height,
-                              const std::function<void()>& on_connected) {
+                              const std::function<void()>& on_connected,
+                              const std::function<void()>& on_stalled) {
   // A synthetic source has no display to adopt; the callback is only meaningful
   // for evdi + a self-configuring compositor backend.
-  (void)on_connected;
+  (void)on_connected; (void)on_stalled;
   width = width_; height = height_;
   return true;
 }

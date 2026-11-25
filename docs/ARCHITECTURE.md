@@ -13,7 +13,7 @@ graph TB
     subgraph Host["Linux host"]
         GUI["droppix_gui<br/>Qt6 control panel"]
         PW["PipeWire sink<br/>droppix-audio"]
-        DB["DesktopBackend<br/>KWin / X11 / Generic"]
+        DB["DesktopBackend<br/>KWin / X11 / GNOME / Generic"]
 
         subgraph Streamer["droppix_stream (per session, often via pkexec)"]
             EVDI["evdi virtual display"]
@@ -216,6 +216,7 @@ graph TB
     IFACE["DesktopBackend interface<br/>outputs map_touch map_pen<br/>adopt_output apply_layout"]
     IFACE --> KWIN["KWinBackend<br/>kscreen-doctor + KWin DBus"]
     IFACE --> X11["X11Backend<br/>xrandr + xinput map-to-output"]
+    IFACE --> GNOME["GnomeBackend<br/>Mutter DisplayConfig + gsettings"]
     IFACE --> GEN["GenericBackend<br/>display may work - touch map no-op"]
 ```
 
@@ -223,10 +224,11 @@ graph TB
 |---|---|---|
 | `KWinBackend` | Yes | `kscreen-doctor` + KWin InputDevice DBus |
 | `X11Backend` | Yes | `xrandr` + `xinput map-to-output` |
+| `GnomeBackend` | Yes (2026-11-25) | Mutter `DisplayConfig` via `gdbus` (outputs, placement, mirror; temporary configs only); touch/pen bound by per-device gsettings keyed on the per-session uinput product id; finds its output by EDID serial; revives a monitor Mutter left "on" after a quick reconnect |
 | `GenericBackend` | Yes | Display may work; touch map is a no-op |
-| Sway / GNOME Wayland | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
+| Sway Wayland | No | See [cross-desktop roadmap](superpowers/specs/2026-07-05-cross-desktop-portability-design.md) |
 
-Roadmap (not shipped): Sway / GNOME Wayland backends - see [`superpowers/specs/2026-07-05-cross-desktop-portability-design.md`](superpowers/specs/2026-07-05-cross-desktop-portability-design.md).
+Roadmap (not shipped): Sway / wlroots backend - see [`superpowers/specs/2026-07-05-cross-desktop-portability-design.md`](superpowers/specs/2026-07-05-cross-desktop-portability-design.md).
 
 ## Client decode paths
 

@@ -16,8 +16,19 @@ TEST(DesktopBackend, UnknownDesktopWithKscreenSelectsKWin) {
 TEST(DesktopBackend, UnknownDesktopNoToolSelectsGeneric) {
   EXPECT_EQ(select_backend_kind("", false, false, false), BackendKind::Generic);
 }
-TEST(DesktopBackend, GnomeSelectsGeneric) {
-  EXPECT_EQ(select_backend_kind("GNOME", false, false, false), BackendKind::Generic);
+TEST(DesktopBackend, GnomeWaylandSelectsGnome) {
+  EXPECT_EQ(select_backend_kind("GNOME", false, false, false), BackendKind::Gnome);
+  EXPECT_EQ(select_backend_kind("ubuntu:GNOME", false, false, false), BackendKind::Gnome);
+}
+TEST(DesktopBackend, MutterOnTheBusSelectsGnomeWithoutADesktopName) {
+  // Under pkexec XDG_CURRENT_DESKTOP is gone; Mutter's D-Bus name is the reliable signal.
+  EXPECT_EQ(select_backend_kind("", false, false, false, true), BackendKind::Gnome);
+}
+TEST(DesktopBackend, GnomeOnX11KeepsTheX11Backend) {
+  EXPECT_EQ(select_backend_kind("GNOME", false, true, true, true), BackendKind::X11);
+}
+TEST(DesktopBackend, KdeBeatsMutter) {
+  EXPECT_EQ(select_backend_kind("KDE", true, false, false, true), BackendKind::KWin);
 }
 TEST(DesktopBackend, NonKdeDesktopIgnoresKscreenPresence) {
   // A named non-KDE desktop is Generic even if kscreen-doctor happens to be installed;
@@ -39,7 +50,7 @@ TEST(DesktopBackend, KdeOnX11StillSelectsKWin) {
 TEST(DesktopBackend, WaylandNonKdeWithToolsSelectsGeneric) {
   // xrandr/xinput being installed doesn't matter on a Wayland session (XWayland's view
   // of outputs/input isn't the compositor's).
-  EXPECT_EQ(select_backend_kind("GNOME", false, false, true), BackendKind::Generic);
+  EXPECT_EQ(select_backend_kind("sway", false, false, true), BackendKind::Generic);
 }
 TEST(DesktopBackend, UnknownDesktopOnX11WithToolsSelectsX11) {
   EXPECT_EQ(select_backend_kind("", false, true, true), BackendKind::X11);
@@ -102,4 +113,26 @@ TEST(DesktopBackend, PrefersTheLowestLiveWaylandSocket) {
 TEST(DesktopBackend, FallsBackToWayland0) {
   EXPECT_EQ(pick_wayland_display({"bus"}), "wayland-0");
   EXPECT_EQ(pick_wayland_display({"wayland-x", "wayland-x.lock"}), "wayland-0");
+}
+
+TEST(SessionDeviceId, DefaultNameKeepsTheBaseId) {
+  EXPECT_EQ(session_device_id(0xd701, "droppix-touch"), 0xd701);
+}
+TEST(SessionDeviceId, EachSessionPortGetsItsOwnId) {
+  // GNOME keys touch/tablet-to-monitor settings by vendor:product, so two tablets at once
+  // need different ids or both map to one screen.
+  const uint16_t a = session_device_id(0xd701, "droppix-touch-27000");
+  const uint16_t b = session_device_id(0xd701, "droppix-touch-27001");
+  EXPECT_NE(a, b);
+  EXPECT_NE(a, 0xd701);
+}
+TEST(SessionDeviceId, TouchAndPenOfDifferentSessionsNeverCollide) {
+  for (int p = 27000; p < 27064; ++p)
+    for (int q = 27000; q < 27064; ++q)
+      EXPECT_NE(session_device_id(0xd701, "droppix-touch-" + std::to_string(p)),
+                session_device_id(0xd704, "droppix-touch-" + std::to_string(q)));
+}
+TEST(SessionDeviceId, SameSessionIsStable) {
+  EXPECT_EQ(session_device_id(0xd704, "droppix-touch-27003"),
+            session_device_id(0xd704, "droppix-touch-27003"));
 }

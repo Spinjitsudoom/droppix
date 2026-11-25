@@ -104,6 +104,14 @@ evdi → Capturer → Encoder → TransportServer
 
 ## Recent session notes
 
+- **2026-11-25 (all-distros push, overnight, user delegated decisions):**
+  - **Scope (user):** desktop Linux only; ChromeOS, WSL, SteamOS and Raspberry Pi are out. Order: GNOME → Sway/Hyprland → Plasma 5 → COSMIC, then portable packaging.
+  - **GNOME Wayland backend shipped** (`GnomeBackend`, `mutter_state.*`, `gvariant_text.*`): Mutter `DisplayConfig` over `gdbus`, gsettings touch/pen mapping keyed by per-session uinput product ids (`session_device_id`). Verified in an Ubuntu 24.04 VM: GNOME 46, virgl, scripted client, GTK probe window per monitor.
+  - **Reconnect revive:** Mutter keeps the old monitor "on" and never modes a quick reconnect. `on_stalled` → `revive_output` (off/on). Identification is by EDID serial (lesson `gnome-reconnect-no-mode`).
+  - **Pen was dead everywhere:** libinput rejected the device (no `BTN_STYLUS`/resolution). Fixed via `pen_device_caps()` (lesson `libinput-rejects-pen`).
+  - **Packaging finding (open):** AppImage libs need glibc 2.43, and its GUI needs Qt ≥ 6.11. It only runs on the newest Fedora/Arch-class distros. The Flatpak's host-staged streamer has the same glibc problem. Needs an old-baseline build.
+  - **VM rig:** `~/droppix-vms/` (`ubuntu/run.sh` with `virtio-vga-gl` + `egl-headless` on the i915 render node; `vm` runs stdin scripts over ssh; `spike/*.sh`). The streamer exits on stdin EOF, so run it as `systemd-run ... sh -c "sleep infinity | exec droppix_stream"`. Software rendering (no virgl) gave a mode but no frames.
+
 - **2026-11-24 (polish pass):**
   - **Orphaned helpers:** 10 `avahi-publish-service` processes outlived killed GUIs. Fixed with `endWithParent` (`PR_SET_PDEATHSIG`) and `QuitSignals`: SIGTERM/INT/HUP now run `MainWindow::quitNow()`, the same path as the tray's Quit.
   - **Dead peers:** a vanished Wi-Fi tablet held its session. Every accepted socket now gets keep-alives plus `TCP_USER_TIMEOUT` (`enable_dead_peer_detection`).

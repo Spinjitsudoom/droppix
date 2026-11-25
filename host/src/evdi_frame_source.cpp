@@ -7,7 +7,8 @@
 namespace droppix {
 
 bool EvdiFrameSource::start(int& width, int& height,
-                            const std::function<void()>& on_connected) {
+                            const std::function<void()>& on_connected,
+                            const std::function<void()>& on_stalled) {
   if (!display_.open()) return false;
   display_.connect(build_edid(mode_timing(width_, height_, refresh_hz_), serial_));
   cap_ = std::make_unique<Capturer>(display_.handle());
@@ -27,8 +28,19 @@ bool EvdiFrameSource::start(int& width, int& height,
   const int kModeWaitMs = 12000;
   std::thread adopt_thread;
   if (on_connected) adopt_thread = std::thread(on_connected);
-  const bool got_mode = cap_->wait_for_mode(kModeWaitMs);
+  // A compositor that hasn't moded the output after kStallMs may think it is still on from a
+  // previous session (GNOME on a quick reconnect): let the backend nudge it, keep waiting.
+  const int kStallMs = 3000;
+  bool got_mode = cap_->wait_for_mode(on_stalled ? kStallMs : kModeWaitMs);
+  std::thread stall_thread;
+  if (!got_mode && on_stalled) {
+    std::fprintf(stderr, "evdi: no mode after %ds; asking the desktop to re-enable the output\n",
+                 kStallMs / 1000);
+    stall_thread = std::thread(on_stalled);
+    got_mode = cap_->wait_for_mode(kModeWaitMs - kStallMs);
+  }
   if (adopt_thread.joinable()) adopt_thread.join();
+  if (stall_thread.joinable()) stall_thread.join();
   if (!got_mode) {
     std::fprintf(stderr, "evdi: no compositor mode within %ds for %dx%d@%d\n",
                  kModeWaitMs / 1000, width_, height_, refresh_hz_);

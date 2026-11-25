@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <functional>
 #include "capturer.h"  // droppix::Frame
 
@@ -22,8 +23,16 @@ class FrameSource {
   // enable/place the new output themselves (X11 reverse-PRIME) can do so while the
   // mode-wait pumps the compositor's probe events — otherwise the wait and the
   // enable deadlock. Sources that don't need it (test pattern) ignore it.
+  //
+  // on_stalled (optional): invoked (on a background thread) if no mode has arrived a few
+  // seconds into the wait. GNOME can believe a reconnected output is still on from the
+  // previous session and never send it a mode; the backend's revive_output() nudges it.
   virtual bool start(int& width, int& height,
-                     const std::function<void()>& on_connected = {}) = 0;
+                     const std::function<void()>& on_connected = {},
+                     const std::function<void()>& on_stalled = {}) = 0;
+  // EDID serial of the display this source created (0 = none). Lets the desktop backend
+  // find exactly this session's output by identity rather than by what appeared when.
+  virtual uint32_t edid_serial() const { return 0; }
   // Next frame; Frame.valid == false on timeout / no update.
   virtual Frame next(int timeout_ms) = 0;
 };

@@ -65,6 +65,9 @@ add_library(droppix_core
   src/aoa_connect.cpp
   src/aoa_scan.cpp
   src/desktop_backend.cpp
+  src/gvariant_text.cpp
+  src/mutter_state.cpp
+  src/input_caps.cpp
   src/session_params.cpp
   src/encoder_factory.cpp
   src/ws_channel.cpp
@@ -217,6 +220,8 @@ add_executable(droppix_tests
   tests/test_audio_sink.cpp
   tests/test_aoa_scan.cpp
   tests/test_desktop_backend.cpp
+  tests/test_mutter_state.cpp
+  tests/test_input_caps.cpp
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp

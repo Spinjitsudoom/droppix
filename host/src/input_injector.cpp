@@ -1,4 +1,6 @@
 #include "input_injector.h"
+#include "desktop_backend.h"   // session_device_id
+#include "input_caps.h"
 #include <linux/uinput.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -51,7 +53,8 @@ bool InputInjector::open(const std::string& name) {
   abs(ABS_MT_PRESSURE, 0, 1023);
 
   uinput_setup us{};
-  us.id.bustype = BUS_USB; us.id.vendor = 0x1209; us.id.product = 0xd701;
+  us.id.bustype = BUS_USB; us.id.vendor = 0x1209;
+  us.id.product = session_device_id(0xd701, name);   // per session: GNOME maps touch by id
   std::strncpy(us.name, name.c_str(), sizeof(us.name) - 1);
   if (ioctl(fd_, UI_DEV_SETUP, &us) < 0 || ioctl(fd_, UI_DEV_CREATE) < 0) {
     std::fprintf(stderr, "uinput device create failed; input disabled\n");
@@ -78,20 +81,21 @@ bool InputInjector::open(const std::string& name) {
   // ABS 0..65535, bound to the droppix output by stream_daemon so 0..65535 spans it.
   pen_fd_ = ::open("/dev/uinput", O_WRONLY | O_NONBLOCK | O_CLOEXEC);
   if (pen_fd_ >= 0) {
-    ioctl(pen_fd_, UI_SET_PROPBIT, INPUT_PROP_DIRECT);
+    const DeviceCaps caps = pen_device_caps();
+    for (int p : caps.props) ioctl(pen_fd_, UI_SET_PROPBIT, p);
     ioctl(pen_fd_, UI_SET_EVBIT, EV_KEY);
-    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOOL_PEN);
-    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOOL_RUBBER);
-    ioctl(pen_fd_, UI_SET_KEYBIT, BTN_TOUCH);
+    for (int k : caps.keys) ioctl(pen_fd_, UI_SET_KEYBIT, k);
     ioctl(pen_fd_, UI_SET_EVBIT, EV_ABS);
-    for (int code : {ABS_X, ABS_Y, ABS_PRESSURE}) ioctl(pen_fd_, UI_SET_ABSBIT, code);
-    auto pabs = [&](int code, int mn, int mx) {
-      uinput_abs_setup a{}; a.code = code; a.absinfo.minimum = mn; a.absinfo.maximum = mx;
+    for (const AbsAxis& ax : caps.abs) {
+      ioctl(pen_fd_, UI_SET_ABSBIT, ax.code);
+      uinput_abs_setup a{};
+      a.code = static_cast<uint16_t>(ax.code);
+      a.absinfo.minimum = ax.min; a.absinfo.maximum = ax.max; a.absinfo.resolution = ax.resolution;
       ioctl(pen_fd_, UI_ABS_SETUP, &a);
-    };
-    pabs(ABS_X, 0, 65535); pabs(ABS_Y, 0, 65535); pabs(ABS_PRESSURE, 0, 1023);
+    }
     uinput_setup pus{};
-    pus.id.bustype = BUS_USB; pus.id.vendor = 0x1209; pus.id.product = 0xd704;
+    pus.id.bustype = BUS_USB; pus.id.vendor = 0x1209;
+    pus.id.product = session_device_id(0xd704, name);   // per session, like the touchscreen
     std::string pname = name + "-pen";
     std::strncpy(pus.name, pname.c_str(), sizeof(pus.name) - 1);
     if (ioctl(pen_fd_, UI_DEV_SETUP, &pus) < 0 || ioctl(pen_fd_, UI_DEV_CREATE) < 0) {

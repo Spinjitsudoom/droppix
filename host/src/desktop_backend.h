@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -61,6 +62,13 @@ struct DesktopBackend {
   virtual bool place_output(const std::string& evdi_output, int x, int y) {
     (void)evdi_output; (void)x; (void)y; return false;
   }
+  // The output whose EDID serial is `edid_serial` (this session's), or "" if the backend
+  // can't tell. Preferred over "what appeared since the session started", which fails when
+  // the previous session's output hasn't been removed yet. Default: can't tell.
+  virtual std::string find_output(uint32_t edid_serial) { (void)edid_serial; return {}; }
+  // The source has had no mode for a few seconds: make the compositor mode the output
+  // again (see FrameSource::start on_stalled). Default no-op. Returns true if it acted.
+  virtual bool revive_output(uint32_t edid_serial) { (void)edid_serial; return false; }
 };
 
 // KDE Plasma: today's behavior, relocated (kscreen-doctor -o + KWin InputDevice DBus).
@@ -95,6 +103,22 @@ class X11Backend : public DesktopBackend {
   bool map_device_x11(const std::string& output, const std::string& dev, const std::string& tag);
 };
 
+// GNOME on Wayland (Mutter): org.gnome.Mutter.DisplayConfig over gdbus for outputs,
+// placement and mirror; GNOME's per-device gsettings to pin touch/pen to the droppix
+// monitor. Layout changes are applied as temporary, so the user's saved monitors.xml
+// is never rewritten.
+class GnomeBackend : public DesktopBackend {
+ public:
+  const char* name() const override { return "gnome"; }
+  std::vector<OutputInfo> outputs() override;
+  void map_touch(const std::string& output, const std::string& touch_dev) override;
+  bool map_pen(const std::string& output, const std::string& pen_dev) override;
+  bool apply_layout(const std::string& evdi_output, LayoutMode mode) override;
+  bool place_output(const std::string& evdi_output, int x, int y) override;
+  std::string find_output(uint32_t edid_serial) override;
+  bool revive_output(uint32_t edid_serial) override;
+};
+
 // Unknown/unsupported compositor: display still works (evdi is compositor-driven);
 // outputs() returns {} and map_touch() logs a warning and no-ops.
 class GenericBackend : public DesktopBackend {
@@ -104,13 +128,22 @@ class GenericBackend : public DesktopBackend {
   void map_touch(const std::string& output, const std::string& touch_dev) override;
 };
 
-enum class BackendKind { KWin, X11, Generic };
+enum class BackendKind { KWin, X11, Gnome, Generic };
 
 // PURE (unit-tested). "kde"/"plasma" in the desktop string (case-insensitive) OR
 // (empty desktop AND kscreen-doctor present) -> KWin; else an X11 session with
-// xrandr+xinput available -> X11; otherwise Generic.
+// xrandr+xinput available -> X11; else "gnome" in the desktop string OR Mutter's
+// DisplayConfig on the session bus (has_mutter; the only signal under pkexec) -> Gnome;
+// otherwise Generic.
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
-                                bool x11_session, bool has_x11_tools);
+                                bool x11_session, bool has_x11_tools, bool has_mutter = false);
+
+// PURE (unit-tested). USB product id for one session's uinput device. GNOME binds a
+// touchscreen/tablet to a monitor by vendor:product, so concurrent sessions need distinct
+// ids: a touch name ending in a number (the GUI uses "droppix-touch-<port>") shifts `base`
+// by a per-session multiple of 0x10, keeping the low nibble (which tells the device kinds
+// apart). A name without a number keeps `base`.
+uint16_t session_device_id(uint16_t base, const std::string& touch_name);
 
 // PURE (unit-tested). Returns the compositor command (no user_session_prefix/timeout wrapper;
 // the caller adds those). Empty string when unsupported (Generic) or when output names are

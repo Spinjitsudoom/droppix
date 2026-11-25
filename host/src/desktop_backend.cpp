@@ -1,4 +1,5 @@
 #include "desktop_backend.h"
+#include "mutter_state.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -316,6 +317,141 @@ bool X11Backend::place_output(const std::string& evdi, int x, int y) {
 }
 
 // Unsupported compositor: logs a warning and no-ops (display still works via evdi).
+// ---- GNOME (Mutter) ----
+
+namespace {
+std::string capture(const std::string& cmd) {
+  std::string out;
+  if (FILE* p = popen(cmd.c_str(), "r")) {
+    char buf[4096]; size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), p)) > 0) out.append(buf, n);
+    pclose(p);
+  }
+  while (!out.empty() && (out.back() == '\n' || out.back() == ' ')) out.pop_back();
+  return out;
+}
+
+std::string shell_quote(const std::string& s) {
+  std::string q = "'";
+  for (char c : s) { if (c == '\'') q += "'\\''"; else q.push_back(c); }
+  return q + "'";
+}
+
+const char* kMutterCall =
+    "gdbus call --session --dest org.gnome.Mutter.DisplayConfig "
+    "--object-path /org/gnome/Mutter/DisplayConfig --method org.gnome.Mutter.DisplayConfig.";
+
+bool read_mutter(MutterState& st) {
+  const std::string out = capture("timeout 5 " + user_session_prefix() + kMutterCall +
+                                  "GetCurrentState 2>&1");
+  if (parse_mutter_state(out, st)) return true;
+  std::fprintf(stderr, "[gnome] could not read the display layout: %.200s\n", out.c_str());
+  return false;
+}
+
+// Temporary (method 1): applies now, never written to the user's monitors.xml.
+bool apply_mutter(const MutterState& st, const std::string& config, const char* what) {
+  const std::string out = capture("timeout 5 " + user_session_prefix() + kMutterCall +
+                                  "ApplyMonitorsConfig " + std::to_string(st.serial) + " 1 " +
+                                  shell_quote(config) + " '@a{sv} {}' 2>&1");
+  if (out == "()") { std::fprintf(stderr, "[gnome] %s applied\n", what); return true; }
+  std::fprintf(stderr, "[gnome] %s rejected: %.300s\n", what, out.c_str());
+  return false;
+}
+
+bool gnome_map(bool pen, const std::string& output, uint16_t product_id) {
+  if (!safe_output_name(output)) return false;
+  MutterState st;
+  if (!read_mutter(st)) return false;
+  for (const auto& m : st.monitors) {
+    if (m.connector != output) continue;
+    const std::string cmd = gnome_map_command(pen, product_id, m);
+    if (cmd.empty()) break;
+    const std::string out = capture("timeout 5 " + user_session_prefix() + cmd + " 2>&1");
+    std::fprintf(stderr, "[gnome] %s 1209:%04x -> %s (%s %s %s)%s%s\n", pen ? "pen" : "touch",
+                 product_id, output.c_str(), m.vendor.c_str(), m.product.c_str(),
+                 m.serial.c_str(), out.empty() ? "" : ": ", out.c_str());
+    return out.empty();
+  }
+  std::fprintf(stderr, "[gnome] %s: no usable monitor identity for %s\n", pen ? "pen" : "touch",
+               output.c_str());
+  return false;
+}
+}  // namespace
+
+std::vector<OutputInfo> GnomeBackend::outputs() {
+  MutterState st;
+  if (!read_mutter(st)) return {};
+  return mutter_outputs(st);
+}
+
+void GnomeBackend::map_touch(const std::string& output, const std::string& touch_dev) {
+  gnome_map(false, output, session_device_id(0xd701, touch_dev));
+}
+
+bool GnomeBackend::map_pen(const std::string& output, const std::string& pen_dev) {
+  // The injector derives the pen's id from the TOUCH name; the pen device is "<touch>-pen".
+  std::string touch = pen_dev;
+  if (touch.size() > 4 && touch.compare(touch.size() - 4, 4, "-pen") == 0)
+    touch.resize(touch.size() - 4);
+  return gnome_map(true, output, session_device_id(0xd704, touch));
+}
+
+bool GnomeBackend::apply_layout(const std::string& evdi, LayoutMode mode) {
+  // Mutter extends a new monitor to the right on its own; only mirror needs a change.
+  if (mode != LayoutMode::Mirror || !safe_output_name(evdi)) return false;
+  MutterState st;
+  if (!read_mutter(st)) return false;
+  const std::string cfg = mutter_mirror_config(st, evdi);
+  if (cfg.empty()) {
+    std::fprintf(stderr, "[gnome] mirror: %s and the primary share no resolution; "
+                         "staying extended\n", evdi.c_str());
+    return false;
+  }
+  return apply_mutter(st, cfg, "mirror");
+}
+
+bool GnomeBackend::place_output(const std::string& evdi, int x, int y) {
+  if (!safe_output_name(evdi)) return false;
+  MutterState st;
+  if (!read_mutter(st)) return false;
+  const std::string cfg = mutter_place_config(st, evdi, x, y);
+  if (cfg.empty()) return false;
+  return apply_mutter(st, cfg, "placement");
+}
+
+std::string GnomeBackend::find_output(uint32_t edid_serial) {
+  if (edid_serial == 0) return {};
+  MutterState st;
+  if (!read_mutter(st)) return {};
+  return mutter_find_by_serial(st, edid_serial);
+}
+
+// Mutter, on a quick reconnect, can keep the output "on" from the last session and never
+// commit a mode to the new evdi connection. Switching it off and back on (temporary
+// configs) makes it commit one. Only acts when Mutter lists the output as on.
+bool GnomeBackend::revive_output(uint32_t edid_serial) {
+  if (edid_serial == 0) return false;
+  MutterState before;
+  if (!read_mutter(before)) return false;
+  const std::string conn = mutter_find_by_serial(before, edid_serial);
+  if (conn.empty()) {
+    std::fprintf(stderr, "[gnome] revive: GNOME doesn't list the droppix monitor yet\n");
+    return false;
+  }
+  const std::string off = mutter_disable_config(before, conn);
+  Rect at{};
+  for (const auto& o : mutter_outputs(before))
+    if (o.name == conn && o.enabled) at = o.geom;
+  if (off.empty() || !safe_output_name(conn)) return false;
+  if (!apply_mutter(before, off, "revive (off)")) return false;
+  MutterState now;
+  if (!read_mutter(now)) return false;
+  MutterState on_state = before;    // the old layout, re-applied under the new serial
+  on_state.serial = now.serial;
+  return apply_mutter(on_state, mutter_place_config(before, conn, at.x, at.y), "revive (on)");
+}
+
 void GenericBackend::map_touch(const std::string& output, const std::string& touch_dev) {
   (void)output; (void)touch_dev;
   std::fprintf(stderr, "input: touch-to-output mapping not supported on this desktop yet; "
@@ -323,14 +459,23 @@ void GenericBackend::map_touch(const std::string& output, const std::string& tou
 }
 
 BackendKind select_backend_kind(const std::string& xdg_current_desktop, bool has_kscreen,
-                                bool x11_session, bool has_x11_tools) {
+                                bool x11_session, bool has_x11_tools, bool has_mutter) {
   std::string d;
   for (char c : xdg_current_desktop) d.push_back(static_cast<char>(std::tolower((unsigned char)c)));
   if (d.find("kde") != std::string::npos || d.find("plasma") != std::string::npos)
     return BackendKind::KWin;
   if (d.empty() && has_kscreen) return BackendKind::KWin;
   if (x11_session && has_x11_tools) return BackendKind::X11;
+  if (d.find("gnome") != std::string::npos || has_mutter) return BackendKind::Gnome;
   return BackendKind::Generic;
+}
+
+uint16_t session_device_id(uint16_t base, const std::string& touch_name) {
+  size_t i = touch_name.size();
+  while (i > 0 && std::isdigit(static_cast<unsigned char>(touch_name[i - 1]))) --i;
+  if (i == touch_name.size() || touch_name.size() - i > 9) return base;
+  const unsigned long n = std::stoul(touch_name.substr(i));
+  return static_cast<uint16_t>(base + ((n % 255) + 1) * 0x10);
 }
 
 std::string layout_command(BackendKind kind, const std::string& evdi,
@@ -389,10 +534,19 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
     }();
     const bool has_x11_tools =
         std::system("command -v xrandr >/dev/null 2>&1 && command -v xinput >/dev/null 2>&1") == 0;
+    // Under pkexec XDG_CURRENT_DESKTOP is gone: ask the user's session bus whether Mutter's
+    // display service is there (GNOME and its derivatives: Ubuntu, Zorin, Pop 22.04, ...).
+    const bool has_mutter =
+        !has_kscreen &&
+        capture("timeout 3 " + user_session_prefix() +
+                "gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus "
+                "--method org.freedesktop.DBus.NameHasOwner org.gnome.Mutter.DisplayConfig 2>/dev/null")
+            .find("true") != std::string::npos;
     std::shared_ptr<DesktopBackend> b;
-    switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools)) {
-      case BackendKind::KWin: b = std::make_shared<KWinBackend>(); break;
-      case BackendKind::X11:  b = std::make_shared<X11Backend>();  break;
+    switch (select_backend_kind(desktop, has_kscreen, x11_session, has_x11_tools, has_mutter)) {
+      case BackendKind::KWin:  b = std::make_shared<KWinBackend>();  break;
+      case BackendKind::X11:   b = std::make_shared<X11Backend>();   break;
+      case BackendKind::Gnome: b = std::make_shared<GnomeBackend>(); break;
       default:                b = std::make_shared<GenericBackend>();
     }
     std::fprintf(stderr, "desktop backend: %s\n", b->name());
