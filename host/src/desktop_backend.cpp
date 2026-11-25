@@ -36,6 +36,29 @@ std::string pick_wayland_display(const std::vector<std::string>& entries) {
   return best < 0 ? "wayland-0" : "wayland-" + std::to_string(best);
 }
 
+std::vector<std::string> live_runtime_entries(const std::string& runtime_dir) {
+  std::vector<std::string> entries;
+  if (DIR* d = ::opendir(runtime_dir.c_str())) {
+    while (dirent* e = ::readdir(d)) entries.emplace_back(e->d_name);
+    ::closedir(d);
+  }
+  std::set<std::string> stale;
+  for (const auto& e : entries) {
+    if (e.rfind("wayland-", 0) != 0 || e.size() < 6 || e.compare(e.size() - 5, 5, ".lock") != 0) continue;
+    const int fd = ::open((runtime_dir + "/" + e).c_str(), O_RDONLY | O_CLOEXEC);
+    if (fd < 0) continue;
+    if (::flock(fd, LOCK_EX | LOCK_NB) == 0) {   // nobody holds it: the compositor is gone
+      ::flock(fd, LOCK_UN);
+      stale.insert(e);
+      stale.insert(e.substr(0, e.size() - 5));
+    }
+    ::close(fd);
+  }
+  std::vector<std::string> live;
+  for (auto& e : entries) if (!stale.count(e)) live.push_back(std::move(e));
+  return live;
+}
+
 bool has_live_wayland_socket(const std::vector<std::string>& entries) {
   std::set<std::string> names(entries.begin(), entries.end());
   for (const std::string& e : names) {
@@ -80,7 +103,7 @@ std::vector<std::string> list_dir(const std::string& dir) {
   return entries;
 }
 std::string discover_wayland_display(const std::string& runtime_dir) {
-  return pick_wayland_display(list_dir(runtime_dir));
+  return pick_wayland_display(live_runtime_entries(runtime_dir));
 }
 // The live Sway IPC socket in the user's runtime dir ("" when Sway isn't running).
 // The live Hyprland instance signature under $XDG_RUNTIME_DIR/hypr ("" if none).
@@ -112,7 +135,7 @@ std::string user_session_prefix() {
       "env XDG_RUNTIME_DIR=" + runtime + " "
       "DBUS_SESSION_BUS_ADDRESS=unix:path=" + runtime + "/bus "
       "WAYLAND_DISPLAY=" + discover_wayland_display(runtime) + " " +
-      wayland_session_env(list_dir(runtime)) +
+      wayland_session_env(live_runtime_entries(runtime)) +
       "DISPLAY=:0 " +   // X11 tools (xrandr/xinput); same "common default" shortcut as wayland-0
       [&]{ const std::string s = discover_sway_socket(runtime, std::atol(u.c_str()));
            return s.empty() ? std::string{} : "SWAYSOCK=" + s + " "; }() +
@@ -241,7 +264,7 @@ std::vector<OutputInfo> X11Backend::outputs() {
 // until the target output's geometry stops changing (idempotent + cheap), so the final
 // binding reflects the settled layout.
 bool X11Backend::map_device_x11(const std::string& output_name, const std::string& dev_name,
-                                const std::string& tag) {
+                                const std::string& tag, bool children) {
   if (!safe_output_name(output_name)) return false;
   if (!safe_output_name(dev_name)) return false;   // shell-interpolated below; allowlist matters
   const std::string inner =
@@ -250,8 +273,12 @@ bool X11Backend::map_device_x11(const std::string& output_name, const std::strin
       "for(i=1;i<=NF;i++) if(\\$i ~ /[0-9]+x[0-9]+\\+[0-9]+\\+[0-9]+/){print \\$i; exit}}\"; }; "
       "found=0; last=; stable=0; "
       "for i in $(seq 1 25); do "
-      "if xinput list --name-only 2>/dev/null | grep -Fxq \"$T\"; then found=1; "
-      "xinput map-to-output \"$T\" \"$N\" 2>&1 | sed \"s/^/[" + tag + "] map-to-output: /\" >&2; "
+      + std::string(children
+          ? "D=$(xinput list --name-only 2>/dev/null | grep -F \"$T \"); "
+          : "D=$(xinput list --name-only 2>/dev/null | grep -Fx \"$T\"); ") +
+      "if [ -n \"$D\" ]; then found=1; "
+      "echo \"$D\" | while IFS= read -r d; do "
+      "xinput map-to-output \"$d\" \"$N\" 2>&1 | sed \"s/^/[" + tag + "] map-to-output: /\" >&2; done; "
       "g=$(geom); "
       "if [ -n \"$g\" ] && [ \"$g\" = \"$last\" ]; then stable=$((stable+1)); "
       "[ \"$stable\" -ge 3 ] && { echo \"[" + tag + "] mapped $T -> $N @ $g\" >&2; exit 0; }; "
@@ -272,7 +299,7 @@ void X11Backend::map_touch(const std::string& output_name, const std::string& to
 // absolute device (not just touch), so this is the identical binding, just a different
 // device name/log tag -- see map_device_x11.
 bool X11Backend::map_pen(const std::string& output_name, const std::string& pen_name) {
-  return map_device_x11(output_name, pen_name, "pen-bind");
+  return map_device_x11(output_name, pen_name, "pen-bind", /*children=*/true);
 }
 
 // Adopt the just-appeared droppix output on X11. Xorg hot-adds the evdi card as a
@@ -873,7 +900,18 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
   static std::shared_ptr<DesktopBackend> cached = []{
     const char* xdg = std::getenv("XDG_CURRENT_DESKTOP");
     const std::string desktop = xdg ? xdg : "";
-    const bool has_kscreen = std::system("command -v kscreen-doctor >/dev/null 2>&1") == 0;
+    // Is a D-Bus name owned on the user's session bus? dbus-send ships with D-Bus itself, so it
+    // is on every desktop (gdbus is GLib's and may be missing on a KDE-only install).
+    auto on_bus = [](const char* name) {
+      return capture("timeout 3 " + user_session_prefix() +
+                     "dbus-send --session --print-reply --dest=org.freedesktop.DBus /org/freedesktop/DBus "
+                     "org.freedesktop.DBus.NameHasOwner string:" + std::string(name) + " 2>/dev/null")
+                 .find("boolean true") != std::string::npos;
+    };
+    // "KDE" when the desktop name is unknown (pkexec drops it) means KWin is RUNNING, not merely
+    // that kscreen-doctor is installed: an Xfce/GNOME box with Plasma's tools was driven as KWin.
+    const bool has_kscreen = std::system("command -v kscreen-doctor >/dev/null 2>&1") == 0 &&
+                             (!desktop.empty() || on_bus("org.kde.KWin"));
     // Is the user's session X11? XDG_SESSION_TYPE when present (plain user run); under
     // pkexec/sudo that env is gone, so probe sockets: a Wayland socket in the invoking
     // user's runtime dir means Wayland (XWayland also creates the X socket, so check
@@ -885,7 +923,7 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
       if (!uid || !*uid) uid = std::getenv("SUDO_UID");
       // Any live wayland-N, not just wayland-0: Sway/Plasma often run on wayland-1, and
       // XWayland's X0 then made droppix pick the X11 backend (xinput can't see uinput there).
-      if (uid && *uid && has_live_wayland_socket(list_dir("/run/user/" + std::string(uid))))
+      if (uid && *uid && has_live_wayland_socket(live_runtime_entries("/run/user/" + std::string(uid))))
         return false;
       return access("/tmp/.X11-unix/X0", F_OK) == 0;
     }();
@@ -893,11 +931,7 @@ std::shared_ptr<DesktopBackend> make_desktop_backend() {
         std::system("command -v xrandr >/dev/null 2>&1 && command -v xinput >/dev/null 2>&1") == 0;
     // Under pkexec XDG_CURRENT_DESKTOP is gone: ask the user's session bus whether Mutter's
     // display service is there (GNOME and its derivatives: Ubuntu, Zorin, Pop 22.04, ...).
-    const bool has_mutter =
-        capture("timeout 3 " + user_session_prefix() +
-                "gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus "
-                "--method org.freedesktop.DBus.NameHasOwner org.gnome.Mutter.DisplayConfig 2>/dev/null")
-            .find("true") != std::string::npos;
+    const bool has_mutter = on_bus("org.gnome.Mutter.DisplayConfig");
     std::shared_ptr<DesktopBackend> b;
     const bool has_sway = [&]{
       const char* uid = std::getenv("PKEXEC_UID");

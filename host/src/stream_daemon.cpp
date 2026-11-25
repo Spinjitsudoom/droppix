@@ -275,6 +275,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       auto backend = desktop_;                       // shared_ptr copy keeps it alive
       std::string out_name = droppix.name, tname = cfg_.touch_name;
       std::thread([backend, out_name, tname]{ backend->map_touch(out_name, tname); }).detach();
+      if (desktop_->pen_needs_proximity_announce()) injector.announce_pen_tools_in(500);
       std::string pname = tname + "-pen";
       std::thread([backend, out_name, pname]{ backend->map_pen(out_name, pname); }).detach();
       // Desktop bounds for the two-finger-tap right-click pointer: prefer --desktop, else

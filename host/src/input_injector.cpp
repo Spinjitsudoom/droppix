@@ -142,6 +142,19 @@ void InputInjector::inject(const std::vector<TouchContact>& contacts) {
 }
 
 void InputInjector::tick() {
+  if (pen_announce_at_ >= 0 && now_ms() >= pen_announce_at_) {
+    pen_announce_at_ = -1;
+    if (pen_fd_ >= 0 && !pen_down_) {
+      for (int tool : {BTN_TOOL_PEN, BTN_TOOL_RUBBER}) {
+        emit(pen_fd_, EV_ABS, ABS_X, 32768);
+        emit(pen_fd_, EV_ABS, ABS_Y, 32768);
+        emit(pen_fd_, EV_KEY, tool, 1);
+        emit(pen_fd_, EV_SYN, SYN_REPORT, 0);
+        emit(pen_fd_, EV_KEY, tool, 0);
+        emit(pen_fd_, EV_SYN, SYN_REPORT, 0);
+      }
+    }
+  }
   if (click_.active() && rc_fd_ >= 0) run_click();
 }
 
@@ -198,6 +211,8 @@ void InputInjector::right_click(uint16_t x_norm, uint16_t y_norm) {
   click_.start(now_ms(), x_norm, y_norm);
   run_click();   // the move goes out now; press/release come due on later tick()s
 }
+
+void InputInjector::announce_pen_tools_in(int ms) { pen_announce_at_ = now_ms() + ms; }
 
 void InputInjector::run_click() { send_click_steps(click_.due(now_ms())); }
 

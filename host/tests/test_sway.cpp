@@ -131,3 +131,25 @@ TEST(WaylandSession, SessionEnvDeclaresWaylandToQtTools) {
             "XDG_SESSION_TYPE=wayland QT_QPA_PLATFORM='wayland;xcb' ");
   EXPECT_EQ(wayland_session_env({"bus"}), "");   // X11 session: leave Qt's default alone
 }
+
+// A compositor leaves wayland-N and wayland-N.lock behind when it exits; only a running one
+// holds the flock. An X11 session after a Wayland one was taken for Wayland (VM-verified).
+#include <fcntl.h>
+#include <sys/file.h>
+#include <unistd.h>
+#include <cstdlib>
+TEST(WaylandSession, OnlyHeldLocksCountAsLive) {
+  char tmpl[] = "/tmp/droppix-wl-XXXXXX";
+  ASSERT_NE(mkdtemp(tmpl), nullptr);
+  const std::string dir = tmpl;
+  for (const char* f : {"wayland-0", "wayland-0.lock", "wayland-1", "wayland-1.lock", "bus"})
+    close(open((dir + "/" + f).c_str(), O_CREAT | O_WRONLY, 0600));
+  const int held = open((dir + "/wayland-1.lock").c_str(), O_RDWR);
+  ASSERT_EQ(flock(held, LOCK_EX | LOCK_NB), 0);   // wayland-1 is "running"; wayland-0 is stale
+  const auto live = live_runtime_entries(dir);
+  EXPECT_TRUE(has_live_wayland_socket(live));
+  EXPECT_EQ(pick_wayland_display(live), "wayland-1");
+  close(held);
+  EXPECT_FALSE(has_live_wayland_socket(live_runtime_entries(dir)));   // nothing running now
+  std::system(("rm -rf " + dir).c_str());
+}

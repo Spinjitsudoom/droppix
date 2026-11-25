@@ -18,6 +18,11 @@ std::string user_session_prefix();
 // leaves a socket but no lock). "wayland-0" if none qualifies.
 std::string pick_wayland_display(const std::vector<std::string>& runtime_entries);
 
+// The entries of a runtime dir with every wayland-N / wayland-N.lock pair dropped whose lock
+// is NOT currently held (a compositor holds a flock on its lock file while it runs, and
+// leaves both files behind when it exits). Feed this to the pure functions below.
+std::vector<std::string> live_runtime_entries(const std::string& runtime_dir);
+
 // PURE (unit-tested). Is any wayland-N socket in $XDG_RUNTIME_DIR live (has its .lock)? Then the
 // session is Wayland even if XWayland's /tmp/.X11-unix/X0 exists. Same rule as
 // pick_wayland_display, without its wayland-0 fallback.
@@ -88,6 +93,9 @@ struct DesktopBackend {
   // desktop? Then the right-click pointer is scaled to the droppix output alone and bound to
   // it with map_pointer(). Default: the whole desktop (KWin, Mutter, wlroots, Hyprland).
   virtual bool pointer_maps_per_output() const { return false; }
+  // Does the pen need a proximity blip before map_pen can bind it (X11: libinput's tool
+  // sub-devices appear on first proximity)? See InputInjector::announce_pen_tools_in.
+  virtual bool pen_needs_proximity_announce() const { return false; }
   virtual void map_pointer(const std::string& output, const std::string& pointer_dev) {
     (void)output; (void)pointer_dev;
   }
@@ -109,6 +117,7 @@ class KWinBackend : public DesktopBackend {
 class X11Backend : public DesktopBackend {
  public:
   const char* name() const override { return "x11"; }
+  bool pen_needs_proximity_announce() const override { return true; }
   std::vector<OutputInfo> outputs() override;
   void map_touch(const std::string& output, const std::string& touch_dev) override;
   bool map_pen(const std::string& output, const std::string& pen_dev) override;
@@ -122,7 +131,10 @@ class X11Backend : public DesktopBackend {
   // devices, so the binding logic is identical -- only the device name (and log tag)
   // differ. Returns true once the safety checks pass and the binding attempt was issued
   // (fire-and-forget completion, like adopt_output/apply_layout).
-  bool map_device_x11(const std::string& output, const std::string& dev, const std::string& tag);
+  // children: map every device named "<dev> ..." (the tablet's "Pen (0)" / "Eraser (0)" tool
+  // devices; the parent tablet device itself rejects map-to-output with BadMatch).
+  bool map_device_x11(const std::string& output, const std::string& dev, const std::string& tag,
+                      bool children = false);
 };
 
 // GNOME on Wayland (Mutter): org.gnome.Mutter.DisplayConfig over gdbus for outputs,

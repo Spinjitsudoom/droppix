@@ -42,6 +42,11 @@ class InputInjector {
   // Name of the right-click/scroll pointer device ("<touch name>-rc"), per session so a
   // compositor that maps devices by name (COSMIC) can map each tablet's pointer separately.
   std::string pointer_name() const { return name_ + "-rc"; }
+  // X's libinput driver creates a tablet's pointing devices ("<pen> Pen (0)", "... Eraser (0)")
+  // only when a tool first comes into proximity, so they can't be mapped to the droppix output
+  // until the user's first stroke. Send one invisible proximity in/out for pen and eraser
+  // `ms` from now (from tick()) so they exist before the backend binds them.
+  void announce_pen_tools_in(int ms);
 
  private:
   void right_click(uint16_t x_norm, uint16_t y_norm);
@@ -58,6 +63,7 @@ class InputInjector {
   int pen_fd_ = -1;    // stylus/pen tablet
   bool pen_down_ = false;    // last BTN_TOOL_PEN/RUBBER proximity state
   bool pen_eraser_ = false;  // which tool is in proximity (for the up edge)
+  int64_t pen_announce_at_ = -1;   // tick() time for announce_pen_tools_in, -1 none
   MtSlots slots_;
   bool anyDown_ = false;   // last BTN_TOUCH state
   TwoFingerTap tap_;
