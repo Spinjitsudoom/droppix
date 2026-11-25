@@ -22,7 +22,7 @@ import com.droppix.app.settings.SettingsStore
  *
  * Two classes of setting, and the difference is real rather than cosmetic:
  *
- *  - **Display params** (flip, brightness, contrast, stats overlay, rotation lock) are local
+ *  - **Display params** (flip, brightness, contrast, stats overlay, orientation) are local
  *    to this device — shader uniforms and view state — so they apply to the live stream the
  *    instant they change, with no interruption.
  *  - **Stream params** (fps, quality, audio) are pushed to the running session with
@@ -49,7 +49,8 @@ class StreamSettingsPanel(
 
     private val flip: Switch = activity.findViewById(R.id.p_flip)
     private val overlay: Switch = activity.findViewById(R.id.p_overlay)
-    private val rotLock: Switch = activity.findViewById(R.id.p_rotlock)
+    private val rotation: Spinner = activity.findViewById(R.id.p_rotation)
+    private val orientations = com.droppix.app.settings.OrientationMode.entries
     private val bright: SeekBar = activity.findViewById(R.id.p_bright)
     private val contrast: SeekBar = activity.findViewById(R.id.p_contrast)
     private val brightLabel: TextView = activity.findViewById(R.id.p_bright_label)
@@ -72,6 +73,7 @@ class StreamSettingsPanel(
         res.adapter = adapter(listOf("Native") + Resolutions.PRESET_HEIGHTS.map { "${it}p" })
         fps.adapter = adapter(fpsValues.map { "$it fps" })
         quality.adapter = adapter(listOf("Low", "Medium", "High"))
+        rotation.adapter = adapter(orientations.map { it.label })
         activity.findViewById<Button>(R.id.panel_close).setOnClickListener { hide() }
         wire()
     }
@@ -108,7 +110,7 @@ class StreamSettingsPanel(
         seeding = true
         flip.isChecked = s.flipHorizontal
         overlay.isChecked = s.showOverlay
-        rotLock.isChecked = s.rotationLocked
+        rotation.setSelection(orientations.indexOf(s.orientation).coerceAtLeast(0))
         bright.progress = (s.brightness + 100).coerceIn(0, 200)
         contrast.progress = s.contrast.coerceIn(0, 200)
         res.setSelection(
@@ -136,7 +138,7 @@ class StreamSettingsPanel(
             fps = fpsValues[fps.selectedItemPosition.coerceIn(0, fpsValues.size - 1)],
             audio = audio.isChecked,
             bitrateKbps = qualityValues[quality.selectedItemPosition.coerceIn(0, qualityValues.size - 1)],
-            rotationLocked = rotLock.isChecked,
+            orientation = orientations[rotation.selectedItemPosition.coerceIn(0, orientations.size - 1)],
             showOverlay = overlay.isChecked,
             flipHorizontal = flip.isChecked,
             brightness = bright.progress - 100,
@@ -175,7 +177,7 @@ class StreamSettingsPanel(
     private fun wire() {
         flip.setOnCheckedChangeListener { _, _ -> live() }
         overlay.setOnCheckedChangeListener { _, _ -> live() }
-        rotLock.setOnCheckedChangeListener { _, _ -> live() }
+        rotation.onItemSelectedListener = select { live() }
         bright.setOnSeekBarChangeListener(seek { live() })
         contrast.setOnSeekBarChangeListener(seek { live() })
 

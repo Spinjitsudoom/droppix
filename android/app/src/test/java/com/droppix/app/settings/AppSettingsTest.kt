@@ -35,7 +35,7 @@ class AppSettingsTest {
     }
     @Test fun newDefaults() {
         val s = AppSettings()
-        assertEquals(8000, s.bitrateKbps); assertFalse(s.rotationLocked); assertFalse(s.showOverlay)
+        assertEquals(8000, s.bitrateKbps); assertEquals(OrientationMode.AUTO, s.orientation); assertFalse(s.showOverlay)
     }
     @Test fun flipDefault() { assertFalse(AppSettings().flipHorizontal) }
     @Test fun brightnessContrastDefaults() {

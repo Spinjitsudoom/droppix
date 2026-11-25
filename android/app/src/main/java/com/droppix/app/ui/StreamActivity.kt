@@ -57,7 +57,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     // and the host sends nothing on a static silent screen. Closing the FileInputStream
     // signals the blocked reader.
     @Volatile private var aoaIn: FileInputStream? = null
-    @Volatile private var rotationLocked = false
+    @Volatile private var orientationMode = com.droppix.app.settings.OrientationMode.AUTO
     @Volatile private var localOverlayWanted = false
 
     // Live quick-toggles from the floating menu. Both take effect on the running stream with
@@ -203,11 +203,22 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         surfaceView.contrast = s.contrast
         localOverlayWanted = s.showOverlay
         overlay.visibility = if (s.showOverlay) View.VISIBLE else View.GONE
-        rotationLocked = s.rotationLocked
-        requestedOrientation = if (s.rotationLocked)
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-        else
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
+        val changed = s.orientation != orientationMode
+        orientationMode = s.orientation
+        requestedOrientation = s.orientation.activityOrientation
+        // Picked mid-stream: tell the host now, so it rebuilds its monitor in the new shape.
+        if (changed) { seedOrientation(); client?.sendOrientation(orientationMapper.currentCode()) }
+    }
+
+    /**
+     * Start the orientation mapper from the chosen mode: a fixed mode IS the answer (without
+     * waiting for Android to finish rotating); AUTO and LOCKED take the display's rotation now.
+     */
+    private fun seedOrientation() {
+        @Suppress("DEPRECATION")
+        val rotation = orientationMode.displayRotation(naturalIsPortrait())
+            ?: windowManager.defaultDisplay.rotation
+        orientationMapper.seedFromDisplayRotation(rotation)
     }
 
     /**
@@ -299,10 +310,10 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         }
         orientationListener = object : OrientationEventListener(this) {
             override fun onOrientationChanged(angleDeg: Int) {
-                // Rotation lock: the display stays put, so the stream must keep ITS shape. Feeding
-                // the sensor anyway left the mapper on the physical orientation, and the next
-                // reconnect's HELLO reported a shape the tablet wasn't showing.
-                if (rotationLocked) return
+                // Locked or a fixed orientation: the display stays put, so the stream must keep
+                // ITS shape. Feeding the sensor anyway left the mapper on the physical orientation,
+                // and the next reconnect's HELLO reported a shape the tablet wasn't showing.
+                if (orientationMode.isFixed) return
                 val code = orientationMapper.update(angleDeg, SystemClock.elapsedRealtime()) ?: return
                 Log.i(TAG, "orientation -> $code")
                 client?.sendOrientation(code)
@@ -434,15 +445,12 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         val sendFps = settings.fps
         val sendAudio = if (settings.audio) 1 else 0
         val sendBitrate = settings.bitrateKbps
-        rotationLocked = settings.rotationLocked
-        requestedOrientation = if (settings.rotationLocked)
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED
-        else
-            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
-        // The HELLO below reports orientationMapper.currentCode(): start it from how the display
-        // is actually rotated right now (portrait, flat on a table, or rotation-locked).
-        @Suppress("DEPRECATION")
-        orientationMapper.seedFromDisplayRotation(windowManager.defaultDisplay.rotation)
+        orientationMode = settings.orientation
+        requestedOrientation = settings.orientation.activityOrientation
+        // The HELLO below reports orientationMapper.currentCode(): start it from the chosen
+        // orientation, or how the display is actually rotated right now (portrait, flat on a
+        // table, or locked).
+        seedOrientation()
         localOverlayWanted = settings.showOverlay
         overlay.visibility = if (settings.showOverlay) View.VISIBLE else View.GONE
         netThread = thread(name = "droppix-net") {

@@ -34,8 +34,9 @@ class SettingsActivity : Activity() {
         qualitySpinner.setSelection(qualityKbps.indexOf(cur.bitrateKbps).let { if (it == -1) 1 else it })  // index for the stored bitrate; default Medium only if not one of the presets
 
         val rotationSpinner = findViewById<Spinner>(R.id.rotation_spinner)
-        rotationSpinner.adapter = lightAdapter(listOf("Auto", "Locked"))
-        rotationSpinner.setSelection(if (cur.rotationLocked) 1 else 0)
+        val orientations = com.droppix.app.settings.OrientationMode.entries
+        rotationSpinner.adapter = lightAdapter(orientations.map { it.label })
+        rotationSpinner.setSelection(orientations.indexOf(cur.orientation).coerceAtLeast(0))
 
         val overlaySwitch = findViewById<Switch>(R.id.overlay_switch)
         overlaySwitch.isChecked = cur.showOverlay
@@ -69,7 +70,7 @@ class SettingsActivity : Activity() {
                 fpsItems[fpsSpinner.selectedItemPosition],
                 audioSwitch.isChecked,
                 qualityKbps[qualitySpinner.selectedItemPosition],
-                rotationSpinner.selectedItemPosition == 1,
+                orientations[rotationSpinner.selectedItemPosition.coerceIn(0, orientations.size - 1)],
                 overlaySwitch.isChecked,
                 flipSwitch.isChecked,
                 brightnessSeek.progress - 100,

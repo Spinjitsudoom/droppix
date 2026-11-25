@@ -104,6 +104,7 @@ evdi → Capturer → Encoder → TransportServer
 
 ## Recent session notes
 
+- **2026-11-25 (late): orientation setting.** On the real Nexus 10, Android's own sensor proposed rotation 2 (upside-down landscape) while the user held it in portrait. droppix reported exactly what Android saw. Added `OrientationMode` (Auto/Locked/4 fixed); fixed modes are reported to the host directly from `displayRotation()`.
 - **2026-11-25 (later): v0.4.0 RELEASED** (first full, non-pre release): https://github.com/Spinjitsudoom/droppix/releases/tag/v0.4.0. Mirror mode removed. `.github/workflows/release.yml` builds AppImages + Flatpaks on a `v*` tag; the APK is built locally and attached (`gh release upload`), so the keystore stays local. The first run built fine but failed to publish (lesson `release-artifact-folders`), so the release was published by hand from its artifacts.
 - **2026-11-25 (all-distros push, overnight, user delegated decisions):**
   - **Scope (user):** desktop Linux only; ChromeOS, WSL, SteamOS and Raspberry Pi are out. Order: GNOME → Sway/Hyprland → Plasma 5 → COSMIC, then portable packaging.
