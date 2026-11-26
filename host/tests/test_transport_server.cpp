@@ -488,3 +488,31 @@ TEST(TransportServer, VideoChangeIsTakenWithoutConsumingAudio) {
   ASSERT_TRUE(s.take_audio_request(on));
   EXPECT_FALSE(on);
 }
+
+// A tablet asleep on the cable reads nothing, so the keepalive ping sent while waiting for
+// HELLO times out and closes the channel. read_hello then dereferenced the channel it had just
+// lost: the streamer segfaulted, the GUI restarted it into the same crash until it gave up, and
+// the tablet never got a session back when it woke (found on the Nexus 10, 2026-11-26).
+namespace {
+class DeafChannel : public droppix::ByteChannel {
+ public:
+  ssize_t recv(void*, size_t) override { return 0; }
+  bool send_all(const unsigned char*, size_t) override { return false; }   // write times out
+  bool wait_readable(int ms) override {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms > 0 ? ms : 1));
+    return false;
+  }
+  bool connected() const override { return true; }
+  void close() override {}
+};
+}  // namespace
+
+TEST(TransportServer, AFailedKeepaliveWhileWaitingForHelloIsNotACrash) {
+  TransportServer s;
+  s.adopt_channel(std::make_unique<DeafChannel>(), "usb");
+  uint32_t ver, w, h, d, fps, bitrate; uint8_t audio, orient; uint16_t wcol, wrow;
+  std::string name, id;
+  s.note_sent(-10'000);   // due a keepalive straight away
+  EXPECT_FALSE(s.read_hello(ver, w, h, d, fps, audio, orient, bitrate, wcol, wrow, name, id, 3000));
+  EXPECT_FALSE(s.connected());
+}

@@ -34,6 +34,14 @@ discarding the new HELLO (it only looked for one before a session).
   2 min with the cable attached (`AoaRetry`; it gave up after 4 s), and the connect screen
   re-adopts an attached accessory after a session (`aoaAdopted` used to stay set forever).
 
+**Follow-up (same day, regression from the fix above):** the keepalive ping sent while waiting
+for HELLO fails when the tablet is asleep on the cable (nothing reads, the USB write times out).
+The failed send closed the channel, and `read_hello` then dereferenced it: the streamer
+segfaulted every ~7 s, the GUI restarted it into the same crash until it gave up, and waking the
+tablet never got a session back. `read_hello` now returns when a keepalive drops the link
+(test `AFailedKeepaliveWhileWaitingForHelloIsNotACrash`). Any helper that can `close_all()`
+leaves `channel_` null for the caller.
+
 See WIRE.md: Bye, Liveness, A HELLO mid-session.
 
 ## Takeaway

@@ -164,6 +164,7 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
     // app's previous USB session, blocked until data arrives) must wake and let go of the
     // accessory, or the new session can never open it (see keepalive()).
     keepalive(steady_ms(), 1000);
+    if (!channel_) return false;   // the ping failed and dropped the link (nobody reading)
     const int slice = static_cast<int>(left > 1000 ? 1000 : (left > 0 ? left : 0));
     if (!channel_->wait_readable(slice)) {
       if (!channel_ || !channel_->connected()) return false;
