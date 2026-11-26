@@ -3,6 +3,7 @@
 #include <QSignalSpy>
 #include <QSpinBox>
 #include <QRadioButton>
+#include <QComboBox>
 #include "pages/settings_page.h"
 #include "settings.h"
 
@@ -28,14 +29,13 @@ TEST(SettingsPage, RoundTripsIncludingSurfacedFields) {
   ensureQApplication();
   SettingsPage page;
   Settings in; in.bitrate_kbps = 16000; in.port = 34000; in.touch = true;
-  in.audio = true; in.orientation = 90; in.fps = 60; in.width = 1920; in.height = 1080;
+  in.audio = true; in.fps = 60; in.width = 1920; in.height = 1080;
   page.load(in);
   Settings out; page.store(out);
   EXPECT_EQ(out.bitrate_kbps, 16000);
   EXPECT_EQ(out.port, 34000);
   EXPECT_TRUE(out.touch);
   EXPECT_TRUE(out.audio);
-  EXPECT_EQ(out.orientation, 90);
   EXPECT_EQ(out.fps, 60);
   EXPECT_EQ(out.width, 1920);
   EXPECT_EQ(out.height, 1080);
@@ -68,7 +68,16 @@ TEST(SettingsPage, LoadDoesNotEmitSettingsChanged) {
   droppix::SettingsPage page;
   QSignalSpy spy(&page, &droppix::SettingsPage::settingsChanged);
   droppix::Settings s; s.bitrate_kbps = 16000; s.port = 34000; s.webClient = true;
-  s.touch = true; s.audio = true; s.orientation = 90; s.fps = 60; s.refresh_hz = 30;
+  s.touch = true; s.audio = true; s.fps = 60; s.refresh_hz = 30;
   page.load(s);
   EXPECT_EQ(spy.count(), 0);
+}
+
+TEST(SettingsPage, HasNoOrientationControl) {
+  // The tablet decides its orientation (its HELLO overrides the PC), so a PC-side box for it
+  // did nothing at all.
+  ensureQApplication();
+  SettingsPage page;
+  for (QComboBox* c : page.findChildren<QComboBox*>())
+    EXPECT_FALSE(c->findText("270") >= 0 && c->findText("90") >= 0) << "an orientation picker is still shown";
 }

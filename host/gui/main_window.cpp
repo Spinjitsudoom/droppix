@@ -1239,6 +1239,7 @@ void MainWindow::logEvent(const QString& key, const QString& source, LogLevel le
   e.level = level;
   e.text = text;
   logBuffer_->append(e);
+  logFile_.write(e);
 }
 
 void MainWindow::wireSession(StreamController* c, const QString& key) {

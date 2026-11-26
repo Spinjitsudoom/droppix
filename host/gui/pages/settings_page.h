@@ -14,7 +14,7 @@ namespace droppix {
 // at stack_ index 3 (replaces the old modal SettingsDialog). Creates and owns all
 // its widgets; the owning MainWindow reads/writes through load()/store() during
 // apply/collect, exactly like the dialog did. Additionally surfaces the Settings
-// fields the dialog left unset (resolution/fps/audio/orientation — see
+// fields the dialog left unset (resolution/fps/audio — see
 // settings_dialog.cpp's historical comment) and a theme control.
 class SettingsPage : public QWidget {
   Q_OBJECT
@@ -45,7 +45,6 @@ class SettingsPage : public QWidget {
   // --- Session & input card ---
   QCheckBox* touch_;
   QCheckBox* audio_;        // NEW -> s.audio
-  QComboBox* orientation_;  // NEW: "0"/"90"/"180"/"270" -> s.orientation
   QCheckBox* overlay_;
   QCheckBox* autoConnect_;
   QCheckBox* webClient_;

@@ -1,7 +1,9 @@
 #pragma once
+#include "peer_liveness.h"
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include <openssl/ssl.h>
@@ -32,6 +34,19 @@ class TransportServer {
   bool send_audio(const std::vector<unsigned char>& pcm);
   bool send_overlay(uint8_t show);   // tell the app to show/hide the perf overlay
   void poll_control();                 // respond to PING, dispatch touch, detect disconnect
+  // True when a pinging client has sent nothing for `limit_ms` (see peer_liveness.h).
+  bool peer_silent(int64_t limit_ms) const;
+  // Send a PING if nothing has gone to the client for `interval_ms`. Wakes a client's stale
+  // reader (the Android app's old USB reader blocks until data arrives, holding the accessory
+  // open), and every client answers with a PONG, which keeps the liveness check fed.
+  void keepalive(int64_t now_ms, int64_t interval_ms);
+  // Tell the client this session is over (the host is ending it). Over USB the client can't
+  // otherwise tell: the link stays up. Every client reconnects or closes on BYE.
+  bool send_bye();
+  // End a session from the host side: BYE (unless the client already said it), then close.
+  // Every host-initiated end goes through here so a USB client is never left waiting.
+  void end_session();
+  void note_sent(int64_t now_ms) { last_tx_ms_ = now_ms; }
   // Called for each TOUCH message during poll_control with the full active-contact set (a
   // legacy single-pointer INPUT is delivered as a 1-contact set, or empty on release).
   // INVARIANT: if the handler captures an object by reference, the caller MUST clear it
@@ -40,12 +55,21 @@ class TransportServer {
   // Set by poll_control() when a client asks for an IDR; the daemon consumes it.
   bool take_keyframe_request() { bool v = keyframe_requested_; keyframe_requested_ = false; return v; }
 
-  // A client's live fps/bitrate/audio change, consumed once by the stream loop.
-  struct StreamParamsRequest { uint32_t fps; uint32_t bitrate_kbps; uint8_t audio; };
-  bool take_stream_params(StreamParamsRequest& out) {
-    if (!params_pending_) return false;
-    out = params_;
-    params_pending_ = false;
+  // A client's live settings change, latched by poll_control and consumed in two halves.
+  // Video (fps, bitrate) is taken on the next frame: reopening the encoder needs one to send.
+  // Audio is taken on every pass of the stream loop: on a still desktop no frame may come for
+  // minutes, and "audio on" must not wait for one. The newest request wins.
+  struct VideoParamsRequest { uint32_t fps; uint32_t bitrate_kbps; };
+  bool take_video_params(VideoParamsRequest& out) {
+    if (!video_pending_) return false;
+    out = video_params_;
+    video_pending_ = false;
+    return true;
+  }
+  bool take_audio_request(bool& on) {
+    if (!audio_pending_) return false;
+    on = audio_wanted_;
+    audio_pending_ = false;
     return true;
   }
 
@@ -80,6 +104,11 @@ class TransportServer {
   // True once a client sent BYE — a deliberate Disconnect, not a dropped link. The reconnect
   // loop uses this to stop serving rather than waiting for the tablet to dial back in.
   bool said_bye() const { return said_bye_; }
+  // True when the client sent a fresh HELLO in the middle of a session: it started over on
+  // the same link (over USB the PC can't see the app close and reopen the accessory). The
+  // session should end WITHOUT a BYE, which would end the client's new session, and the
+  // next read_hello returns that HELLO on the same channel.
+  bool client_restarted() const { return pending_hello_.has_value(); }
   // Unacknowledged bytes queued to the client; see ByteChannel::pending_bytes. Used to
   // pace capture against a slow link (a blocking send can't reveal that on its own).
   size_t pending_bytes() const { return channel_ ? channel_->pending_bytes() : 0; }
@@ -90,6 +119,8 @@ class TransportServer {
   void enable_tls(const std::string& cert_path, const std::string& key_path);
 
  private:
+  PeerLiveness liveness_;
+  int64_t last_tx_ms_ = 0;   // last send (or the connect); see keepalive()
   bool send_all(const std::vector<unsigned char>& bytes);
   void reset_session_state();
 
@@ -108,9 +139,12 @@ class TransportServer {
   std::string cert_, key_;
   SSL_CTX* ctx_ = nullptr;
   bool keyframe_requested_ = false;
-  bool params_pending_ = false;
+  bool video_pending_ = false;
+  bool audio_pending_ = false;
+  bool audio_wanted_ = false;
   bool said_bye_ = false;          // client sent BYE: a deliberate disconnect, not a drop
-  StreamParamsRequest params_{};
+  std::optional<std::vector<unsigned char>> pending_hello_;   // a mid-session HELLO's body; see client_restarted()
+  VideoParamsRequest video_params_{};
   std::unique_ptr<ByteChannel> channel_;   // the live client connection (socket or AOA)
 };
 }  // namespace droppix

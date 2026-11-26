@@ -823,8 +823,11 @@ uint16_t session_device_id(uint16_t base, const std::string& touch_name) {
 std::string layout_command(BackendKind kind, const std::string& evdi, const std::string& primary) {
   if (!safe_output_name(evdi) || !safe_output_name(primary)) return {};
   switch (kind) {
-    case BackendKind::KWin:   // clears any replication (mirror) a previous session left
-      return "kscreen-doctor \"output." + evdi + ".replicationSource.0\"";
+    case BackendKind::KWin:
+      // Clear a mirror KScreen restores for this screen (left by an older droppix that had
+      // mirror mode). Only where kscreen-doctor knows the option: older ones reject it.
+      return "kscreen-doctor --help 2>&1 | grep -q mirror && kscreen-doctor output." + evdi +
+             ".mirror.none";
     case BackendKind::X11:
       return "xrandr --output " + evdi + " --auto --right-of " + primary;
     default:

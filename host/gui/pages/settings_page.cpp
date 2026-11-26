@@ -89,7 +89,6 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
 
   touch_ = new QCheckBox("Touch");
   audio_ = new QCheckBox("Audio (stream PC audio to the tablet)");
-  orientation_ = new QComboBox; orientation_->addItems({"0", "90", "180", "270"});
   overlay_ = new QCheckBox("Performance Overlay");
   connect(overlay_, &QCheckBox::toggled, this, &SettingsPage::overlayToggled);  // live toggle
   autoConnect_ = new QCheckBox("Auto-connect known monitors");
@@ -100,7 +99,6 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   sessionForm->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
   sessionForm->addRow("", touch_);
   sessionForm->addRow("", audio_);
-  sessionForm->addRow("Orientation:", orientation_);
   sessionForm->addRow("", overlay_);
   sessionForm->addRow("", autoConnect_);
   sessionForm->addRow("", webClient_);
@@ -167,7 +165,7 @@ SettingsPage::SettingsPage(QWidget* parent) : QWidget(parent) {
   // NOT the theme/app-pref controls (no server impact). ---
   for (QRadioButton* r : {srcTest_, srcEvdi_})
     connect(r, &QRadioButton::toggled, this, &SettingsPage::settingsChanged);
-  for (QComboBox* c : {resolution_, fps_, refresh_, orientation_})
+  for (QComboBox* c : {resolution_, fps_, refresh_})
     connect(c, &QComboBox::currentIndexChanged, this, &SettingsPage::settingsChanged);
   for (QSpinBox* s : {bitrate_, port_})
     connect(s, QOverload<int>::of(&QSpinBox::valueChanged), this, &SettingsPage::settingsChanged);
@@ -181,7 +179,7 @@ void SettingsPage::load(const Settings& s) {
   // settingsChanged() (that signal exists to trigger a live server restart).
   const QSignalBlocker bSrcT(srcTest_), bSrcE(srcEvdi_), bRes(resolution_), bFps(fps_),
       bBit(bitrate_), bPort(port_), bRef(refresh_), bTouch(touch_), bAudio(audio_),
-      bOri(orientation_), bWeb(webClient_);
+      bWeb(webClient_);
 
   srcEvdi_->setChecked(s.source == Settings::Source::Evdi);
   srcTest_->setChecked(s.source == Settings::Source::TestPattern);
@@ -193,14 +191,13 @@ void SettingsPage::load(const Settings& s) {
   autoConnect_->setChecked(s.autoConnect);
   webClient_->setChecked(s.webClient);
 
-  // --- surfaced fields (new): width/height/fps/audio/orientation were left unset by
+  // --- surfaced fields (new): width/height/fps/audio were left unset by
   // the old SettingsDialog::load() — now wired to their own widgets. ---
   if (s.width == 1280 && s.height == 800) resolution_->setCurrentText("1280×800");
   else if (s.width == 1920 && s.height == 1080) resolution_->setCurrentText("1920×1080");
   else resolution_->setCurrentText("Match client");   // 0/0 or any other pair
   fps_->setCurrentText(QString::number(s.fps));
   audio_->setChecked(s.audio);
-  orientation_->setCurrentText(QString::number(s.orientation));
 }
 
 void SettingsPage::store(Settings& s) const {
@@ -221,7 +218,6 @@ void SettingsPage::store(Settings& s) const {
   else { s.width = 0; s.height = 0; }   // "Match client"
   s.fps = fps_->currentText().toInt();
   s.audio = audio_->isChecked();
-  s.orientation = orientation_->currentText().toInt();
 }
 
 void SettingsPage::setTheme(Theme t) {

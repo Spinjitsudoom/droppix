@@ -16,6 +16,13 @@
 
 namespace droppix {
 
+namespace {
+int64_t steady_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+}  // namespace
+
 bool TransportServer::listen(uint16_t port, int backlog) {
   if (listen_fd_ >= 0) { ::close(listen_fd_); listen_fd_ = -1; }  // re-listen safe
   // SOCK_CLOEXEC: the streamer popen()s helpers (parec for audio, xrandr/kscreen-doctor for
@@ -66,6 +73,8 @@ void TransportServer::enable_tls(const std::string& cert, const std::string& key
 }
 
 void TransportServer::adopt_channel(std::unique_ptr<ByteChannel> ch, std::string peer) {
+  liveness_.reset();
+  last_tx_ms_ = steady_ms();   // quiet is measured from the connect: a normal handshake gets no ping
   channel_ = std::move(ch);
   peer_ip_ = std::move(peer);
   reset_session_state();
@@ -75,8 +84,10 @@ void TransportServer::adopt_channel(std::unique_ptr<ByteChannel> ch, std::string
 // next client's bytes it misaligns that client's HELLO. Its latched requests are stale too.
 void TransportServer::reset_session_state() {
   parser_ = MessageParser{};
+  pending_hello_.reset();
   keyframe_requested_ = false;
-  params_pending_ = false;
+  video_pending_ = false;
+  audio_pending_ = false;
 }
 
 bool TransportServer::accept_client(int timeout_ms) {
@@ -134,6 +145,13 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
   // One deadline for the whole HELLO, not per read: a peer trickling a byte every few
   // seconds would otherwise hold this one-client listener indefinitely.
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+  if (pending_hello_) {   // the client already started over; see client_restarted()
+    const std::vector<unsigned char> body = std::move(*pending_hello_);
+    pending_hello_.reset();
+    liveness_.reset();   // a new session: the setup quiet before it must not count
+    return decode_hello(body, version, w, h, density, fps, audio_wanted, orientation,
+                        bitrate, wall_col, wall_row, name, id);
+  }
   for (;;) {
     if (parser_.next(m)) {
       if (m.type != MsgType::Hello) continue;
@@ -142,7 +160,16 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
     }
     const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
                           deadline - std::chrono::steady_clock::now()).count();
-    if (!channel_->wait_readable(left > 0 ? static_cast<int>(left) : 0)) return false;
+    // Wait in steps of at most 1 s, pinging in between: a client's stale reader (the Android
+    // app's previous USB session, blocked until data arrives) must wake and let go of the
+    // accessory, or the new session can never open it (see keepalive()).
+    keepalive(steady_ms(), 1000);
+    const int slice = static_cast<int>(left > 1000 ? 1000 : (left > 0 ? left : 0));
+    if (!channel_->wait_readable(slice)) {
+      if (!channel_ || !channel_->connected()) return false;
+      if (left > 1000) continue;
+      return false;
+    }
     ssize_t n = channel_->recv(buf, sizeof(buf));
     if (n <= 0) { close_all(); return false; }
     parser_.feed(buf, static_cast<size_t>(n));
@@ -152,7 +179,25 @@ bool TransportServer::read_hello(uint32_t& version, uint32_t& w, uint32_t& h, ui
 bool TransportServer::send_all(const std::vector<unsigned char>& bytes) {
   if (!channel_ || !channel_->connected()) return false;
   if (!channel_->send_all(bytes.data(), bytes.size())) { close_all(); return false; }
+  note_sent(steady_ms());
   return true;
+}
+
+bool TransportServer::send_bye() {
+  return send_all(encode_message(MsgType::Bye, {}));
+}
+
+void TransportServer::end_session() {
+  if (channel_ && channel_->connected() && !said_bye_) send_bye();
+  close_all();
+}
+
+void TransportServer::keepalive(int64_t now_ms, int64_t interval_ms) {
+  if (!channel_ || now_ms - last_tx_ms_ < interval_ms) return;
+  std::vector<unsigned char> body(8);
+  for (int i = 0; i < 8; ++i) body[i] = static_cast<unsigned char>(now_ms >> (56 - 8 * i));
+  send_all(encode_message(MsgType::Ping, body));
+  note_sent(now_ms);
 }
 
 bool TransportServer::send_config(uint32_t w, uint32_t h, uint32_t fps,
@@ -173,20 +218,34 @@ bool TransportServer::send_overlay(uint8_t show) {
   return send_all(encode_message(MsgType::Overlay, encode_overlay(show)));
 }
 
+bool TransportServer::peer_silent(int64_t limit_ms) const {
+  return channel_ && liveness_.silent(steady_ms(), limit_ms);
+}
+
 void TransportServer::poll_control() {
-  if (!channel_ || !channel_->wait_readable(0)) return;
-  unsigned char buf[1024];
-  ssize_t n = channel_->recv(buf, sizeof(buf));
-  if (n <= 0) { close_all(); return; }
-  parser_.feed(buf, static_cast<size_t>(n));
+  if (!channel_) return;
+  // Read what arrived, then dispatch everything parsed, including messages already buffered:
+  // read_hello can pull in bytes past the HELLO, and they must not wait for the next arrival.
+  if (channel_->wait_readable(0)) {
+    unsigned char buf[1024];
+    ssize_t n = channel_->recv(buf, sizeof(buf));
+    if (n <= 0) { close_all(); return; }
+    parser_.feed(buf, static_cast<size_t>(n));
+  }
   ParsedMessage m;
   while (parser_.next(m)) {
+    liveness_.heard(steady_ms(), m.type == MsgType::Ping);
     if (m.type == MsgType::Bye) {
       // The user pressed Disconnect on the tablet. Distinct from the socket simply dropping:
       // a drop is assumed temporary and the streamer waits for the client to come back, but
       // this says "I am done", so the caller tears the session down instead of re-serving it.
       said_bye_ = true;
       close_all();
+      return;
+    } else if (m.type == MsgType::Hello) {
+      // The client started a new session on this link. Keep the HELLO for the next
+      // read_hello, and stop here: whatever follows it belongs to the new session.
+      pending_hello_ = m.body;
       return;
     } else if (m.type == MsgType::Ping) {
       send_all(encode_message(MsgType::Pong, m.body));
@@ -195,8 +254,10 @@ void TransportServer::poll_control() {
       // overwrite matters because dragging a quality slider emits a burst of these.
       uint32_t fps = 0, kbps = 0; uint8_t aud = 0;
       if (decode_stream_params(m.body, fps, kbps, aud)) {
-        params_ = StreamParamsRequest{fps, kbps, aud};
-        params_pending_ = true;
+        video_params_ = VideoParamsRequest{fps, kbps};
+        video_pending_ = true;
+        audio_wanted_ = aud != 0;
+        audio_pending_ = true;
       }
     } else if (static_cast<unsigned char>(m.type) == kMsgClientSettings) {
       // The web client saved its settings. We run as root and the GUI does not, so writing

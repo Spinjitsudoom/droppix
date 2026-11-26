@@ -128,63 +128,56 @@ class StreamSettingsPanel(
         contrastLabel.text = "Contrast  ${s.contrast}%"
     }
 
-    /** Read every control into a settings snapshot and persist it. */
-    private fun collect(): AppSettings {
-        val s = store.load().copy(
-            // Width is derived from the panel at connect time; only the target height is stored.
-            width = 0,
-            height = if (res.selectedItemPosition <= 0) 0
-                     else Resolutions.PRESET_HEIGHTS[res.selectedItemPosition - 1],
-            fps = fpsValues[fps.selectedItemPosition.coerceIn(0, fpsValues.size - 1)],
-            audio = audio.isChecked,
-            bitrateKbps = qualityValues[quality.selectedItemPosition.coerceIn(0, qualityValues.size - 1)],
-            orientation = orientations[rotation.selectedItemPosition.coerceIn(0, orientations.size - 1)],
-            showOverlay = overlay.isChecked,
-            flipHorizontal = flip.isChecked,
-            brightness = bright.progress - 100,
-            contrast = contrast.progress,
-        )
-        store.save(s)
-        return s
-    }
+    /** The settings as the controls show them now. */
+    private fun read(before: AppSettings): AppSettings = before.copy(
+        // Width is derived from the panel at connect time; only the target height is stored.
+        width = 0,
+        height = if (res.selectedItemPosition <= 0) 0
+                 else Resolutions.PRESET_HEIGHTS[res.selectedItemPosition - 1],
+        fps = fpsValues[fps.selectedItemPosition.coerceIn(0, fpsValues.size - 1)],
+        audio = audio.isChecked,
+        bitrateKbps = qualityValues[quality.selectedItemPosition.coerceIn(0, qualityValues.size - 1)],
+        orientation = orientations[rotation.selectedItemPosition.coerceIn(0, orientations.size - 1)],
+        showOverlay = overlay.isChecked,
+        flipHorizontal = flip.isChecked,
+        brightness = bright.progress - 100,
+        contrast = contrast.progress,
+    )
 
-    /** A display-only change: apply to the running stream, no interruption. */
-    private fun live() {
+    /**
+     * Any control changed: persist, then do only what the difference needs (see PanelChange).
+     * A display change applies instantly; fps/quality/audio go to the running session; only a
+     * new resolution restarts it, because the PC must re-create its virtual screen.
+     */
+    private fun onChange() {
         if (seeding) return
-        val s = collect()
-        labels(s)
-        applyLive(s)
-    }
-
-    /** fps / quality / audio: pushed to the running session, no interruption. */
-    private fun liveParams() {
-        if (seeding) return
-        val s = collect()
-        applyLive(s)
-        note.text = ""
-        applyStreamParams(s)
-    }
-
-    /** Resolution only: the host must re-create its virtual display, so the session restarts. */
-    private fun renegotiate() {
-        if (seeding) return
-        val s = collect()
-        applyLive(s)
-        note.text = "Reconnecting to apply the new resolution…"
-        reconnect()
+        val before = store.load()
+        val after = read(before)
+        val change = PanelChange.of(before, after)
+        if (change == PanelChange.NONE) return
+        store.save(after)
+        labels(after)
+        applyLive(after)
+        when (change) {
+            PanelChange.STREAM_PARAMS -> { note.text = ""; applyStreamParams(after) }
+            PanelChange.RESOLUTION -> {
+                note.text = "Reconnecting to apply the new resolution…"
+                reconnect()
+            }
+            else -> {}
+        }
     }
 
     private fun wire() {
-        flip.setOnCheckedChangeListener { _, _ -> live() }
-        overlay.setOnCheckedChangeListener { _, _ -> live() }
-        rotation.onItemSelectedListener = select { live() }
-        bright.setOnSeekBarChangeListener(seek { live() })
-        contrast.setOnSeekBarChangeListener(seek { live() })
-
-        audio.setOnCheckedChangeListener { _, _ -> liveParams() }
-        fps.onItemSelectedListener = select { liveParams() }
-        quality.onItemSelectedListener = select { liveParams() }
-        res.onItemSelectedListener = select { renegotiate() }   // only this needs a new session
+        flip.setOnCheckedChangeListener { _, _ -> onChange() }
+        overlay.setOnCheckedChangeListener { _, _ -> onChange() }
+        rotation.onItemSelectedListener = select { onChange() }
+        bright.setOnSeekBarChangeListener(seek { onChange() })
+        contrast.setOnSeekBarChangeListener(seek { onChange() })
+        audio.setOnCheckedChangeListener { _, _ -> onChange() }
+        fps.onItemSelectedListener = select { onChange() }
+        quality.onItemSelectedListener = select { onChange() }
+        res.onItemSelectedListener = select { onChange() }
     }
 
     private fun seek(onChange: () -> Unit) = object : SeekBar.OnSeekBarChangeListener {

@@ -21,9 +21,7 @@ Command build_command(const Settings& s, const std::string& stream_bin,
       a.push_back("--touch");   // touch injection (evdi/root only)
       a.push_back("--touch-name"); a.push_back(tname);
     }
-    if (s.orientation != 0) {              // rotate the droppix output (evdi only)
-      a.push_back("--orientation"); a.push_back(std::to_string(s.orientation));
-    }
+    // No --orientation: every client's HELLO carries its own, and that wins.
     if (usb_aoa_serial.empty())
       a.push_back("--approve");  // gates non-localhost Wi-Fi peers; AOA (cable) is trusted, no approval
   }

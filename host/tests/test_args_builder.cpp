@@ -74,20 +74,12 @@ TEST(ArgsBuilder, TestPatternNeverHasTouch) {
   EXPECT_FALSE(has(c.args, "--touch"));   // touch is evdi-only
 }
 
-TEST(ArgsBuilder, EvdiOrientationFlagWhenSet) {
-  Settings s; s.source = Settings::Source::Evdi; s.orientation = 90;
-  Command c = build_command(s, "/path/droppix_stream");
-  EXPECT_TRUE(has(c.args, "--orientation")); EXPECT_TRUE(has(c.args, "90"));
-}
-TEST(ArgsBuilder, EvdiNoOrientationFlagWhenZero) {
-  Settings s; s.source = Settings::Source::Evdi; s.orientation = 0;
+TEST(ArgsBuilder, TheTabletDecidesOrientation) {
+  // Every client's HELLO carries its orientation and overrides the streamer's, so the PC
+  // never passes one: an old setting (a leftover 270) would only seed a value that loses.
+  Settings s; s.source = Settings::Source::Evdi;
   Command c = build_command(s, "/path/droppix_stream");
   EXPECT_FALSE(has(c.args, "--orientation"));
-}
-TEST(ArgsBuilder, TestPatternNeverHasOrientation) {
-  Settings s; s.source = Settings::Source::TestPattern; s.orientation = 180;
-  Command c = build_command(s, "/path/droppix_stream");
-  EXPECT_FALSE(has(c.args, "--orientation"));   // evdi-only
 }
 
 TEST(ArgsBuilder, NeverAsksForMirror) {

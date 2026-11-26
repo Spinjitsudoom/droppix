@@ -135,3 +135,36 @@ TEST(ClickSchedule, CancelWhenIdleOrDoneSendsNothing) {
   s.due(1000); // complete
   EXPECT_TRUE(s.cancel().empty());
 }
+
+// Fingers of a two-finger tap must leave as a CANCEL, not a release: Qt turns the first touch
+// into a mouse press, so a release clicked whatever was under that finger (a link, a button)
+// on top of opening the context menu. Everything that is not a tap still releases normally.
+TEST(TwoFingerTap, TapFingersAreCancelledNotReleased) {
+  TwoFingerTap g;
+  EXPECT_FALSE(g.update({{0, 1000, 2000, 0}}, 0).cancelLifts);
+  g.update({{0, 1000, 2000, 0}, {1, 3000, 4000, 0}}, 20);   // nothing lifts here
+  EXPECT_TRUE(g.update({{1, 3000, 4000, 0}}, 60).cancelLifts);   // finger 0 lifts first
+  auto r = g.update({}, 90);
+  EXPECT_TRUE(r.rightClick);
+  EXPECT_TRUE(r.cancelLifts);
+}
+
+TEST(TwoFingerTap, ASingleTapStillReleases) {
+  TwoFingerTap g;
+  g.update({{0, 1000, 2000, 0}}, 0);
+  EXPECT_FALSE(g.update({}, 50).cancelLifts);
+}
+
+TEST(TwoFingerTap, AScrollOrPinchStillReleases) {
+  TwoFingerTap g;
+  g.update({{0, 1000, 2000, 0}, {1, 3000, 4000, 0}}, 0);
+  g.update({{0, 1000, 9000, 0}, {1, 3000, 11000, 0}}, 50);   // moved: a scroll
+  EXPECT_FALSE(g.update({{1, 3000, 11000, 0}}, 80).cancelLifts);
+  EXPECT_FALSE(g.update({}, 100).cancelLifts);
+}
+
+TEST(TwoFingerTap, ASlowTwoFingerHoldStillReleases) {
+  TwoFingerTap g;
+  g.update({{0, 1000, 2000, 0}, {1, 3000, 4000, 0}}, 0);
+  EXPECT_FALSE(g.update({{1, 3000, 4000, 0}}, 900).cancelLifts);
+}

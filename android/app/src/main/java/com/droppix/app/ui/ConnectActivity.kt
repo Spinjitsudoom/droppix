@@ -83,6 +83,15 @@ class ConnectActivity : AppCompatActivity() {
                 .initiateScan()
         }
         findViewById<ImageButton>(R.id.usb_btn).setOnClickListener {
+            StreamActivity.aoaUserDisconnected = false   // explicitly asking for USB again
+            // The cable is already in droppix's accessory mode (e.g. after Disconnect): use it.
+            // That path needs no USB debugging, unlike the adb-reverse fallback below.
+            val usb = getSystemService(Context.USB_SERVICE) as UsbManager
+            if (usb.accessoryList?.any { isDroppixAccessory(it.manufacturer, it.model) } == true) {
+                aoaAdopted = false
+                adoptAttachedAccessory()
+                return@setOnClickListener
+            }
             // Classic USB path: the host runs `adb reverse tcp:27000 tcp:27000`, so the
             // tablet reaches it on localhost. 127.0.0.1 is auto-trusted (no PIN).
             status.text = "Connecting over USB (127.0.0.1:27000)..."
@@ -144,7 +153,7 @@ class ConnectActivity : AppCompatActivity() {
      * streamer waited forever. Once per screen instance, so backing out of a stream stays here.
      */
     private fun adoptAttachedAccessory() {
-        if (aoaAdopted || StreamActivity.aoaSessionActive) return
+        if (aoaAdopted || StreamActivity.aoaSessionActive || StreamActivity.aoaUserDisconnected) return
         val usb = getSystemService(Context.USB_SERVICE) as UsbManager
         val acc = usb.accessoryList?.firstOrNull { isDroppixAccessory(it.manufacturer, it.model) }
             ?: return
@@ -201,6 +210,11 @@ class ConnectActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Back on this screen with no USB stream running (it ended, or was left): the accessory
+        // may be adopted again. The flag only guards a launch already in flight; it used to stay
+        // set forever, so after the first USB session the tablet never picked the cable up again
+        // until the app was killed (found on the Nexus 10). Not while a permission prompt is open.
+        if (!StreamActivity.aoaSessionActive && usbPermissionReceiver == null) aoaAdopted = false
         if (!handleUsbAutoconnect()) adoptAttachedAccessory()
         discovery.start(
             onFound = { name, host, port -> onPcFound(name, host, port) },

@@ -10,6 +10,7 @@
 #include <QDateTime>
 #include <QFile>
 #include <QFileDialog>
+#include "log_file.h"
 #include <QFont>
 #include <QHBoxLayout>
 #include <QLineEdit>
@@ -123,13 +124,7 @@ void LogPanel::saveToFile() {
   QFile f(path);
   if (!f.open(QIODevice::WriteOnly | QIODevice::Text)) return;
   QTextStream out(&f);
-  for (const auto& e : buffer_->entries()) {
-    const QString ts = QDateTime::fromMSecsSinceEpoch(e.epochMs).toString(Qt::ISODate);
-    out << ts << ' '
-        << (e.session.isEmpty() ? QString() : "[" + e.session + "]")
-        << (e.source.isEmpty() ? QString() : "[" + e.source + "]") << ' '
-        << e.text << '\n';
-  }
+  for (const auto& e : buffer_->entries()) out << LogFile::format(e) << '\n';
 }
 
 }  // namespace droppix

@@ -5,6 +5,7 @@
 #include "protocol.h"   // TouchContact
 #include "mt_slots.h"
 #include "tap_gesture.h"
+#include "touch_gate.h"
 
 namespace droppix {
 // Multi-touch uinput TOUCHSCREEN (evdev protocol B, INPUT_PROP_DIRECT). KWin binds it to the
@@ -67,6 +68,8 @@ class InputInjector {
   MtSlots slots_;
   bool anyDown_ = false;   // last BTN_TOUCH state
   TwoFingerTap tap_;
+  TouchGate gate_;   // holds a touch back until it is not a two-finger tap (see touch_gate.h)
+  void emit_frame(const std::vector<TouchContact>& contacts, bool cancel_lifts);
   ClickSchedule click_;
   int outX_ = 0, outY_ = 0, outW_ = 0, outH_ = 0, deskX_ = 0, deskY_ = 0, deskW_ = 0, deskH_ = 0;
 };

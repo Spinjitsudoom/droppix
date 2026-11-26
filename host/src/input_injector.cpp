@@ -39,7 +39,7 @@ bool InputInjector::open(const std::string& name) {
   ioctl(fd_, UI_SET_EVBIT, EV_ABS);
   for (int code : {ABS_X, ABS_Y, ABS_PRESSURE,
                    ABS_MT_SLOT, ABS_MT_TRACKING_ID, ABS_MT_POSITION_X, ABS_MT_POSITION_Y,
-                   ABS_MT_PRESSURE}) {
+                   ABS_MT_PRESSURE, ABS_MT_TOOL_TYPE}) {
     ioctl(fd_, UI_SET_ABSBIT, code);
   }
 
@@ -52,6 +52,7 @@ bool InputInjector::open(const std::string& name) {
   abs(ABS_MT_TRACKING_ID, 0, 65535);
   abs(ABS_MT_POSITION_X, 0, 65535); abs(ABS_MT_POSITION_Y, 0, 65535);
   abs(ABS_MT_PRESSURE, 0, 1023);
+  abs(ABS_MT_TOOL_TYPE, MT_TOOL_FINGER, MT_TOOL_PALM);   // PALM = cancel (see inject)
 
   uinput_setup us{};
   us.id.bustype = BUS_USB; us.id.vendor = 0x1209;
@@ -111,16 +112,38 @@ bool InputInjector::open(const std::string& name) {
 
 void InputInjector::inject(const std::vector<TouchContact>& contacts) {
   if (fd_ < 0) return;
+  // The tap detector sees every contact as the tablet sent it; the desktop sees only what the
+  // gate lets through, so a two-finger tap's fingers never click what is under them.
+  const TwoFingerTap::Result t = tap_.update(contacts, now_ms());
+  for (const auto& frame : gate_.update(contacts, now_ms())) emit_frame(frame, t.cancelLifts);
+  // Two-finger tap -> right-click on the pointer device (if geometry is known).
+  if (t.rightClick) right_click(t.x, t.y);
+}
+
+void InputInjector::emit_frame(const std::vector<TouchContact>& contacts, bool cancel_lifts) {
   // Device is bound to the droppix output, so 0..65535 spans that monitor directly.
   const MtSlots::Update u = slots_.update(contacts);
 
+  if (cancel_lifts && !u.lifted.empty()) {
+    // A contact that turns into a palm is cancelled by libinput (KWin and the app see a touch
+    // cancel, not a release), so the tap's fingers never click what is under them. It needs
+    // its own frame before the release, or libinput only sees the lift.
+    for (int slot : u.lifted) {
+      emit(fd_, EV_ABS, ABS_MT_SLOT, slot);
+      emit(fd_, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_PALM);
+    }
+    emit(fd_, EV_SYN, SYN_REPORT, 0);
+  }
   for (int slot : u.lifted) {                       // release vanished fingers
     emit(fd_, EV_ABS, ABS_MT_SLOT, slot);
     emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, -1);
   }
   for (const auto& a : u.active) {
     emit(fd_, EV_ABS, ABS_MT_SLOT, a.slot);
-    if (a.isNew) emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, a.c.id);
+    if (a.isNew) {
+      emit(fd_, EV_ABS, ABS_MT_TRACKING_ID, a.c.id);
+      emit(fd_, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER);   // the slot may last have been a palm
+    }
     emit(fd_, EV_ABS, ABS_MT_POSITION_X, a.c.x);
     emit(fd_, EV_ABS, ABS_MT_POSITION_Y, a.c.y);
     emit(fd_, EV_ABS, ABS_MT_PRESSURE, a.c.pressure);
@@ -135,13 +158,11 @@ void InputInjector::inject(const std::vector<TouchContact>& contacts) {
     emit(fd_, EV_ABS, ABS_PRESSURE, p.pressure);
   }
   emit(fd_, EV_SYN, SYN_REPORT, 0);
-
-  // Two-finger tap -> right-click on the pointer device (if geometry is known).
-  const TwoFingerTap::Result t = tap_.update(contacts, now_ms());
-  if (t.rightClick) right_click(t.x, t.y);
 }
 
 void InputInjector::tick() {
+  if (fd_ >= 0)   // a touch held still by the gate is released once its hold expires
+    for (const auto& frame : gate_.tick(now_ms())) emit_frame(frame, false);
   if (pen_announce_at_ >= 0 && now_ms() >= pen_announce_at_) {
     pen_announce_at_ = -1;
     if (pen_fd_ >= 0 && !pen_down_) {

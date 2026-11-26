@@ -82,6 +82,16 @@ export function parseFrame(data: ArrayBuffer | Uint8Array): { type: MsgType; bod
   return { type: u[0]! as MsgType, body: u.subarray(1) };
 }
 
+/**
+ * The HELLO orientation code for a view of this size: 1 (90°, portrait) when it is taller than
+ * wide, else 0. The host builds its screen in the shape this code says, whatever the size, so a
+ * portrait phone that sent 0 got a landscape screen letterboxed small. The host only tells
+ * portrait from landscape, so 90° stands for either portrait way up.
+ */
+export function orientationForSize(width: number, height: number): number {
+  return height > width ? 1 : 0;
+}
+
 export function encodeHello(
   version: number,
   width: number,

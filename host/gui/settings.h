@@ -12,7 +12,6 @@ struct Settings {
   bool audio = false;   // capture droppix-audio sink and stream it to the tablet
   bool overlay = false; // tell the tablet to show its RTT/fps/decode overlay
   bool autoConnect = true;  // auto-connect known tablets (USB + paired Wi-Fi) on discovery
-  int orientation = 0;  // droppix output rotation degrees: 0/90/180/270 (evdi only)
   bool tls = true;          // pass --tls/--cert/--key to the streamer
   std::string certPath;     // PC's TLS cert (PEM), signed by caPath
   std::string keyPath;      // PC's TLS key (PEM)

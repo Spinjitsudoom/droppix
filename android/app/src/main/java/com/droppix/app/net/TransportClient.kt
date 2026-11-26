@@ -162,9 +162,11 @@ class TransportClient {
                        wallCol: Int, wallRow: Int,
                        listener: StreamListener, isRunning: () -> Boolean,
                        stats: StatsSink? = null, pingIntervalMs: Long = 1000,
-                       name: String = "", id: String = "") {
+                       name: String = "", id: String = "", configTimeoutMs: Long = 0) {
         try {
             out = output
+            val helloAt = System.currentTimeMillis()
+            var gotConfig = false
             synchronized(sendLock) {
                 output.write(Protocol.encodeMessage(MsgType.HELLO,
                     Protocol.encodeHello(Protocol.VERSION, width, height, density, name, id,
@@ -178,6 +180,13 @@ class TransportClient {
             var lastPing = 0L
             while (isRunning()) {
                 val nowMs = System.currentTimeMillis()
+                // No CONFIG yet, long after the HELLO: over USB this reader may have opened in
+                // the middle of one of the PC's messages and be waiting on a length that is
+                // really picture data. End the session; a fresh open re-sends HELLO, which the
+                // PC answers with a new session (see the host's client_restarted()).
+                if (configTimeoutMs > 0 && !gotConfig && nowMs - helloAt > configTimeoutMs) {
+                    throw java.io.IOException("no CONFIG within $configTimeoutMs ms")
+                }
                 if (stats != null && nowMs - lastPing >= pingIntervalMs) {
                     synchronized(sendLock) {
                         output.write(Protocol.encodeMessage(MsgType.PING, longToBytes(System.nanoTime())))
@@ -191,7 +200,10 @@ class TransportClient {
                     var msg = parser.next()
                     while (msg != null) {
                         when (msg.type) {
-                            MsgType.CONFIG -> Protocol.decodeConfig(msg.body)?.let(listener::onConfig)
+                            MsgType.CONFIG -> Protocol.decodeConfig(msg.body)?.let {
+                                gotConfig = true
+                                listener.onConfig(it)
+                            }
                             MsgType.VIDEO -> {
                                 Protocol.decodeVideo(msg.body)?.let(listener::onVideo)
                                 if (stats != null) {

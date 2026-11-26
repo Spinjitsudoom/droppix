@@ -28,7 +28,7 @@ ClientSettingsDialog::ClientSettingsDialog(const ClientSettings& cur, const QStr
   audio_->setChecked(cur.audio);
 
   rotation_ = new QComboBox;
-  rotation_->addItem("0°", 0);
+  rotation_->addItem("Match screen", 0);   // portrait or landscape, as this screen is
   rotation_->addItem("90°", 90);
   rotation_->addItem("180°", 180);
   rotation_->addItem("270°", 270);

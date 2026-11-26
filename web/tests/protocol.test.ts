@@ -66,3 +66,12 @@ test("HELLO v5 body omits wall fields (back-compat)", () => {
   // name_len (u16) = 0 sits right after bitrate (offset 26), no wall bytes.
   assert.deepEqual([...body.subarray(26, 28)], [0x00, 0x00]);
 });
+
+// The host builds its screen in the shape the HELLO's orientation says, not the shape of the
+// size: a portrait phone that reported 0 got a landscape screen, letterboxed small.
+test("orientationForSize: a taller-than-wide view asks for portrait", async () => {
+  const { orientationForSize } = await import("../src/protocol.ts");
+  assert.equal(orientationForSize(1170, 2532), 1);
+  assert.equal(orientationForSize(2532, 1170), 0);
+  assert.equal(orientationForSize(1000, 1000), 0);
+});

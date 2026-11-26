@@ -95,17 +95,13 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
     fun setKeyListener(l: KeyListener?) { keyListener = l }
     fun setPenListener(l: PenListener?) { penListener = l }
 
-    // Same 0..65535 normalization the touch-contact loop below applies (view-local pixels ->
-    // fraction of width/height, clamped, scaled). Reused by the mouse scroll/button branches so
-    // both input paths land on identical coordinates.
-    private fun normX(x: Float): Int {
-        val w = width.coerceAtLeast(1)
-        return ((x / w).coerceIn(0f, 1f) * 65535f).toInt()
-    }
-    private fun normY(y: Float): Int {
-        val h = height.coerceAtLeast(1)
-        return ((y / h).coerceIn(0f, 1f) * 65535f).toInt()
-    }
+    // View-local pixels -> 0..65535 across the picture as drawn (see AspectFit.toStream): the
+    // same letterbox/pillarbox and flip the renderer applies, so every input path (fingers,
+    // pen, mouse buttons and wheel) lands on what is under the pointer.
+    private fun normX(x: Float): Int =
+        AspectFit.toStream(x, width, AspectFit.scale(videoWidth, videoHeight, width, height).first, flipHorizontal)
+    private fun normY(y: Float): Int =
+        AspectFit.toStream(y, height, AspectFit.scale(videoWidth, videoHeight, width, height).second, false)
 
     // Mouse wheel: SOURCE_MOUSE ACTION_SCROLL carries the wheel delta as axis values, not a
     // pointer move, so it arrives here rather than onTouchEvent. Cursor movement/left-click are
@@ -180,7 +176,6 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             if (now - lastMoveSentMs < moveMinIntervalMs) return true
             lastMoveSentMs = now
         }
-        val w = width.coerceAtLeast(1); val h = height.coerceAtLeast(1)
         val contacts = if (masked == MotionEvent.ACTION_CANCEL) {
             emptyList()
         } else {
@@ -190,8 +185,8 @@ class GlDisplayView @JvmOverloads constructor(context: Context, attrs: Attribute
             val list = ArrayList<Contact>(event.pointerCount)
             for (i in 0 until event.pointerCount) {
                 if (i == liftIdx) continue
-                val xn = ((event.getX(i) / w).coerceIn(0f, 1f) * 65535f).toInt()
-                val yn = ((event.getY(i) / h).coerceIn(0f, 1f) * 65535f).toInt()
+                val xn = normX(event.getX(i))
+                val yn = normY(event.getY(i))
                 // Pressure 0..1023 (capacitive screens report an approximation).
                 val pn = (event.getPressure(i).coerceIn(0f, 1f) * 1023f).toInt()
                 list.add(Contact(event.getPointerId(i), xn, yn, pn))

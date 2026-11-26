@@ -222,9 +222,13 @@ int main(int argc, char** argv) {
   // Reconnect loop: keep serving sessions until SIGINT. One-shot when --frames>0.
   while (!g_stop) {
     bool preconnected = !usb_aoa.empty();
-    // AOA: run the accessory handshake and adopt the USB channel before streaming; retry
-    // until the tablet is plugged in + the app opens the accessory.
-    if (!usb_aoa.empty()) {
+    if (tx.client_restarted() && tx.connected()) {
+      // The client started a new session on the link it is already on: serve its HELLO
+      // there rather than re-running the handshake or waiting for a new connection.
+      preconnected = true;
+    } else if (!usb_aoa.empty()) {
+      // AOA: run the accessory handshake and adopt the USB channel before streaming; retry
+      // until the tablet is plugged in + the app opens the accessory.
       auto ch = droppix::aoa_connect(usb_aoa);
       if (!ch) {
         std::this_thread::sleep_for(std::chrono::seconds(1));

@@ -19,6 +19,9 @@
 
 namespace droppix {
 
+// Clients ping once a second; this much silence means the client is gone (see PeerLiveness).
+static constexpr int64_t kPeerSilenceMs = 5000;
+
 bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_frames) {
   // We need the droppix output's NAME for orientation (incl. live auto-rotate) and
   // touch: snapshot the outputs BEFORE the source creates its monitor, so we can
@@ -37,7 +40,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   uint16_t hwall_col, hwall_row;
   if (!tx_.read_hello(cver, cw, ch, density, hfps, haudio, hori, hbitrate, hwall_col, hwall_row,
                       cname, cid, 10000)) {
-    std::fprintf(stderr, "no HELLO\n"); tx_.close_all(); return false; }
+    std::fprintf(stderr, "no HELLO\n"); tx_.end_session(); return false; }
   std::fprintf(stderr, "client HELLO v%u %ux%u fps=%u audio=%u orient=%u name=%s id=%s\n",
                cver, cw, ch, hfps, haudio, hori, cname.c_str(), cid.c_str());
   const SessionParams sp = select_session_params(cver, hfps, haudio, hori,
@@ -54,7 +57,7 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     bool allow = false;
     if (!cfg_.gate->wait(cid.empty() ? tx_.peer_ip() : cid, 60000, allow) || !allow) {
       std::fprintf(stderr, "connection from %s denied\n", tx_.peer_ip().c_str());
-      tx_.close_all();   // reconnect loop continues with a clean socket
+      tx_.end_session();   // reconnect loop continues with a clean socket
       return false;
     }
   }
@@ -95,17 +98,17 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     // client's socket sits open forever with no CONFIG ever sent: "connected" in the
     // browser, silently dead server-side. The native TCP path self-heals via the next
     // accept_client()'s close_all(), but closing here makes both paths behave the same.
-    tx_.close_all();
+    tx_.end_session();
     return false;
   }
   std::fprintf(stderr, "source %dx%d\n", w, h);
 
   if (!enc_.open(w, h, sp.fps, sp.bitrate)) {
     std::fprintf(stderr, "encoder open failed\n");
-    tx_.close_all();
+    tx_.end_session();
     return false;
   }
-  if (!tx_.send_config(w, h, sp.fps, enc_.extradata())) { tx_.close_all(); return false; }
+  if (!tx_.send_config(w, h, sp.fps, enc_.extradata())) { tx_.end_session(); return false; }
   // Seed the app's overlay from the live host-side toggle if present (so a reconnect
   // keeps whatever the GUI last set), else the start-up flag. Tracked below so the
   // stream loop can push later host-side changes mid-session.
@@ -324,9 +327,6 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   int cur_bitrate = sp.bitrate;
   bool dropping_for_backlog = false;
   int frames_dropped_backlog = 0;
-  // With touch on, poll the loop tightly so incoming touch is handled promptly
-  // instead of being gated by the up-to-1s damage-driven frame wait.
-  const int frame_timeout = (cfg_.touch || do_audio) ? 8 : 1000;
   while (!stop && !restart_for_orientation && tx_.connected()) {
     injector.tick();   // advances a time-spaced right-click (the loop wakes every <=8 ms with touch on)
     if (cfg_.live_overlay) {  // host-side overlay toggle changed -> tell the app (loop thread = single writer)
@@ -338,6 +338,41 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
       if (audio.drain(chunks))
         for (auto& c : chunks) tx_.send_audio(c);
     }
+    // A client that pings every second and has gone quiet has left, even if the channel can't
+    // tell (the tablet app closing its end of the USB accessory looks like "no data yet" here,
+    // and a static screen sends nothing that could fail). End the session so the caller can
+    // serve the client again; over USB that re-adopts the accessory so the app can reopen it.
+    tx_.keepalive(std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now().time_since_epoch()).count(), 1000);
+    if (tx_.client_restarted()) {
+      // The tablet app started a new session on this link (a new resolution, or back from
+      // the background over USB, where the PC can't see it close the old one). End this one
+      // quietly; the caller serves the new HELLO on the same channel.
+      std::fprintf(stderr, "client: started a new session; restarting\n");
+      break;
+    }
+    if (tx_.peer_silent(kPeerSilenceMs)) {
+      std::fprintf(stderr, "peer: nothing from the client for %d s; ending the session\n",
+                   static_cast<int>(kPeerSilenceMs / 1000));
+      tx_.end_session();   // BYE: a stale reader on the tablet wakes and lets go of the accessory
+      break;
+    }
+    // Audio can start/stop mid-session without touching the video path, so it is applied
+    // here rather than with fps/bitrate: a still desktop sends no frames to wait for.
+    bool want_audio = false;
+    if (tx_.take_audio_request(want_audio) && want_audio != do_audio) {
+      if (want_audio) {
+        do_audio = start_audio();
+        std::fprintf(stderr, "live params: audio on (%s)\n", do_audio ? "ok" : "unavailable");
+      } else {
+        stop_audio();
+        do_audio = false;
+        std::fprintf(stderr, "live params: audio off\n");
+      }
+    }
+    // With touch or audio on, poll tightly so input and audio are serviced promptly instead
+    // of being gated by the up-to-1s damage-driven frame wait. Audio can start mid-session.
+    const int frame_timeout = (cfg_.touch || do_audio) ? 8 : 1000;
     Frame f = src_->next(frame_timeout);
     if (!f.valid) { tx_.poll_control(); continue; }
     if (!frame_fits_session(f, w, h)) {
@@ -367,11 +402,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
     last_frame_at = frame_at;
     int64_t pts_us = std::chrono::duration_cast<std::chrono::microseconds>(
                          frame_at - t0).count();
-    // Live stream params: apply a client's fps/bitrate/audio change to the RUNNING session
-    // rather than making it reconnect. Encoders are safe to reopen (see Encoder::reset),
-    // and the reopen starts a fresh GOP, so the client resyncs on the next frame.
-    TransportServer::StreamParamsRequest np{};
-    if (tx_.take_stream_params(np)) {
+    // Live fps/bitrate: apply a client's change to the RUNNING session rather than making it
+    // reconnect. Encoders are safe to reopen (see Encoder::reset), and the reopen starts a
+    // fresh GOP, so the client resyncs on this frame. (Audio is handled before the frame wait.)
+    TransportServer::VideoParamsRequest np{};
+    if (tx_.take_video_params(np)) {
       const int new_fps = np.fps > 0 ? clamp_fps(np.fps) : cur_fps;
       const int new_bitrate = np.bitrate_kbps > 0 ? clamp_bitrate_kbps(np.bitrate_kbps) : cur_bitrate;
       if (new_fps != cur_fps || new_bitrate != cur_bitrate) {
@@ -387,18 +422,6 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
         } else {
           std::fprintf(stderr, "live params: encoder reopen FAILED; keeping %d fps %d kbps\n",
                        cur_fps, cur_bitrate);
-        }
-      }
-      // Audio can start/stop mid-session without touching the video path at all.
-      const bool want_audio = np.audio != 0;
-      if (want_audio != do_audio) {
-        if (want_audio) {
-          do_audio = start_audio();
-          std::fprintf(stderr, "live params: audio on (%s)\n", do_audio ? "ok" : "unavailable");
-        } else {
-          stop_audio();
-          do_audio = false;
-          std::fprintf(stderr, "live params: audio off\n");
         }
       }
     }
@@ -457,8 +480,11 @@ bool StreamDaemon::run_until(const volatile std::sig_atomic_t& stop, int max_fra
   for (auto& pkt : enc_.flush()) tx_.send_video(pkt.pts_us, pkt.keyframe, pkt.data);
   std::fprintf(stderr, "sent %d video packets\n", sent);
   // On an orientation- or mode-driven restart, drop the client so it reconnects and the
-  // caller rebuilds the source at the new dimensions.
-  if (restart_for_orientation) tx_.close_all();
+  // caller rebuilds the source at the new dimensions. Say BYE first: over USB the client can't
+  // see a close (the link stays up), so without it the app waited forever on the old session.
+  // Every host-side end says BYE (end_session): over USB the client can't see a close. Not
+  // when the client itself started over: a BYE now would end its new session.
+  if (!tx_.client_restarted()) tx_.end_session();
   // Release the audio claim (if held) so the next session can capture the shared sink.
   if (audio_lock_fd >= 0) ::close(audio_lock_fd);
   return true;

@@ -10,6 +10,14 @@ TEST(ClientSettings, RotationToCode) {
   EXPECT_EQ(rotation_to_code(180), 2); EXPECT_EQ(rotation_to_code(270), 3);
   EXPECT_EQ(rotation_to_code(45), 0);  // invalid -> 0
 }
+TEST(ClientSettings, NoRotationMatchesTheScreenShape) {
+  // The host builds its screen in the shape the HELLO orientation says, whatever the size: a
+  // portrait monitor that sent 0 got a landscape stream. 0 now means "as my screen is".
+  EXPECT_EQ(hello_orientation(0, 1080, 1920), 1);
+  EXPECT_EQ(hello_orientation(0, 1920, 1080), 0);
+  EXPECT_EQ(hello_orientation(90, 1920, 1080), 1);   // an explicit choice still wins
+  EXPECT_EQ(hello_orientation(180, 1080, 1920), 2);
+}
 TEST(ClientSettings, SaveLoadRoundTrip) {
   static int argc = 0; static QCoreApplication app(argc, nullptr);
   QSettings::setDefaultFormat(QSettings::IniFormat);   // avoid touching the real config

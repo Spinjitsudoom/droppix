@@ -36,10 +36,18 @@ import kotlin.concurrent.thread
 class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
     companion object {
         private const val TAG = "droppix"
+        // Over USB a session that has not started within this long is treated as stuck and
+        // reopened (see TransportClient.runOverChannel). The PC normally answers a HELLO with
+        // CONFIG in 1-3 s (building its virtual screen); USB needs no approval step.
+        private const val AOA_CONFIG_TIMEOUT_MS = 8_000L
         private val aoaInstances = java.util.concurrent.atomic.AtomicInteger(0)
         // An accessory can only be opened once; ConnectActivity must not start a second stream
         // screen for it while one (e.g. the system-launched one, in its own task) exists.
         val aoaSessionActive: Boolean get() = aoaInstances.get() > 0
+        // The user pressed Disconnect on a USB session. The accessory usually stays attached, so
+        // the connect screen must not adopt it again (that relaunched the session just ended).
+        // Cleared by a fresh attach (a stream screen started for an accessory) or the USB button.
+        @Volatile var aoaUserDisconnected = false
     }
 
     private val host by lazy { intent.getStringExtra("host") ?: "127.0.0.1" }
@@ -189,6 +197,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
      * session joins the net thread.
      */
     private fun disconnect() {
+        if (aoaAccessory != null) aoaUserDisconnected = true
         val c = client
         thread(name = "droppix-bye") {
             try { c?.sendBye() } catch (_: Exception) { /* going away regardless */ }
@@ -278,7 +287,7 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (aoaAccessory != null) aoaInstances.incrementAndGet()
+        if (aoaAccessory != null) { aoaInstances.incrementAndGet(); aoaCounted = true; aoaUserDisconnected = false }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_stream)
         // Don't let the IME resize/pan the window when it appears: the surface is a fixed-size
@@ -400,6 +409,9 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
 
     override fun onPause() {
         super.onPause()
+        // Finishing: release the USB-session count NOW. onDestroy runs only after the connect
+        // screen has resumed and checked it, which made that screen skip the accessory.
+        if (isFinishing) releaseAoaCount()
         uiHandler.removeCallbacks(overlayTick)
         orientationListener?.disable()
         surfaceView.setTouchListener(null)
@@ -410,9 +422,14 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
         stopStreaming()
     }
 
+    private var aoaCounted = false
+    private fun releaseAoaCount() {
+        if (aoaCounted) { aoaCounted = false; aoaInstances.decrementAndGet() }
+    }
+
     override fun onDestroy() {
         uiHandler.removeCallbacks(reapplyImmersive)
-        if (aoaAccessory != null) aoaInstances.decrementAndGet()
+        releaseAoaCount()
         super.onDestroy()
     }
 
@@ -522,12 +539,25 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                 // Let the host finish claiming the interface before we open the accessory — opening
                 // mid-claim EIOs the first read (M0: opening late, after a manual tap, avoided it).
                 Thread.sleep(1200)
+                val retry = com.droppix.app.net.AoaRetry().apply { reset(SystemClock.elapsedRealtime()) }
                 var attempt = 0
-                while (running.get() && attempt < 20) {
+                while (running.get()) {
+                    // The PC's handshake re-enumerates the link, which yields a NEW accessory
+                    // object: always open the one attached now, not the one we were started with.
+                    val current = usb.accessoryList?.firstOrNull {
+                        com.droppix.app.net.isDroppixAccessory(it.manufacturer, it.model)
+                    }
+                    if (!retry.shouldContinue(SystemClock.elapsedRealtime(), current != null)) break
+                    if (current == null) { Thread.sleep(300); continue }
                     attempt++
                     sawVideo = false
-                    val pfd = usb.openAccessory(acc)
-                    if (pfd == null) { Log.w(TAG, "aoa: openAccessory null ($attempt)"); Thread.sleep(200); continue }
+                    val pfd = try { usb.openAccessory(current) } catch (e: Exception) {
+                        Log.w(TAG, "aoa: open failed: ${e.message}"); null
+                    }
+                    if (pfd == null) {
+                        if (attempt % 10 == 1) Log.w(TAG, "aoa: accessory not openable yet ($attempt)")
+                        Thread.sleep(300); continue
+                    }
                     val input = FileInputStream(pfd.fileDescriptor)
                     aoaIn = input
                     // stopStreaming() may have run between the open and publishing `input`.
@@ -541,7 +571,8 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                             settings.wallCol, settings.wallRow,
                             listener, { running.get() }, stats,
                             name = DeviceIdentity.displayName(this@StreamActivity),
-                            id = DeviceIdentity.stableId(this@StreamActivity))
+                            id = DeviceIdentity.stableId(this@StreamActivity),
+                            configTimeoutMs = AOA_CONFIG_TIMEOUT_MS)
                         Log.i(TAG, "aoa: session ended")
                     } catch (e: Exception) {
                         Log.w(TAG, "aoa: attempt $attempt ended: ${e.message}")
@@ -551,12 +582,15 @@ class StreamActivity : Activity(), GlDisplayView.SurfaceListener {
                         try { input.close() } catch (_: Exception) {}
                         try { pfd.close() } catch (_: Exception) {}
                     }
-                    if (sawVideo) attempt = 0  // real session ended -> reconnect with a fresh budget
+                    if (sawVideo) { attempt = 0; retry.reset(SystemClock.elapsedRealtime()) }
                     Thread.sleep(200)
                 }
-                // Only a session that ran out of retries (an unplug) leaves the screen; a stop
-                // from onPause must not finish an Activity that is about to resume.
-                if (running.getAndSet(false)) runOnUiThread { finish() }
+                // Only an unplug (accessory gone 3 s+) or a long dead spell leaves the screen; a
+                // stop from onPause must not finish an Activity that is about to resume.
+                if (running.getAndSet(false)) {
+                    Log.i(TAG, "aoa: giving up (unplugged, or no session for 2 min)")
+                    runOnUiThread { finish() }
+                }
             } else {
                 // The host re-accepts clients in a loop, so keep dialing until paused.
                 while (running.get()) {

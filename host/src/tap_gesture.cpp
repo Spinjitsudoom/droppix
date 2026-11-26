@@ -30,15 +30,15 @@ TwoFingerTap::Result TwoFingerTap::update(const std::vector<TouchContact>& conta
       centroidY_ = static_cast<uint16_t>((contacts[0].y + contacts[1].y) / 2);
       haveTwoCentroid_ = true;
     }
-    return {};
+    Result r;
+    r.cancelLifts = tapSoFar(now_ms);
+    return r;
   }
 
   // All fingers up: decide whether the finished sequence was a two-finger tap.
   Result r;
   if (inGesture_) {
-    if (maxCount_ == 2 && !moved_ && haveTwoCentroid_ && (now_ms - startMs_) <= kTapMs) {
-      r = {true, centroidX_, centroidY_};
-    }
+    if (tapSoFar(now_ms)) r = {true, centroidX_, centroidY_, true};
     inGesture_ = false;
   }
   return r;

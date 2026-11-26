@@ -2,6 +2,11 @@
 #include <QSettings>
 namespace droppix {
 int rotation_to_code(int d) { switch (d) { case 90: return 1; case 180: return 2; case 270: return 3; default: return 0; } }
+int hello_orientation(int rotation_degrees, unsigned width, unsigned height) {
+  const int code = rotation_to_code(rotation_degrees);
+  if (code != 0) return code;
+  return height > width ? 1 : 0;
+}
 ClientSettings ClientSettingsStore::load() {
   QSettings q("droppix", "droppix_client");
   ClientSettings s;

@@ -23,6 +23,7 @@
 #include "log_buffer.h"
 #include "log_panel.h"
 #include "log_entry.h"
+#include "log_file.h"
 #include "theme.h"
 
 class QComboBox; class QSpinBox; class QCheckBox; class QPushButton;
@@ -46,6 +47,7 @@ class MainWindow : public QMainWindow {
  protected:
   void closeEvent(QCloseEvent* event) override;
  private:
+  LogFile logFile_{LogFile::defaultPath()};   // every log line also on disk (see log_file.h)
   std::string resolveStreamBin();   // sibling binary, extracted AppImage copy, or host-staged (Flatpak)
   void stageWebAssets();             // dev/local: copy source web/dist into the root-readable runtime dir
   void stageCertsToHost();           // Flatpak: mirror cert/key to the host for the streamer

@@ -12,7 +12,10 @@ namespace droppix {
 // moved little, and was quick.
 class TwoFingerTap {
  public:
-  struct Result { bool rightClick = false; uint16_t x = 0; uint16_t y = 0; };
+  // cancelLifts: fingers lifting in this update belong to what is (so far) a two-finger tap, so
+  // they must reach the desktop as a cancelled touch rather than a release. Qt turns a touch
+  // into a mouse press, and releasing it clicked whatever was under that finger.
+  struct Result { bool rightClick = false; uint16_t x = 0; uint16_t y = 0; bool cancelLifts = false; };
   Result update(const std::vector<TouchContact>& contacts, int64_t now_ms);
 
   // Tunable thresholds (0..65535 coord space; ms).
@@ -27,6 +30,9 @@ class TwoFingerTap {
   std::map<uint8_t, std::pair<uint16_t, uint16_t>> initPos_;   // id -> first position
   bool haveTwoCentroid_ = false;
   uint16_t centroidX_ = 0, centroidY_ = 0;   // midpoint while exactly two contacts were down
+  bool tapSoFar(int64_t now_ms) const {
+    return maxCount_ == 2 && !moved_ && haveTwoCentroid_ && (now_ms - startMs_) <= kTapMs;
+  }
 };
 
 // A mouse-like right-click spread over time: land mid-tablet, then wiggle + move 15 ms later,

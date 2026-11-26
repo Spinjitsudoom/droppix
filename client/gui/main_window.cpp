@@ -191,7 +191,7 @@ void MainWindow::netThreadMain(QString hostQ, quint16 port) {
   const uint32_t h = settings_.height > 0 ? static_cast<uint32_t>(settings_.height) : static_cast<uint32_t>(scr.height());
   const uint32_t fps = static_cast<uint32_t>(settings_.fps);
   const uint8_t audio = settings_.audio ? 1 : 0;
-  const uint8_t orient = static_cast<uint8_t>(rotation_to_code(settings_.rotation));
+  const uint8_t orient = static_cast<uint8_t>(hello_orientation(settings_.rotation, w, h));
   const uint32_t bitrate = static_cast<uint32_t>(settings_.bitrate_kbps);
   const uint16_t wall_col = static_cast<uint16_t>(settings_.wall_col);
   const uint16_t wall_row = static_cast<uint16_t>(settings_.wall_row);

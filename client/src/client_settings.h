@@ -4,5 +4,8 @@ namespace droppix {
 // "use this device's native screen resolution" (resolved at connect time by the caller).
 struct ClientSettings { int width = 0, height = 0; int fps = 60; bool audio = false; int rotation = 0; int bitrate_kbps = 8000; bool flip_horizontal = false; int brightness = 0; int contrast = 100; int wall_col = 0, wall_row = 0; };
 int rotation_to_code(int degrees);   // 0/90/180/270 -> 0/1/2/3; else 0
+// The HELLO orientation code: the chosen rotation, or with none (0) the shape of the screen
+// being streamed to, since the host builds its screen in the shape this code says.
+int hello_orientation(int rotation_degrees, unsigned width, unsigned height);
 struct ClientSettingsStore { static ClientSettings load(); static void save(const ClientSettings&); };
 }  // namespace droppix

@@ -61,9 +61,15 @@ using droppix::BackendKind; using droppix::layout_command;
 // droppix always extends (mirror mode was removed 2026-11-25): the layout command only
 // ever makes the output extend the desktop.
 TEST(LayoutCommand, KWinExtendClearsAnyReplication) {
+  // KScreen restores a mirror an older droppix (with mirror mode) left for this screen.
+  // kscreen-doctor spells the reset "mirror.none" ("replicationSource" is only its JSON key,
+  // and asking for that printed "Unable to parse arguments" every session). Versions without
+  // the option are skipped rather than handed an argument they reject.
   auto c = layout_command(BackendKind::KWin, "DVI-I-1", "DP-3");
-  EXPECT_NE(c.find("replicationSource.0"), std::string::npos);
-  EXPECT_NE(c.find("DVI-I-1"), std::string::npos);
+  EXPECT_NE(c.find("output.DVI-I-1.mirror.none"), std::string::npos);
+  EXPECT_EQ(c.find("replicationSource"), std::string::npos);
+  EXPECT_NE(c.find("--help"), std::string::npos);
+  EXPECT_EQ(c.find('\''), std::string::npos);   // it runs inside sh -c '...'
 }
 TEST(LayoutCommand, X11ExtendRightOf) {
   auto c = layout_command(BackendKind::X11, "DVI-I-1", "eDP-1");

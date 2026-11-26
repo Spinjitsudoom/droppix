@@ -58,6 +58,7 @@ add_library(droppix_core
   src/input_injector.cpp
   src/mt_slots.cpp
   src/tap_gesture.cpp
+  src/touch_gate.cpp
   src/mdns_browse.cpp
   src/audio_streamer.cpp
   src/tether_discovery.cpp
@@ -158,6 +159,7 @@ if(Qt6_FOUND)
     src/web_root.cpp
     gui/log_classify.cpp
     gui/log_buffer.cpp
+    gui/log_file.cpp
     gui/log_forwarder.cpp
     gui/log_model.cpp
     gui/log_panel.cpp
@@ -210,6 +212,7 @@ add_executable(droppix_tests
   tests/test_input_map.cpp
   tests/test_mt_slots.cpp
   tests/test_tap_gesture.cpp
+  tests/test_touch_gate.cpp
   tests/test_monitor_geometry.cpp
   tests/test_orientation.cpp
   tests/test_audio_streamer.cpp
@@ -229,6 +232,7 @@ add_executable(droppix_tests
   tests/test_sway.cpp
   tests/test_hyprland.cpp
   tests/test_cosmic.cpp
+  tests/test_peer_liveness.cpp
   tests/test_encoder_factory.cpp
   tests/test_web_frontend.cpp
   tests/test_web_pin.cpp
@@ -275,6 +279,8 @@ if(Qt6_FOUND)
     gui/log_classify.cpp
     gui/tests/test_log_buffer.cpp
     gui/log_buffer.cpp
+    gui/tests/test_log_file.cpp
+    gui/log_file.cpp
     gui/tests/test_log_forwarder.cpp
     gui/log_forwarder.cpp
     gui/tests/test_log_filter.cpp

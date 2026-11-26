@@ -54,4 +54,35 @@ class AspectFitTest {
         val (sx, sy) = AspectFit.scale(1080, 2340, 1080, 2340)
         assertEquals(1f, sx, eps); assertEquals(1f, sy, eps)
     }
+
+    // ---- toStream: a touch on the view -> 0..65535 across the picture actually drawn ----
+
+    @Test fun touchMapsAcrossTheWholeViewWhenThereAreNoBars() {
+        assertEquals(0, AspectFit.toStream(0f, 2560, 1f, false))
+        assertEquals(32767, AspectFit.toStream(1280f, 2560, 1f, false))
+        assertEquals(65535, AspectFit.toStream(2560f, 2560, 1f, false))
+    }
+
+    @Test fun touchSkipsThePillarboxBars() {
+        // 768x480 (1.6) in a 2560x1504 view (nav bar showing): the picture is 2406 px wide,
+        // centred, with 77 px bars. 10% across the PICTURE is 77 + 240.6 = 317.6 view px.
+        val (sx, _) = AspectFit.scale(768, 480, 2560, 1504)
+        assertEquals(6553f, AspectFit.toStream(317.6f, 2560, sx, false).toFloat(), 10f)
+        assertEquals(32767, AspectFit.toStream(1280f, 2560, sx, false))
+    }
+
+    @Test fun touchOnABarClampsToThePictureEdge() {
+        val (sx, _) = AspectFit.scale(768, 480, 2560, 1504)
+        assertEquals(0, AspectFit.toStream(20f, 2560, sx, false))
+        assertEquals(65535, AspectFit.toStream(2550f, 2560, sx, false))
+    }
+
+    @Test fun flippedPictureMirrorsTheTouch() {
+        assertEquals(65535, AspectFit.toStream(0f, 2560, 1f, true))
+        assertEquals(6553f, AspectFit.toStream(2304f, 2560, 1f, true).toFloat(), 2f)
+    }
+
+    @Test fun unmeasuredViewDoesNotDivideByZero() {
+        assertEquals(0, AspectFit.toStream(5f, 0, 1f, false))
+    }
 }

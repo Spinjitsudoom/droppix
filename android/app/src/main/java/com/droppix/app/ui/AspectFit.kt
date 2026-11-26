@@ -25,4 +25,20 @@ object AspectFit {
             else -> 1f to 1f
         }
     }
+
+    /**
+     * A point on the view, along one axis, as 0..65535 across the picture actually drawn there.
+     *
+     * The picture fills the middle [extent] (the half-extent from [scale]) of the view's
+     * [viewLen] pixels, so a touch has to skip the bars or it lands short of where the finger
+     * is: up to a bar's width off at the edges. A touch on a bar clamps to the picture's edge.
+     * [mirror] follows a horizontally flipped picture, so the touch lands on what is under the
+     * finger.
+     */
+    fun toStream(px: Float, viewLen: Int, extent: Float, mirror: Boolean): Int {
+        if (viewLen <= 0 || extent <= 0f) return 0
+        var u = ((px / viewLen - 0.5f) / extent + 0.5f).coerceIn(0f, 1f)
+        if (mirror) u = 1f - u
+        return (u * 65535f).toInt()
+    }
 }

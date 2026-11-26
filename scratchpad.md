@@ -6,6 +6,29 @@ Spacedesk-like system: turn an Android tablet (or Linux desktop client) into a *
 
 License: MIT
 
+## Session note — 2026-11-26 (real-hardware QA pass before the next release)
+
+User asked for everything to "work like a charm" before the next release (no orientation/touch
+issues). Drove the Nexus 10 over USB against this PC (Plasma 6.8) with scripts in
+`~/droppix-vms/hosttest/` (outside the repo): `probe3.py` (GTK probe fullscreen on DVI-I-1, logs
+touch/press/key), `run.sh` (tap/gesture/key actions + probe), `gest.sh` (raw sendevent gestures on
+the tablet), `ui.sh` (uiautomator taps), `reconnect.sh`, `orient.sh`, `panel.sh` (in-stream panel
+spinners). Qt click test: a tiny QPushButton app (Qt synthesizes clicks GTK doesn't).
+
+Architecture decisions this session (see WIRE.md and lessons):
+- Over AOA neither end can see a close. Host `Bye` on every end, host keepalive + `PeerLiveness`
+  (5 s), mid-session HELLO = restart on the same channel (`client_restarted`, stream_main reuses
+  it), app reopens with no `Config` in 8 s, `AoaRetry` (2 min while attached).
+- `TouchGate` in front of the uinput touchscreen: a two-finger tap is never delivered (Qt clicks
+  even on a cancelled touch). Taps go out whole on lift; moves at once from their start.
+- Live `StreamParams` split: audio every loop pass, fps/bitrate on the next frame.
+- The HELLO orientation decides the screen's shape; every client now sends its shape. The PC GUI
+  Orientation setting was removed (did nothing).
+- GUI log persisted to `$XDG_STATE_HOME/droppix/droppix.log` (`LogFile`).
+
+Testing the PC app on hardware: build `packaging/portable/build-portable.sh`, SIGTERM
+`droppix_gui`, copy the AppImage to `~/Downloads/droppix-test-x86_64.AppImage`, relaunch.
+
 ## Session note — 2026-07-21 (shipped to master)
 
 Merged `feat/gui-log-console` → `master` (`646efa0`). Three things landed, 236/236 host tests:

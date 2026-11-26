@@ -53,6 +53,9 @@ function parseFrame(data) {
   if (u.length < 1) return null;
   return { type: u[0], body: u.subarray(1) };
 }
+function orientationForSize(width, height) {
+  return height > width ? 1 : 0;
+}
 function encodeHello(version, width, height, density, name, id, fps = 0, audioWanted = 0, orientationCode = 0, bitrateKbps = 0, wallCol = 0, wallRow = 0) {
   const nameBytes = new TextEncoder().encode(name);
   const idBytes = new TextEncoder().encode(id);
@@ -255,7 +258,7 @@ var Transport = class {
       h.id,
       h.fps,
       h.audioWanted,
-      0,
+      orientationForSize(h.width, h.height),
       h.bitrateKbps,
       h.wallCol,
       h.wallRow

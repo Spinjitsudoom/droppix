@@ -7,6 +7,7 @@ import {
   decodeVideo,
   decodeOverlay,
   kProtocolVersion,
+  orientationForSize,
 } from "./protocol.ts";
 
 export interface TransportHandlers {
@@ -191,7 +192,7 @@ export class Transport {
       h.id,
       h.fps,
       h.audioWanted,
-      0,
+      orientationForSize(h.width, h.height),
       h.bitrateKbps,
       h.wallCol,
       h.wallRow,

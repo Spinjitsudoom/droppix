@@ -59,6 +59,34 @@ The client must ensure the message actually leaves before tearing the connection
 
 Back-compatible: older hosts ignore the unknown type and fall back to drop handling.
 
+**Host → client (2026-11-26).** The host also says `Bye` whenever *it* ends a session: an
+orientation or screen-mode restart, no HELLO in time, a failed encoder/source start, or a
+silent client (below). Over USB/AOA the client cannot see a close (the link stays up), so
+without it the app waited forever on a session that no longer existed. Clients treat a host
+`Bye` as "reconnect": the Android AOA loop reopens the accessory, its Wi-Fi loop redials, and
+the web client returns to its connect card.
+
+### Liveness (Ping, type 4)
+
+Clients ping every second. The host pings a quiet link once a second too (during a session,
+and while waiting for HELLO), which wakes a client's stale USB reader so it lets go of the
+accessory. A client that has pinged at least once and then sends nothing for **5 s** is
+treated as gone: the host ends the session (with `Bye`) and serves the link again.
+
+### A HELLO mid-session (type 1)
+
+A HELLO is only ever a session's first message. Over USB the host cannot see the app close
+and reopen the accessory, so the app's new session simply sends HELLO on the link the old one
+is still streaming over (a new resolution, back from the background, a stuck reader). The host
+treats a HELLO received during a session as "start over with these settings": it ends the
+current session **without** `Bye` (that would end the client's new session), keeps the
+channel, and answers the stashed HELLO with a fresh `Config`. Over TCP a client never does
+this; the behaviour is the same if one did.
+
+The Android client also gives up on a USB session that has seen no `Config` 8 s after its
+HELLO (it may have opened the accessory in the middle of a message and be mis-framed) and
+reopens, which this path serves.
+
 ### Keyframe recovery (type 16)
 
 Encoders emit a keyframe every `gop_size = fps * 2` frames (~2 s). A client that loses
@@ -84,8 +112,11 @@ u8  audio_wanted
 ```
 
 The host reopens its encoder with the new fps/bitrate and resends `Config`; the reopen
-starts a fresh GOP, so the client resyncs on the next frame. Audio starts or stops its
-capture without touching the video path. Requests are coalesced by overwrite — dragging a
+starts a fresh GOP, so the client resyncs on the next frame. That happens on the next
+captured frame (a still desktop may send none for a while; nothing on screen changes until it
+does). Audio starts or stops its capture **at once**, without touching the video path and
+without waiting for a frame (until 2026-11-26 it waited, so "audio on" over a still desktop did
+nothing). Requests are coalesced by overwrite — dragging a
 quality slider emits a burst, and only the newest matters.
 
 Encoders must therefore be safe to reopen mid-session (`Encoder::reset()`); before that
@@ -113,6 +144,13 @@ u16 wall_row              -- client-declared grid row (0-based); 0 = unset/defau
 u16 name_len + name bytes
 u16 id_len   + id bytes
 ```
+
+`orientation_code` (0/1/2/3 = 0°/90°/180°/270°) decides the **shape** of the screen the host
+builds: 90°/270° portrait, 0°/180° landscape, whatever `width`/`height` say (it swaps them to
+fit). Every client must therefore send the shape it wants: the Android app its display
+rotation, the web client 90° when its view is taller than wide, the desktop client its chosen
+rotation or, with none, its screen's shape. (Before 2026-11-26 the web client always sent 0,
+so a phone held upright got a landscape screen letterboxed small.)
 
 Back-compatible with shorter v5/v4/v3/v2 bodies (missing fields default to 0 / empty):
 a v5 body (no `wall_col`/`wall_row`) decodes with both fields as 0, and the name/id
